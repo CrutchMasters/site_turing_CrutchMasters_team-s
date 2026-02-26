@@ -21,13 +21,13 @@ app.add_middleware(
     allow_headers=["*"], # Дозволяє всі заголовки
 )
 
-# 1. Головна сторінка (вітання)
+# 1. Главная страница
 @app.get("/")
 def read_root():
     return {
         "status": "online",
         "message": "Привіт, Капітане! Бекенд турнірної платформи запущено.",
-        "team": ["Антон (Backend)", "Учень №1 (Frontend)", "Діма (Data)"]
+        "team": ["Антон (Backend)", "Учень Богдан (Frontend)", "Діма (Data)"]
     }
 
 # 2. Тестовий маршрут для перевірки логіки
@@ -37,4 +37,11 @@ def check_system():
         "service": "tournament-core",
         "database_connected": False,  # Поки що False, поки Діма не підключив Supabase
         "uptime": "just started"
+    }
+# 3. Маршрут связи с фронтом
+@app.get("/api/test")
+def connection_test():
+    return {
+        "status": "ok",
+        "message": "Бекенд Антона працює! Привіт, Богдане!"
     }
