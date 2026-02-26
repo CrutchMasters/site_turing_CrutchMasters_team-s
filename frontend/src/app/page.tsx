@@ -1,6 +1,33 @@
+"use client"; // Обов'язково для роботи fetch та useState
+
 import Image from "next/image";
+import { useEffect, useState } from "react"; // Додаємо інструменти React
 
 export default function Home() {
+
+// 1. Створюємо змінну для повідомлення від Антона
+  const [backendMessage, setBackendMessage] = useState("Чекаємо відповіді від Антона...");
+
+  // 2. Логіка запиту до бекенда
+  useEffect(() => {
+    // Якщо Антон на FastAPI (порт 8000)
+    // Якщо ви з іншого ПК, впишіть IP Антона замість localhost
+    const API_URL = "http://localhost:8000/api/test"; 
+
+    fetch(API_URL)
+      .then((res) => {
+        if (!res.ok) throw new Error("Сервер відповів помилкою");
+        return res.json();
+      })
+      .then((data) => {
+        setBackendMessage(data.message); // Зберігаємо "Бекенд Антона працює!"
+      })
+      .catch((err) => {
+        console.error(err);
+        setBackendMessage("Помилка: не вдалося з'єднатися з бекендом.");
+      });
+  }, []);
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
@@ -13,9 +40,20 @@ export default function Home() {
           priority
         />
         <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
+          
+          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
+            Welcome Crutch Masters
+          </p>
+
+          {/* 3. ВИВОДИМО ПОВІДОМЛЕННЯ ВІД БЕКЕНДА ТУТ */}
+          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-blue-600 dark:text-blue-400">
+            {backendMessage}
+          </h1>
+
           <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
             To get started, edit the page.tsx file.
           </h1>
+          
           <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
             Looking for a starting point or more instructions? Head over to{" "}
             <a
