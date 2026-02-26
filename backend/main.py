@@ -1,10 +1,24 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 # Створюємо екземпляр додатка
 app = FastAPI(
     title="Tournament Platform API",
     description="Це 'мозок' нашої системи для проведення турнірів",
     version="0.1.0"
+
+)
+origins = [
+    "http://localhost:3000",
+    "https://your-frontend-vercel-link.vercel.app", # Сюди потім додасте посилання Богдана
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"], # Дозволяє всі методи (GET, POST і т.д.)
+    allow_headers=["*"], # Дозволяє всі заголовки
 )
 
 # 1. Головна сторінка (вітання)
