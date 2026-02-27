@@ -3,6 +3,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
+# подкачь ключа
+load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL")
 # Создание экземпляра додатка
 app = FastAPI(
     title="Tournament Platform API",
@@ -47,13 +50,6 @@ def connection_test():
         "status": "ok",
         "message": "Бекенд Антона працює! Привіт, Богдане!"
     }
-
-load_dotenv()
-
-app = FastAPI()
-
-# подкачь ключа
-DATABASE_URL = os.getenv("DATABASE_URL")
 
 @app.get("/api/db-check")
 def check_db():
