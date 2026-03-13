@@ -1,8 +1,0 @@
-column_name,data_type,is_nullable,column_default
-id,bigint,NO,null
-name,text,NO,null
-description,text,YES,null
-time_start,timestamp with time zone,YES,null
-time_end,timestamp with time zone,YES,null
-max_team,smallint,YES,null
-max_round,smallint,YES,null
