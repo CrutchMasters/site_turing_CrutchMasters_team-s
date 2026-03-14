@@ -39,7 +39,7 @@ export default function RegisterPage() {
    {/* Декоративный логотип на фоне (водяной знак) */}
 <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
   <img 
-    src="/logo begrund1.png" 
+    src="/logo begrund1.svg" 
     alt="Watermark" 
     className="w-[800px] h-[800px] object-contain" 
   />
