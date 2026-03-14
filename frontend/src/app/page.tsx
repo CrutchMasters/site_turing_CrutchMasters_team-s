@@ -63,7 +63,7 @@ export default function Home() {
    {/* Декоративный логотип на фоне (водяной знак) */}
 <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
   <img 
-    src="/logo begrund1.svg" 
+    src="/logo backround1" 
     alt="Watermark" 
     className="w-[800px] h-[800px] object-contain" 
   />
