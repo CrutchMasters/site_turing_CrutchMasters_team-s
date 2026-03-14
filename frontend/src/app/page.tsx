@@ -60,12 +60,14 @@ export default function Home() {
     {/* --- ОСНОВНОЙ КОНТЕНТ --- */}
     <main className="relative flex-grow flex items-center justify-center p-6 overflow-hidden">
 
-    {/* Декоративный логотип на фоне (водяной знак) */}
-    <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
-    <svg width="500" height="500" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
-    </svg>
-    </div>
+   {/* Декоративный логотип на фоне (водяной знак) */}
+<div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
+  <img 
+    src="/logo begrund1.png" 
+    alt="Watermark" 
+    className="w-[800px] h-[800px] object-contain" 
+  />
+</div>
 
     <div className="max-w-6xl w-full grid grid-cols-1 md:grid-cols-3 gap-8 items-center z-10">
 

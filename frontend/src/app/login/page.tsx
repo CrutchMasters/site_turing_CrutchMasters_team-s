@@ -6,12 +6,14 @@ export default function LoginPage() {
     return (
         <div className="min-h-screen bg-[#f3f4f6] flex flex-col items-center justify-center font-sans text-slate-900 relative overflow-hidden">
 
-        {/* --- СЕРЫЙ ЛОГОТИП-ЩИТ НА ФОНЕ (СТИЛЬ ГЛАВНОЙ) --- */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none z-0">
-        <svg width="800" height="800" viewBox="0 0 24 24" fill="currentColor" className="text-gray-900">
-        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
-        </svg>
-        </div>
+        {/* Декоративный логотип на фоне (водяной знак) */}
+<div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
+  <img 
+    src="/logo begrund1.png" 
+    alt="Watermark" 
+    className="w-[800px] h-[800px] object-contain" 
+  />
+</div>
 
         {/* --- КОНТЕЙНЕР ФОРМЫ --- */}
         <div className="z-10 w-full max-w-md bg-white/80 backdrop-blur-xl p-10 rounded-3xl shadow-2xl border border-white/50 flex flex-col items-center">
