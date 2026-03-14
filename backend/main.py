@@ -1,60 +1,80 @@
 import os
-from fastapi import FastAPI
+import sys
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from supabase import create_client, Client
+from pydantic import BaseModel, EmailStr
 
-# подкачь ключа
+# 1. Загрузка окружения
 load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL")
-# Создание экземпляра додатка
-app = FastAPI(
-    title="Tournament Platform API",
-    description="Це 'мозок' нашої системи для проведення турнірів",
-    version="0.1.0"
 
-)
-origins = [
-    "http://localhost:3000",
-    "https://your-frontend-vercel-link.vercel.app", # ссылка богдана
-]
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
+# Инициализация клиента
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("❌ КРИТИЧЕСКАЯ ОШИБКА: Ключи не найдены!", flush=True)
+    supabase = None
+else:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    print("✅ Бэкенд успешно подключен к Supabase", flush=True)
+
+app = FastAPI()
+
+# 2. CORS (Без этого фронтенд не сможет слать POST запросы)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
-    allow_methods=["*"], # Разрешает все методы (GET, POST і т.д.)
-    allow_headers=["*"], # Разрешает все заголовки
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# 1. Главная страница
+# Схема данных
+class UserRegister(BaseModel):
+    username: str
+    login: str
+    email: EmailStr
+    password: str
+
 @app.get("/")
-def read_root():
-    return {
-        "status": "online",
-        "message": "Привіт, Капітане! Бекенд турнірної платформи запущено.",
-        "team": ["Антон (Backend)", "Учень Богдан (Frontend)", "Діма (Data)"]
-    }
+def home():
+    return {"message": "Server is running"}
 
-# 2. Проверка логики текстовым путем
-@app.get("/healthcheck")
-def check_system():
-    return {
-        "service": "tournament-core",
-        "database_connected": True,  
-        "uptime": "just started"
-    }
-# 3. Маршрут связи с фронтом
-@app.get("/api/test")
-def connection_test():
-    return {
-        "status": "ok",
-        "message": "Бекенд Антона працює! Привіт, Богдане!"
-    }
+# --- ЭНДПОИНТ РЕГИСТРАЦИИ ---
+@app.post("/api/register")
+async def register_user(user: UserRegister):
+    # ПРИНУДИТЕЛЬНЫЙ ВЫВОД В КОНСОЛЬ
+    print("\n" + "="*30, flush=True)
+    print(f"🔥 ПОЛУЧЕН ЗАПРОС НА РЕГИСТРАЦИЮ!", flush=True)
+    print(f"👤 Имя (username): {user.username}", flush=True)
+    print(f"🔑 Логин (login):    {user.login}", flush=True)
+    print(f"📧 Email:           {user.email}", flush=True)
+    print(f"🛡️ Пароль:          {user.password}", flush=True)
+    print("="*30 + "\n", flush=True)
 
-@app.get("/api/db-check")
-def check_db():
-    # Це просто перевірка, видит ли бэкенд клуч
-    if DATABASE_URL:
-        # показываем начало строки ради безопасности поняли да ?
-        return {"status": "success", "db_info": f"{DATABASE_URL[:15]}..."}
-    return {"status": "error", "message": "Ключ не знайдено в .env"}
+    try:
+        # 1. Создаем пользователя в Auth
+        auth_res = supabase.auth.sign_up({
+            "email": user.email,
+            "password": user.password,
+            "options": {"data": {"username": user.username}}
+        })
+
+        # 2. Сохраняем в таблицу accaunt
+        db_res = supabase.table("accaunt").insert({
+            "login": user.login,
+            "name": user.username,
+            "email": user.email,
+            "pasword": user.password, # Убедись, что в БД это TEXT, а не BIGINT
+            "status": "active"
+        }).execute()
+
+        print("✅ Данные успешно сохранены в таблицу 'accaunt'", flush=True)
+        return {"status": "success", "user": user.login}
+
+    except Exception as e:
+        error_msg = str(e)
+        print(f"❌ ОШИБКА: {error_msg}", flush=True)
+        raise HTTPException(status_code=400, detail=error_msg)
