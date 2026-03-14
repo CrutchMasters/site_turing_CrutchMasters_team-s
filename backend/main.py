@@ -40,7 +40,7 @@ def read_root():
 def check_system():
     return {
         "service": "tournament-core",
-        "database_connected": True,
+        "database_connected": True,  
         "uptime": "just started"
     }
 # 3. Маршрут связи с фронтом

@@ -1,0 +1,7 @@
+column_name,data_type,is_nullable,column_default
+id,bigint,NO,null
+login,text,NO,null
+name,text,YES,null
+pasword,bigint,YES,null
+email,text,YES,null
+status,text,YES,'false'::text
