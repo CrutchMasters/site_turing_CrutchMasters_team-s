@@ -1,71 +1,89 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 
 export default function LoginPage() {
-    return (
-        <div className="min-h-screen bg-[#f3f4f6] flex flex-col items-center justify-center font-sans text-slate-900 relative overflow-hidden">
+  const cardRef = useRef<HTMLDivElement>(null);
 
-        {/* Декоративный логотип на фоне (водяной знак) */}
-<div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
-  <img 
-    src="/logo_backround1.svg" 
-    alt="Watermark" 
-    className="w-[800px] h-[800px] object-contain" 
-  />
-</div>
+  useEffect(() => {
+    // Анимация появления карточки в стиле Plasma
+    if (cardRef.current) {
+      setTimeout(() => {
+        cardRef.current?.classList.add("opacity-100", "translate-y-0");
+        cardRef.current?.classList.remove("opacity-0", "-translate-y-10");
+      }, 100);
+    }
+  }, []);
 
-        {/* --- КОНТЕЙНЕР ФОРМЫ --- */}
-        <div className="z-10 w-full max-w-md bg-white/80 backdrop-blur-xl p-10 rounded-3xl shadow-2xl border border-white/50 flex flex-col items-center">
+  return (
+    <div className="min-h-screen bg-[#f3f4f6] flex flex-col items-center justify-center font-sans text-slate-900 relative overflow-hidden">
 
-        {/* Название проекта */}
-        <h1 className="text-4xl font-black text-gray-800 mb-8 tracking-tighter uppercase">
-        Code Future
-        </h1>
+    <style jsx global>{`
+      .reveal-drop {
+        transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      `}</style>
 
-        <form className="w-full flex flex-col gap-5">
-        {/* Поле Gmail / Login */}
-        <div className="flex flex-col gap-1">
-        <input
-        type="text"
-        placeholder="gmail / login ..."
-        className="w-full px-5 py-3 rounded-lg border border-gray-300 bg-white focus:ring-2 focus:ring-blue-600 outline-none transition-all placeholder:italic text-sm"
-        required
-        />
-        </div>
+      {/* Фоновый логотип (водяной знак) */}
+      <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
+      <img
+      src="/logo_backround1.svg"
+      alt="Watermark"
+      className="w-[800px] h-[800px] object-contain"
+      />
+      </div>
 
-        {/* Поле Password */}
-        <div className="flex flex-col gap-1">
-        <input
-        type="password"
-        placeholder="password ..."
-        className="w-full px-5 py-3 rounded-lg border border-gray-300 bg-white focus:ring-2 focus:ring-blue-600 outline-none transition-all placeholder:italic text-sm"
-        required
-        />
-        </div>
+      {/* Кнопка возврата в стиле Plasma */}
+      <Link href="/" className="absolute top-8 left-8 text-gray-400 hover:text-blue-600 text-xs font-black uppercase tracking-[0.3em] transition-all flex items-center gap-2 group z-20">
+      <span className="group-hover:-translate-x-1 transition-transform">←</span> Back to main
+      </Link>
 
-        {/* Кнопка Sign In */}
-        <button
-        type="submit"
-        className="w-full mt-2 bg-blue-600 text-white py-4 rounded-lg text-2xl font-bold shadow-md hover:bg-blue-700 transition-all active:scale-[0.98] uppercase tracking-tight"
-        >
-        Sign In
-        </button>
-        </form>
+      {/* --- КОНТЕЙНЕР ФОРМЫ (KDE PLASMA STYLE) --- */}
+      <div
+      ref={cardRef}
+      className="reveal-drop opacity-0 -translate-y-10 z-10 w-full max-w-md bg-white/70 backdrop-blur-2xl p-10 rounded-[2.5rem] shadow-2xl shadow-blue-900/5 border border-white/50 flex flex-col items-center"
+      >
 
-        {/* --- НАДПИСЬ DON'T HAVE AN ACCOUNT? --- */}
-        <div className="mt-8 text-center text-sm">
-        <span className="text-gray-400 font-medium italic">Don&apos;t have an account? </span>
-        <Link href="/register" className="text-blue-600 font-bold hover:underline ml-1">
-        sign up
-        </Link>
-        </div>
-        </div>
+      {/* Название проекта */}
+      <h1 className="text-4xl font-black text-gray-800 mb-10 tracking-tighter uppercase text-center">
+      Code Future
+      </h1>
 
-        {/* Кнопка возврата на главную */}
-        <Link href="/" className="absolute top-8 left-8 text-gray-400 hover:text-blue-600 text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-2">
-        <span>←</span> Back to home
-        </Link>
-        </div>
-    );
+      <form className="w-full flex flex-col gap-4">
+      {/* Поле Gmail / Login */}
+      <input
+      type="text"
+      placeholder="gmail / login ..."
+      className="w-full px-5 py-4 rounded-2xl border border-gray-200 bg-white/50 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all placeholder:italic text-sm"
+      required
+      />
+
+      {/* Поле Password */}
+      <input
+      type="password"
+      placeholder="password ..."
+      className="w-full px-5 py-4 rounded-2xl border border-gray-200 bg-white/50 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all placeholder:italic text-sm"
+      required
+      />
+
+      {/* Кнопка Sign In */}
+      <button
+      type="submit"
+      className="w-full mt-4 bg-blue-600 text-white py-5 rounded-[2rem] text-xl font-black shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95 uppercase tracking-tighter"
+      >
+      Sign In
+      </button>
+      </form>
+
+      {/* --- ССЫЛКА НА РЕГИСТРАЦИЮ --- */}
+      <div className="mt-10 text-center">
+      <span className="text-gray-400 text-xs font-bold uppercase tracking-widest">Don't have an account? </span>
+      <Link href="/register" className="text-blue-600 font-black hover:underline ml-1 uppercase text-xs tracking-widest">
+      sign up
+      </Link>
+      </div>
+      </div>
+      </div>
+  );
 }
