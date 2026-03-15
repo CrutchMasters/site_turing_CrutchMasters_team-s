@@ -31,6 +31,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 3. Маршрут связи с фронтом (то, что ищет Богдан)
+@app.get("/api/test")
+def connection_test():
+    return {
+        "status": "ok",
+        "message": "Backend status active"
+    }
+
 # Схема данных
 class UserRegister(BaseModel):
     username: str
