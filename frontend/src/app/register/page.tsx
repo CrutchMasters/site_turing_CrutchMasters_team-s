@@ -6,7 +6,6 @@ import { useState, ChangeEvent, FormEvent, useEffect, useRef } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 
 export default function RegisterPage() {
-  const { t } = useLanguage(); // Достаем переводы
   const [formData, setFormData] = useState({
     username: "",
     login: "",
