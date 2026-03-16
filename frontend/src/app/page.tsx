@@ -3,21 +3,26 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
+import { useLanguage } from "@/context/LanguageContext";
 
 export default function Home() {
+  const { locale, setLocale, t } = useLanguage();
   const [backendMessage, setBackendMessage] = useState("waiting for a response back end");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
   const revealRefs = useRef<(HTMLDivElement | null)[]>([]);
   const headerRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Проверка статуса бэкенда
     const API_URL = "http://localhost:8000/api/test";
     fetch(API_URL)
     .then((res) => res.json())
     .then((data) => setBackendMessage(data.message))
     .catch(() => setBackendMessage("Disconnected"));
 
+    // Observer для анимации появления блоков при скролле
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -34,6 +39,7 @@ export default function Home() {
       if (ref) observer.observe(ref);
     });
 
+      // Плавное появление хедера
       if (headerRef.current) {
         setTimeout(() => {
           headerRef.current?.classList.add("opacity-100", "translate-y-0");
@@ -41,12 +47,14 @@ export default function Home() {
         }, 100);
       }
 
+      // Закрытие настроек при клике вне области
       const handleClickOutside = (event: MouseEvent) => {
         if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
           setIsSettingsOpen(false);
         }
       };
       document.addEventListener("mousedown", handleClickOutside);
+
       return () => {
         observer.disconnect();
         document.removeEventListener("mousedown", handleClickOutside);
@@ -58,13 +66,8 @@ export default function Home() {
     element?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const sections = [
-    { title: "🏆 Tournament Organization", text: "Create tournaments of any scale with full administrative control. Enjoy flexible settings for start dates, registration windows, and formats." },
-    { title: "👥 Team Interface & Registration", text: "We’ve simplified the entry process. Benefit from automated application validation, participant uniqueness checks, and comprehensive user profiles." },
-    { title: "💻 Assignments & Submissions", text: "Experience a structured workflow with informative rounds, active task tracking, countdown timers, and a unified standard for submitting solutions." },
-    { title: "⚖️ Evaluation & Jury System", text: "Objectivity is our priority. Our platform features random task distribution to prevent bias, criteria-based scoring, and dynamic real-time leaderboards." },
-    { title: "🚀 Advanced Features", text: "Stay updated with smart notifications and push alerts. Easily export data to CSV/Sheets and automatically generate professional PDF certificates." }
-  ];
+  // Секции преимуществ (теперь берутся из словаря)
+  const sections = t.infoSections || [];
 
   return (
     <div className="min-h-screen bg-[#f3f4f6] flex flex-col font-sans text-slate-900 overflow-x-hidden">
@@ -91,17 +94,28 @@ export default function Home() {
       {/* --- КНОПКА НАСТРОЕК (KDE STYLE) --- */}
       <div className="fixed bottom-6 right-6 z-[60]" ref={settingsRef}>
       <div className={`absolute bottom-16 right-0 w-64 bg-white/80 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/50 p-5 transition-all duration-300 origin-bottom-right ${isSettingsOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4 pointer-events-none'}`}>
-      <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4 px-1">Settings</h3>
+      <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4 px-1">{t.settings.title}</h3>
       <div className="space-y-4">
-      <div className="flex items-center justify-between">
-      <span className="text-sm font-bold text-gray-700">Language</span>
-      <div className="flex bg-gray-200/50 p-1 rounded-xl">
-      <button className="px-3 py-1 text-[10px] font-bold bg-white rounded-lg shadow-sm">EN</button>
-      <button className="px-3 py-1 text-[10px] font-bold text-gray-500">RU</button>
+      <div className="flex flex-col gap-2">
+      <span className="text-sm font-bold text-gray-700">{t.settings.lang}</span>
+      <div className="flex bg-gray-200/50 p-1 rounded-xl gap-1">
+      {(['en', 'ru', 'ua'] as const).map((lang) => (
+        <button
+        key={lang}
+        onClick={() => setLocale(lang)}
+        className={`flex-1 py-1 text-[10px] font-black rounded-lg transition-all ${
+          locale === lang ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-blue-400'
+        }`}
+        >
+        {lang.toUpperCase()}
+        </button>
+      ))}
       </div>
       </div>
       <div className="pt-4 border-t border-gray-100">
-      <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter block mb-1">Status: {backendMessage}</span>
+      <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter block mb-1">
+      {t.settings.status}: {backendMessage}
+      </span>
       </div>
       </div>
       </div>
@@ -121,9 +135,9 @@ export default function Home() {
       <span className="text-lg font-bold tracking-tight text-gray-800 uppercase">CodeFuture</span>
       </div>
       <div className="flex items-center gap-4">
-      <Link href="/login" className="text-sm font-semibold text-gray-500 hover:text-blue-600 transition px-3 py-1">Sign in</Link>
+      <Link href="/login" className="text-sm font-semibold text-gray-500 hover:text-blue-600 transition px-3 py-1">{t.nav.signIn}</Link>
       <Link href="/register">
-      <button className="px-5 py-2 text-sm font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-all active:scale-95">Sign up</button>
+      <button className="px-5 py-2 text-sm font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-all active:scale-95">{t.nav.signUp}</button>
       </Link>
       </div>
       </header>
@@ -136,32 +150,27 @@ export default function Home() {
       </div>
 
       <div className="max-w-7xl w-full grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch z-10">
-
       {/* Левая плашка */}
       <div ref={(el) => { revealRefs.current[0] = el; }} className="reveal-drop opacity-0 -translate-y-10 bg-white/95 backdrop-blur-sm p-10 rounded-[2.5rem] shadow-xl border border-gray-100 flex flex-col">
       <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white mb-6">
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
       </div>
-      <h2 className="text-2xl font-black mb-4 text-gray-900 uppercase tracking-tight">Ecosystem</h2>
-      <p className="text-gray-600 leading-relaxed text-sm mb-6">A comprehensive environment for IT tournaments connecting <span className="font-bold text-blue-600">organizers</span> and <span className="font-bold text-blue-600">participants</span>.</p>
+      <h2 className="text-2xl font-black mb-4 text-gray-900 uppercase tracking-tight">{t.hero.ecosystem}</h2>
+      <p className="text-gray-600 leading-relaxed text-sm mb-6">
+      {t.hero.ecosystemDesc} <span className="font-bold text-blue-600">{t.hero.organizers}</span> {locale === 'en' ? 'and' : locale === 'ru' ? 'и' : 'та'} <span className="font-bold text-blue-600">{t.hero.participants}</span>.
+      </p>
       </div>
 
-      {/* ЦЕНТРАЛЬНЫЙ БЛОК (ВОЗВРАЩЕНЫ АНИМАЦИИ) */}
-      <div
-      ref={(el) => { revealRefs.current[1] = el; }}
-      className="reveal-fade opacity-0 flex flex-col items-center justify-center gap-10"
-      >
+      {/* ЦЕНТРАЛЬНЫЙ БЛОК */}
+      <div ref={(el) => { revealRefs.current[1] = el; }} className="reveal-fade opacity-0 flex flex-col items-center justify-center gap-10">
       <Link href="/register" className="w-full max-w-[260px]">
       <button className="bg-blue-600 text-white px-8 py-6 rounded-[2rem] text-2xl font-black shadow-[0_20px_40px_rgba(37,99,235,0.3)] hover:bg-blue-700 hover:scale-105 transition-all w-full uppercase tracking-tighter">
-      Get Started
+      {t.hero.getStarted}
       </button>
       </Link>
 
-      <button
-      onClick={scrollToContent}
-      className="flex flex-col items-center gap-2 text-zinc-400 hover:text-blue-600 transition-colors group"
-      >
-      <span className="text-[10px] font-black uppercase tracking-[0.3em]">Learn More</span>
+      <button onClick={scrollToContent} className="flex flex-col items-center gap-2 text-zinc-400 hover:text-blue-600 transition-colors group">
+      <span className="text-[10px] font-black uppercase tracking-[0.3em]">{t.hero.learnMore}</span>
       <svg className="w-5 h-5 animate-arrow-small" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 13l-7 7-7-7m14-8l-7 7-7-7" />
       </svg>
@@ -173,16 +182,20 @@ export default function Home() {
       <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white mb-6">
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
       </div>
-      <h2 className="text-2xl font-black mb-4 text-gray-900 uppercase tracking-tight">Functionality</h2>
-      <p className="text-gray-600 leading-relaxed text-sm mb-6">Our core engine handles <span className="font-bold text-blue-600">dynamic rounds</span> and <span className="font-bold text-blue-600">expert review</span> with ease.</p>
+      <h2 className="text-2xl font-black mb-4 text-gray-900 uppercase tracking-tight">{t.hero.functionality}</h2>
+      <p className="text-gray-600 leading-relaxed text-sm mb-6">{t.hero.funcDesc}</p>
       </div>
       </div>
       </main>
 
       {/* --- CONTENT СЕКЦИЯ (5 БЛОКОВ) --- */}
       <section id="content-section" className="py-24 px-10 max-w-5xl mx-auto space-y-8">
-      {sections.map((item, index) => (
-        <div key={index} ref={(el) => { revealRefs.current[index + 3] = el; }} className="reveal-drop opacity-0 -translate-y-10 bg-white p-10 rounded-[2.5rem] shadow-sm border border-gray-100">
+      {sections.map((item: any, index: number) => (
+        <div
+        key={index}
+        ref={(el) => { revealRefs.current[index + 3] = el; }}
+        className="reveal-drop opacity-0 -translate-y-10 bg-white p-10 rounded-[2.5rem] shadow-sm border border-gray-100"
+        >
         <h2 className="text-xl font-black mb-3 text-gray-800 uppercase tracking-tight">{item.title}</h2>
         <p className="text-gray-600 text-base leading-relaxed">{item.text}</p>
         </div>
