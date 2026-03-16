@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useState, ChangeEvent, FormEvent, useEffect, useRef } from "react";
-// Импортируем хук для работы с языком
+// Подключаем наш контекст
 import { useLanguage } from "@/context/LanguageContext";
 
 export default function RegisterPage() {
+  const { t } = useLanguage(); // Достаем переводы
+  
   const [formData, setFormData] = useState({
     username: "",
     login: "",
@@ -21,7 +23,7 @@ export default function RegisterPage() {
   const canSubmit = agreed && isPasswordMatch && passwordsNotEmpty;
 
   useEffect(() => {
-    // Анимация появления карточки в стиле Plasma
+    // Анимация появления в стиле Plasma (KDE)
     if (cardRef.current) {
       setTimeout(() => {
         cardRef.current?.classList.add("opacity-100", "translate-y-0");
@@ -55,8 +57,7 @@ export default function RegisterPage() {
         const data = await response.json();
 
         if (response.ok) {
-          // Здесь можно тоже добавить перевод для уведомлений в будущем
-          alert("Success!"); 
+          alert("Success!");
           console.log("Успех:", data);
         } else {
           alert(`Error: ${data.message || data.detail || "Fail"}`);
@@ -82,7 +83,7 @@ export default function RegisterPage() {
         <img src="/logo_backround1.svg" alt="Watermark" className="w-[800px] h-[800px] object-contain" />
       </div>
 
-      {/* Кнопка "Назад" в стиле Plasma */}
+      {/* Кнопка "Назад" */}
       <Link 
         href="/" 
         className="absolute top-8 left-8 text-gray-400 hover:text-blue-600 text-xs font-black uppercase tracking-[0.3em] transition-all flex items-center gap-2 group z-20"
