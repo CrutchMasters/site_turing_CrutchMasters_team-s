@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 import { useState, ChangeEvent, FormEvent, useEffect, useRef } from "react";
-// Импортируем хук для работы с языком
-import { useLanguage } from "@/context/LanguageContext";
 
 export default function RegisterPage() {
   const { t } = useLanguage(); // Достаем переводы
@@ -56,15 +54,14 @@ export default function RegisterPage() {
         const data = await response.json();
 
         if (response.ok) {
-          // Здесь можно тоже добавить перевод для уведомлений в будущем
-          alert("Success!");
+          alert("Регистрация успешна!");
           console.log("Успех:", data);
         } else {
-          alert(`Error: ${data.message || data.detail || "Fail"}`);
+          alert(`Ошибка: ${data.message || data.detail || "Не удалось зарегистрироваться"}`);
         }
       } catch (error) {
         console.error("Ошибка сети:", error);
-        alert("Server connection error.");
+        alert("Не удалось связаться с сервером.");
       }
     }
   };
@@ -84,11 +81,8 @@ export default function RegisterPage() {
       </div>
 
       {/* Кнопка "Назад" в стиле Plasma */}
-      <Link
-      href="/"
-      className="absolute top-8 left-8 text-gray-400 hover:text-blue-600 text-xs font-black uppercase tracking-[0.3em] transition-all flex items-center gap-2 group z-20"
-      >
-      <span className="group-hover:-translate-x-1 transition-transform">←</span> {t.nav.backHome}
+      <Link href="/" className="absolute top-8 left-8 text-gray-400 hover:text-blue-600 text-xs font-black uppercase tracking-[0.3em] transition-all flex items-center gap-2 group z-20">
+      <span className="group-hover:-translate-x-1 transition-transform">←</span> Back to main
       </Link>
 
       {/* Карточка регистрации */}
@@ -97,14 +91,14 @@ export default function RegisterPage() {
       className="reveal-drop opacity-0 -translate-y-10 z-10 w-full max-w-md bg-white/70 backdrop-blur-2xl p-10 rounded-[2.5rem] shadow-2xl shadow-blue-900/5 border border-white/50 flex flex-col items-center"
       >
       <h1 className="text-4xl font-black text-gray-800 mb-8 tracking-tighter uppercase text-center">
-      {t.auth.registerTitle}
+      Code Future
       </h1>
 
       <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
       <input
       name="username"
       type="text"
-      placeholder={t.auth.username}
+      placeholder="username ..."
       value={formData.username}
       onChange={handleChange}
       className="w-full px-5 py-4 rounded-2xl border border-gray-200 bg-white/50 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all placeholder:italic text-sm"
@@ -114,7 +108,7 @@ export default function RegisterPage() {
       <input
       name="login"
       type="text"
-      placeholder={t.auth.login}
+      placeholder="login ..."
       value={formData.login}
       onChange={handleChange}
       className="w-full px-5 py-4 rounded-2xl border border-gray-200 bg-white/50 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all placeholder:italic text-sm"
@@ -124,7 +118,7 @@ export default function RegisterPage() {
       <input
       name="email"
       type="email"
-      placeholder={t.auth.email}
+      placeholder="gmail ..."
       value={formData.email}
       onChange={handleChange}
       className="w-full px-5 py-4 rounded-2xl border border-gray-200 bg-white/50 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all placeholder:italic text-sm"
@@ -135,7 +129,7 @@ export default function RegisterPage() {
       <input
       name="password"
       type="password"
-      placeholder={t.auth.password}
+      placeholder="password ..."
       value={formData.password}
       onChange={handleChange}
       className="w-full px-4 py-4 rounded-2xl border border-gray-200 bg-white/50 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all placeholder:italic text-sm"
@@ -144,7 +138,7 @@ export default function RegisterPage() {
       <input
       name="confirmPassword"
       type="password"
-      placeholder={t.auth.confirmPassword}
+      placeholder="conf. pass..."
       value={formData.confirmPassword}
       onChange={handleChange}
       className={`w-full px-4 py-4 rounded-2xl border bg-white/50 focus:ring-2 outline-none transition-all placeholder:italic text-sm ${
@@ -163,7 +157,7 @@ export default function RegisterPage() {
       className="w-5 h-5 cursor-pointer accent-blue-600 rounded-lg border-gray-300 transition-all"
       />
       <label htmlFor="privacy" className="text-[11px] font-bold text-gray-500 cursor-pointer select-none uppercase tracking-wider">
-      {t.auth.privacy}
+      Privacy Policy
       </label>
       </div>
 
@@ -176,19 +170,14 @@ export default function RegisterPage() {
         : "bg-gray-200 text-gray-400 cursor-not-allowed"
       }`}
       >
-      {t.auth.registerBtn}
+      Registered
       </button>
       </form>
 
       <div className="mt-8 text-center">
-      <span className="text-gray-400 text-xs font-bold uppercase tracking-widest">
-      {t.auth.haveAccount}{" "}
-      </span>
-      <Link
-      href="/login"
-      className="text-blue-600 font-black hover:underline ml-1 uppercase text-xs tracking-widest"
-      >
-      {t.auth.toSignIn}
+      <span className="text-gray-400 text-xs font-bold uppercase tracking-widest">Already have an account? </span>
+      <Link href="/login" className="text-blue-600 font-black hover:underline ml-1 uppercase text-xs tracking-widest">
+      sign in
       </Link>
       </div>
       </div>
