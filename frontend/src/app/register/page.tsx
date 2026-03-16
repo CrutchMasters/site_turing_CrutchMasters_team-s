@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, ChangeEvent, FormEvent, useEffect, useRef } from "react";
 
 export default function RegisterPage() {
+  const { t } = useLanguage(); // Достаем переводы
   const [formData, setFormData] = useState({
     username: "",
     login: "",
