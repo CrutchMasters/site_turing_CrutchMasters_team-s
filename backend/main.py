@@ -39,36 +39,28 @@ class UserRegister(BaseModel):
 
 @app.post("/api/register")
 async def register_user(user: UserRegister):
-    print(f"\n👤 Попытка регистрации: {user.username} ({user.login})")
-    
-    try:
-        # Этап 1: Создание аккаунта в системе Auth
-        # Если здесь ошибка "Database error saving new user" — чисти триггеры в SQL Editor (Шаг 1 выше)
-        auth_res = supabase.auth.sign_up({
-            "email": user.email,
-            "password": user.password,
-        })
-        print("✅ Auth этап пройден")
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
 
-        # Этап 2: Запись в твою таблицу
-        db_res = supabase.table("account").insert({
+    try:
+        # Перевіряємо чи існує вже такий email
+        existing = supabase.table("account").select("id").eq("email", user.email).execute()
+        if existing.data:
+            raise HTTPException(status_code=400, detail="User with this email already exists")
+
+        # Записуємо в таблицю account (без пароля — він зберігається в Supabase Auth)
+        result = supabase.table("account").insert({
             "username": user.username,
             "login": user.login,
             "email": user.email,
-            "password": user.password,
-            "status": "user"
         }).execute()
-        
-        print(f"✅ Данные сохранены в таблицу account")
-        return {"status": "success", "message": "User registered successfully"}
 
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to insert user data")
+
+        return {"success": True, "message": "User registered successfully"}
+
+    except HTTPException:
+        raise
     except Exception as e:
-        msg = str(e)
-        print("\n--- КРИТИЧЕСКАЯ ОШИБКА БАЗЫ ---")
-        print(f"Сообщение: {msg}")
-        print("-------------------------------\n")
-        
-        raise HTTPException(
-            status_code=400,
-            detail=f"Ошибка: {msg}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))

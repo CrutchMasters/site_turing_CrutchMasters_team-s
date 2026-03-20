@@ -93,16 +93,33 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
+      // Крок 1: верифікація OTP (як було)
       const { error } = await supabase.auth.verifyOtp({
         email: formData.email,
         token: otp,
         type: 'signup',
       });
-
       if (error) throw error;
 
-      alert("Success!");
-      window.location.href = "/dashboard";
+      // Крок 2: записуємо дані в таблицю account через бекенд ← НОВИЙ КОД
+      const res = await fetch("http://localhost:8000/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: formData.username,
+          login: formData.login,
+          email: formData.email,
+          password: formData.password,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || "Failed to save user data");
+      }
+
+      window.location.href = "/main_page";
+
     } catch (error: any) {
       alert(error.message || "Verification failed");
     } finally {
