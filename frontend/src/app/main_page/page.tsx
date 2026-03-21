@@ -1,128 +1,212 @@
-"use client";
-
 import React from 'react';
 import { 
-  LayoutDashboard, Trophy, Users, User, Settings, 
-  LogOut, ExternalLink, Shield 
+  LayoutDashboard, 
+  Trophy, 
+  Users, 
+  UserCircle, 
+  Settings, 
+  LogOut, 
+  ExternalLink, 
+  Upload, 
+  ChevronRight,
+  FileText
 } from 'lucide-react';
 
-// Вспомогательные компоненты для чистоты кода
-const NavItem = ({ icon, label, active = false }: { icon: React.ReactNode, label: string, active?: boolean }) => (
-  <div className={`flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-colors ${active ? 'bg-blue-600 text-white' : 'hover:bg-slate-700/50'}`}>
-    {icon}
-    <span className="font-medium">{label}</span>
-  </div>
-);
-
-const FilterButton = ({ label, active = false }: { label: string, active?: boolean }) => (
-  <button className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${active ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
-    {label}
-  </button>
-);
-
-const TournamentRow = ({ name, status, date, participation, statusColor, actionLabel }: any) => (
-  <tr className="border-b border-slate-700/30">
-    <td className="py-4 font-medium">{name}</td>
-    <td className={`py-4 ${statusColor}`}>{status}</td>
-    <td className="py-4 text-slate-400">{date}</td>
-    <td className="py-4">{participation}</td>
-    <td className="py-4 text-right">
-      {actionLabel ? (
-        <button className="text-blue-400 text-xs font-bold uppercase hover:underline">{actionLabel}</button>
-      ) : (
-        <button className="text-slate-500 hover:text-white transition-colors"><ExternalLink size={16} /></button>
-      )}
-    </td>
-  </tr>
-);
-
-export default function DashboardPage() {
+export default function HomePage() {
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-800 font-sans">
-      {/* Sidebar */}
-      <aside className="w-64 bg-[#1e2235] text-slate-400 p-4 flex flex-col fixed h-full">
-        <div className="flex items-center gap-3 mb-8 px-2">
-          <div className="w-10 h-10 bg-slate-300 rounded-full flex items-center justify-center">
-            <User size={24} className="text-slate-600" />
+    <div className="flex min-h-screen bg-[#F8FAFC]">
+      {/* Sidebar - залишаємо темним для професійного контрасту */}
+      <aside className="w-64 bg-[#1E293B] text-slate-300 flex flex-col shrink-0">
+        <div className="p-6 flex items-center gap-3 border-b border-slate-800">
+          <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg font-bold">
+            AP
           </div>
-          <div className="text-sm">
-            <p className="text-white font-semibold leading-none">Anton Petrov</p>
+          <div className="overflow-hidden">
+            <p className="text-sm font-bold text-white truncate">Anton Petrov</p>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Admin Role</p>
           </div>
         </div>
 
-        <nav className="flex-1 space-y-1">
-          <NavItem icon={<LayoutDashboard size={20} />} label="Dashboard" active />
-          <NavItem icon={<Trophy size={20} />} label="Турніри" />
-          <NavItem icon={<Users size={20} />} label="Команди" />
-          <NavItem icon={<User size={20} />} label="Гравці" />
-          <NavItem icon={<Settings size={20} />} label="Налаштування" />
+        <nav className="flex-1 p-4 space-y-1">
+          <NavItem icon={<LayoutDashboard size={18} />} label="Dashboard" active />
+          <NavItem icon={<Trophy size={18} />} label="Турніри" />
+          <NavItem icon={<Users size={18} />} label="Команди" />
+          <NavItem icon={<UserCircle size={18} />} label="Гравці" />
+          <NavItem icon={<Settings size={18} />} label="Налаштування" />
         </nav>
 
-        <div className="pt-4 border-t border-slate-700 space-y-1">
-          <NavItem icon={<LogOut size={20} />} label="Logout" />
+        <div className="p-4 mt-auto border-t border-slate-800">
+          <button className="flex items-center gap-3 px-4 py-2 hover:text-red-400 transition-colors w-full text-sm font-medium">
+            <LogOut size={18} /> Вихід
+          </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 ml-64 p-8 relative min-h-screen overflow-hidden">
-        <Shield className="absolute -right-20 top-1/2 -translate-y-1/2 text-slate-200 w-96 h-96 -z-10 opacity-30" />
-        <Shield className="absolute -left-20 top-1/4 text-slate-200 w-64 h-64 -z-10 opacity-30" />
-
-        <header className="flex justify-between items-center mb-6">
-          <div>
-            <nav className="text-sm text-slate-500 mb-1">Головна &gt; Дашборд</nav>
-            <h1 className="text-2xl font-bold text-slate-900">8. Головна сторінка - Огляд</h1>
+      {/* Main Content Area */}
+      <main className="flex-1 p-8 overflow-y-auto">
+        <header className="mb-8">
+          <div className="flex items-center gap-2 text-xs text-slate-400 mb-2 font-medium">
+            <span>Головна</span>
+            <ChevronRight size={12} />
+            <span className="text-slate-600">Дашборд</span>
           </div>
-          <div className="text-right text-sm text-slate-500">
-            [Результатно Admin] - 12.03.2026 18:00
-          </div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">8. Головна сторінка - Огляд</h1>
         </header>
 
-        <div className="max-w-4xl space-y-8">
-          <section className="bg-[#1e2235] rounded-xl p-6 text-white shadow-xl">
-            <h2 className="text-xl font-semibold mb-4">1. Список турнірів</h2>
-            <div className="flex gap-2 mb-6 flex-wrap">
-              <FilterButton label="Всі" active />
-              <FilterButton label="Registration Open" />
-              <FilterButton label="Running" />
-              <FilterButton label="Finished" />
+        <div className="max-w-6xl space-y-8">
+          
+          {/* 1. Список турнірів */}
+          <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <h2 className="font-bold text-lg text-slate-800">1. Список турнірів</h2>
+              <div className="flex flex-wrap gap-2">
+                <FilterButton label="Всі" active />
+                <FilterButton label="Registration Open" />
+                <FilterButton label="Running" />
+                <FilterButton label="Finished" />
+              </div>
             </div>
 
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-700 text-slate-400">
-                  <th className="pb-3 font-medium">Назва турніру</th>
-                  <th className="pb-3 font-medium">Статус</th>
-                  <th className="pb-3 font-medium">Дата старту</th>
-                  <th className="pb-3 font-medium">Ваша участь</th>
-                  <th className="pb-3 font-medium text-right">Дії</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-700/50">
-                <TournamentRow name="Весняний хакатон 2026" status="Running" date="12.01.2026" participation="Дати" statusColor="text-orange-400" />
-                <TournamentRow name="Summer Code Jam" status="Registration" date="02.01.2026" participation="—" statusColor="text-yellow-400" actionLabel="Зареєструватись" />
-              </tbody>
-            </table>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold mb-4 text-slate-900">2. Команда: Team Alpha</h2>
-            <div className="bg-[#1e2235] rounded-xl p-6 text-white shadow-xl">
-               <div className="flex justify-between items-center border-b border-slate-700 pb-4 mb-4">
-                  <div>
-                    <p className="text-xs text-slate-400 uppercase">Поточний турнір</p>
-                    <p className="text-blue-400 flex items-center gap-1">Весняний хакатон 2026 <ExternalLink size={14}/></p>
-                  </div>
-                  <span className="text-orange-400 text-sm font-bold">Running</span>
-               </div>
-               <div className="flex justify-between items-center">
-                  <p className="text-sm">Ваше завдання: Створення API</p>
-                  <button className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg font-medium">Здати</button>
-               </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50 text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                    <th className="px-6 py-4">Назва турніру</th>
+                    <th className="px-6 py-4">Статус</th>
+                    <th className="px-6 py-4">Дата старту</th>
+                    <th className="px-6 py-4">Ваша участь</th>
+                    <th className="px-6 py-4 text-right">Дії</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm divide-y divide-slate-50">
+                  <TournamentRow 
+                    title="Весняний хакатон 2026" 
+                    status="Running" 
+                    statusType="warning" 
+                    date="12.01.2026" 
+                    participation="Дати" 
+                  />
+                  <TournamentRow 
+                    title="Summer Code Jam" 
+                    status="Registration" 
+                    statusType="info" 
+                    date="02.01.2026" 
+                    participation="—" 
+                    isSpecialAction 
+                  />
+                </tbody>
+              </table>
             </div>
           </section>
+
+          {/* 2. Команда: Team Alpha - ТЕПЕР У СВІТЛІЙ ТЕМІ */}
+          <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 relative overflow-hidden">
+            {/* Декоративний елемент на фоні */}
+            <div className="absolute -right-8 -top-8 w-32 h-32 bg-indigo-50 rounded-full blur-3xl opacity-60" />
+            
+            <h2 className="font-bold text-lg text-slate-800 mb-6 flex items-center gap-2">
+              <Users className="text-indigo-600" size={20} /> 2. Команда: Team Alpha
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
+              {/* Поточний турнір */}
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Поточний турнір</p>
+                <div className="flex items-center justify-between">
+                  <a href="#" className="font-bold text-slate-900 hover:text-indigo-600 transition-colors flex items-center gap-1.5">
+                    Весняний хакатон 2026 <ExternalLink size={14} />
+                  </a>
+                  <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 border border-orange-200">
+                    Running
+                  </span>
+                </div>
+              </div>
+
+              {/* Ваше завдання */}
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ваше завдання</p>
+                <p className="font-semibold text-slate-800">Створення API для авторизації</p>
+              </div>
+
+              {/* Ваш сабміт */}
+              <div className="p-4 rounded-xl bg-indigo-50/50 border border-indigo-100">
+                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">Останній сабміт</p>
+                <div className="flex items-center gap-2 text-indigo-700">
+                  <FileText size={16} />
+                  <p className="text-sm font-bold italic">v2_final_build.zip</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-slate-100">
+              <p className="text-xs text-slate-500">
+                <span className="font-bold text-slate-400 italic">Статус:</span> Файли перевіряються автоматичною системою...
+              </p>
+              <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-bold text-sm shadow-md shadow-indigo-200 transition-all active:scale-95 flex items-center gap-2 w-full sm:w-auto justify-center">
+                <Upload size={18} /> Здати нову версію
+              </button>
+            </div>
+          </section>
+
         </div>
       </main>
     </div>
+  );
+}
+
+// Допоміжні компоненти
+function NavItem({ icon, label, active = false }: { icon: any, label: string, active?: boolean }) {
+  return (
+    <button className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+      active 
+      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/20' 
+      : 'hover:bg-slate-800 hover:text-white'
+    }`}>
+      {icon} <span>{label}</span>
+    </button>
+  );
+}
+
+function FilterButton({ label, active = false }: { label: string, active?: boolean }) {
+  return (
+    <button className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+      active 
+      ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-100' 
+      : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200/50'
+    }`}>
+      {label}
+    </button>
+  );
+}
+
+function TournamentRow({ title, status, statusType, date, participation, isSpecialAction }: any) {
+  const statusStyles = {
+    warning: 'text-orange-600 bg-orange-50 border-orange-100',
+    info: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+    success: 'text-emerald-600 bg-emerald-50 border-emerald-100'
+  };
+
+  return (
+    <tr className="hover:bg-slate-50/50 transition-colors group">
+      <td className="px-6 py-5 font-bold text-slate-700 underline-offset-4 decoration-indigo-200 group-hover:underline">{title}</td>
+      <td className="px-6 py-5">
+        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded border ${statusStyles[statusType as keyof typeof statusStyles]}`}>
+          {status}
+        </span>
+      </td>
+      <td className="px-6 py-5 text-slate-500 font-medium">{date}</td>
+      <td className="px-6 py-5 text-slate-700 font-medium">{participation}</td>
+      <td className="px-6 py-5 text-right">
+        {isSpecialAction ? (
+          <button className="text-indigo-600 font-black text-[10px] uppercase tracking-tighter hover:bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 transition-all">
+            Зареєструватись
+          </button>
+        ) : (
+          <button className="p-2 text-slate-300 group-hover:text-indigo-600 group-hover:bg-indigo-50 rounded-lg transition-all">
+            <ExternalLink size={18} />
+          </button>
+        )}
+      </td>
+    </tr>
   );
 }
