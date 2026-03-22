@@ -27,6 +27,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/api/test")
+def connection_test():
+    return {
+        "status": "ok",
+        "message": "Backend status active"
+    }
+
 # --- REGISTER ---
 class UserRegister(BaseModel):
     username: str

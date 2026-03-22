@@ -145,9 +145,9 @@ export default function Home() {
 
       {/* --- HERO СЕКЦИЯ --- */}
       <main className="relative min-h-screen flex items-center justify-center p-6 pt-24 overflow-hidden">
-        <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
-          <img src="/logo_backround1.svg" alt="Watermark" className="w-[800px] h-[800px] object-contain" />
-        </div>
+      <div className="fixed inset-0 flex items-center justify-center opacity-5 pointer-events-none z-0">
+      <img src="/logo_backround1.svg" alt="Watermark" className="w-[800px] h-[800px] object-contain" />
+      </div>
 
         <div className="max-w-7xl w-full grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch z-10">
           {/* Левая плашка */}
