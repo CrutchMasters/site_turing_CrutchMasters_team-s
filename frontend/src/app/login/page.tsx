@@ -20,6 +20,11 @@ function ShieldWM() {
   );
 }
 
+const API_URL =
+typeof window !== "undefined" && window.location.hostname === "localhost"
+? "http://localhost:8000"
+: "https://site-turing-crutchmasters-team-s.onrender.com";
+
 export default function LoginPage() {
   const router = useRouter();
   const { t }  = useLanguage();
