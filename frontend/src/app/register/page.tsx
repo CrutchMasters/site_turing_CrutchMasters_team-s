@@ -1,9 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useState, ChangeEvent, FormEvent, useEffect, useRef, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { useState, ChangeEvent, FormEvent, useEffect, useMemo } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 import { createBrowserClient } from "@supabase/ssr";
+import { Eye, EyeOff, ShieldCheck, ArrowLeft } from "lucide-react";
+
+/* ── Shield SVG (shared markup) ── */
+function ShieldWM() {
+  return (
+    <div className="shield-wm">
+      <svg viewBox="0 0 200 230" fill="none" style={{ width:"min(70vw,560px)", height:"auto" }}>
+        <path d="M100 10L190 50V110C190 160 150 200 100 220C50 200 10 160 10 110V50L100 10Z" fill="#1a2035"/>
+        <path d="M100 30L175 64V110C175 152 142 186 100 204C58 186 25 152 25 110V64L100 30Z"
+          fill="none" stroke="white" strokeWidth="4" strokeOpacity=".15"/>
+        <path d="M82 115L95 128L122 98" stroke="white" strokeWidth="8"
+          strokeLinecap="round" strokeLinejoin="round" strokeOpacity=".3"/>
+      </svg>
+    </div>
+  );
+}
+
+function pwStrength(pw: string) {
+  let s = 0;
+  if (pw.length >= 8) s++;
+  if (/[A-Z]/.test(pw)) s++;
+  if (/[0-9]/.test(pw)) s++;
+  if (/[^A-Za-z0-9]/.test(pw)) s++;
+  return s;
+}
 
 const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -24,226 +50,273 @@ const EyeOffIcon = () => (
 );
 
 export default function RegisterPage() {
-  const { t } = useLanguage();
+  const router = useRouter();
+  const { t }  = useLanguage();
 
-  const supabase = useMemo(() => {
-    return createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
-    );
-  }, []);
+  const supabase = useMemo(() => createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
+  ), []);
 
-  const [formData, setFormData] = useState({
-    username: "",
-    login: "",
-    email: "",
-    password: "",
-    confirmPassword: ""
-  });
-
-  const [agreed, setAgreed] = useState(false);
+  const [form, setForm]       = useState({ username:"", login:"", email:"", password:"", confirmPassword:"" });
+  const [showPw, setShowPw]   = useState(false);
+  const [showCPw, setShowCPw] = useState(false);
+  const [agreed, setAgreed]   = useState(false);
   const [showOtp, setShowOtp] = useState(false);
-  const [otp, setOtp] = useState("");
+  const [otp, setOtp]         = useState("");
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  const cardRef = useRef<HTMLDivElement>(null);
+  const isMatch   = form.password === form.confirmPassword;
+  const pwOk      = form.password.length > 0;
+  const canSubmit = agreed && isMatch && pwOk && !loading;
+  const strength  = pwStrength(form.password);
+  const sColor    = ["#c8cdd8","#ef4444","#f59e0b","#3b82f6","#22c55e"][strength];
+  const sLabel    = ["","Слабкий","Середній","Добрий","Відмінний"][strength];
 
-  const isPasswordMatch = formData.password === formData.confirmPassword;
-  const passwordsNotEmpty = formData.password.length > 0;
-  const canSubmit = agreed && isPasswordMatch && passwordsNotEmpty && !loading;
+  useEffect(() => { setTimeout(() => setMounted(true), 80); }, []);
 
-  useEffect(() => {
-    if (cardRef.current && !showOtp) {
-      const timer = setTimeout(() => {
-        cardRef.current?.classList.add("opacity-100", "translate-y-0");
-        cardRef.current?.classList.remove("opacity-0", "-translate-y-10");
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [showOtp]);
-
-  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) =>
+    setForm(p => ({ ...p, [e.target.name]: e.target.value }));
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      alert("System Error: Supabase keys are missing.");
-      return;
-    }
-
     setLoading(true);
     try {
       const { error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            username: formData.username,
-            login: formData.login,
-          },
-        },
+        email: form.email, password: form.password,
+        options: { data: { username: form.username, login: form.login } },
       });
-
       if (error) throw error;
       setShowOtp(true);
-    } catch (error: any) {
-      alert(error.message || "Registration failed");
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: any) { alert(err.message || "Registration failed"); }
+    finally { setLoading(false); }
   };
 
-  const handleOtpVerify = async () => {
+  const handleVerify = async () => {
     if (otp.length !== 6) return;
-
     setLoading(true);
     try {
       const { error } = await supabase.auth.verifyOtp({
-        email: formData.email,
-        token: otp,
-        type: 'signup',
+        email: form.email, token: otp, type: "signup",
       });
       if (error) throw error;
 
-      const res = await fetch(`${API_URL}/api/register`, {
+      const res = await fetch("http://localhost:8000/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username: formData.username,
-          login: formData.login,
-          email: formData.email,
-          password: formData.password,
+          username: form.username, login: form.login,
+          email: form.email, password: form.password,
         }),
       });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.detail); }
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || "Failed to save user data");
-      }
+      /* ── → Login page ── */
+      router.push("/login");
+    } catch (err: any) { alert(err.message || "Verification failed"); }
+    finally { setLoading(false); }
+  };
 
-      window.location.href = "/main_page";
-
-    } catch (error: any) {
-      alert(error.message || "Verification failed");
-    } finally {
-      setLoading(false);
-    }
+  /* card transition style */
+  const cardStyle: React.CSSProperties = {
+    position: "relative", zIndex: 10,
+    width: "100%", maxWidth: 440,
+    background: "var(--card)", borderRadius: 28,
+    padding: "44px 38px 38px",
+    boxShadow: "var(--sh-lg)", border: "1px solid var(--brd)",
+    display: "flex", flexDirection: "column", alignItems: "center",
+    opacity: mounted ? 1 : 0,
+    transform: mounted ? "translateY(0)" : "translateY(-26px) scale(.97)",
+    transition: "opacity 500ms var(--spring), transform 500ms var(--spring)",
   };
 
   return (
-    <div className="min-h-screen bg-[#f3f4f6] flex flex-col items-center justify-center font-sans text-slate-900 relative overflow-hidden">
-    <style jsx global>{`
-      .reveal-drop { transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
-      .otp-animate { animation: slideUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-      @keyframes slideUp {
-        from { opacity: 0; transform: translateY(20px) scale(0.95); }
-        to { opacity: 1; transform: translateY(0) scale(1); }
-      }
-      `}</style>
-
-      {/* Watermark */}
-      <div className="fixed inset-0 flex items-center justify-center opacity-10 pointer-events-none z-0">
-      <img src="/logo_backround1.svg" alt="Watermark" className="w-[800px] h-[800px] object-contain" />
-      </div>
+    <div style={{
+      minHeight: "100vh", background: "var(--bg)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      position: "relative", overflow: "hidden", padding: "32px 16px",
+    }}>
+      <ShieldWM />
 
       {!showOtp && (
-        <Link href="/" className="absolute top-8 left-8 text-gray-400 hover:text-blue-600 text-xs font-black uppercase tracking-[0.3em] transition-all flex items-center gap-2 z-20">
-        <span>←</span> {t.nav.backHome}
+        <Link href="/" className="sl" style={{
+          position: "absolute", top: 28, left: 32, zIndex: 20,
+          display: "flex", alignItems: "center", gap: 6,
+          fontSize: 11, fontWeight: 800, color: "var(--t3)",
+          textDecoration: "none", textTransform: "uppercase", letterSpacing: ".15em",
+          transition: "color 150ms ease",
+        }}
+          onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+          onMouseLeave={e => (e.currentTarget.style.color = "var(--t3)")}
+        >
+          ← {t.nav.backHome}
         </Link>
       )}
 
+      {/* ── REGISTER FORM ── */}
       {!showOtp ? (
-        <div ref={cardRef} className="reveal-drop opacity-0 -translate-y-10 z-10 w-full max-w-md bg-white/70 backdrop-blur-2xl p-10 rounded-[2.5rem] shadow-2xl border border-white/50 flex flex-col items-center">
-        <h1 className="text-4xl font-black text-gray-800 mb-8 tracking-tighter uppercase text-center">
-        {t.auth.registerTitle}
-        </h1>
+        <div style={cardStyle}>
+          <h1 className="fu d50" style={{
+            fontFamily: "var(--font)", fontSize: 32, fontWeight: 900,
+            color: "var(--t1)", letterSpacing: "-.01em",
+            textTransform: "uppercase", marginBottom: 28, textAlign: "center",
+          }}>
+            CODE FUTURE
+          </h1>
 
-        <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
-        <input name="username" type="text" placeholder={t.auth.username} value={formData.username} onChange={handleChange} className="w-full px-5 py-4 rounded-2xl border border-gray-200 bg-white/50 focus:ring-2 focus:ring-blue-500 outline-none text-sm" required />
-        <input name="login" type="text" placeholder={t.auth.login} value={formData.login} onChange={handleChange} className="w-full px-5 py-4 rounded-2xl border border-gray-200 bg-white/50 focus:ring-2 focus:ring-blue-500 outline-none text-sm" required />
-        <input name="email" type="email" placeholder={t.auth.email} value={formData.email} onChange={handleChange} className="w-full px-5 py-4 rounded-2xl border border-gray-200 bg-white/50 focus:ring-2 focus:ring-blue-500 outline-none text-sm" required />
+          <form onSubmit={handleSubmit} style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10 }}>
+            <input name="username" type="text" className="inp fu d50"
+              placeholder={`${t.auth.username} ...`} value={form.username} onChange={handleChange} required />
+            <input name="login" type="text" className="inp fu d100"
+              placeholder={`${t.auth.login} ...`} value={form.login} onChange={handleChange} required />
+            <input name="email" type="email" className="inp fu d150"
+              placeholder="gmail ..." value={form.email} onChange={handleChange} required />
 
-        <div className="grid grid-cols-2 gap-3">
-        {/* Пароль */}
-        <div className="relative">
-        <input
-        name="password"
-        type={showPassword ? "text" : "password"}
-        placeholder={t.auth.password}
-        value={formData.password}
-        onChange={handleChange}
-        className="w-full px-4 py-4 pr-9 rounded-2xl border border-gray-200 bg-white/50 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-        required
-        />
-        <button
-        type="button"
-        onClick={() => setShowPassword(!showPassword)}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-500 transition-colors"
-        >
-        {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-        </button>
+            {/* Passwords */}
+            <div className="fu d200" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div style={{ position: "relative" }}>
+                <input name="password" type={showPw ? "text" : "password"}
+                  className="inp" placeholder={`${t.auth.password} ...`}
+                  value={form.password} onChange={handleChange}
+                  style={{ paddingRight: 40 }} required />
+                <button type="button" onClick={() => setShowPw(!showPw)} style={{
+                  position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+                  background: "none", border: "none", cursor: "pointer", color: "var(--t3)", padding: 0,
+                  transition: "color 150ms ease",
+                }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+                  onMouseLeave={e => (e.currentTarget.style.color = "var(--t3)")}
+                >{showPw ? <EyeOff size={16}/> : <Eye size={16}/>}</button>
+              </div>
+              <div style={{ position: "relative" }}>
+                <input name="confirmPassword" type={showCPw ? "text" : "password"}
+                  className={`inp ${form.confirmPassword && !isMatch ? "err" : form.confirmPassword && isMatch ? "ok" : ""}`}
+                  placeholder="cont. pass..." value={form.confirmPassword} onChange={handleChange}
+                  style={{ paddingRight: 40 }} required />
+                <button type="button" onClick={() => setShowCPw(!showCPw)} style={{
+                  position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+                  background: "none", border: "none", cursor: "pointer", color: "var(--t3)", padding: 0,
+                  transition: "color 150ms ease",
+                }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+                  onMouseLeave={e => (e.currentTarget.style.color = "var(--t3)")}
+                >{showCPw ? <EyeOff size={16}/> : <Eye size={16}/>}</button>
+              </div>
+            </div>
+
+            {/* Password strength */}
+            {form.password && (
+              <div className="fu" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ flex: 1, height: 3, background: "#e5e7eb", borderRadius: 99, overflow: "hidden" }}>
+                  <div className="pw-bar" style={{ width: `${strength * 25}%`, background: sColor }} />
+                </div>
+                <span style={{ fontSize: 10, fontWeight: 800, color: sColor, textTransform: "uppercase", letterSpacing: ".06em", whiteSpace: "nowrap" }}>{sLabel}</span>
+              </div>
+            )}
+
+            {/* Checkbox */}
+            <div className="fu d250" style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0" }}>
+              <div onClick={() => setAgreed(!agreed)} style={{
+                width: 20, height: 20, borderRadius: 5, flexShrink: 0, cursor: "pointer",
+                border: agreed ? "none" : "2px solid var(--brd2)",
+                background: agreed ? "var(--accent)" : "transparent",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                transition: "background 160ms ease, border 160ms ease, transform 160ms var(--spring)",
+                transform: agreed ? "scale(1.1)" : "scale(1)",
+                boxShadow: agreed ? "0 3px 10px rgba(45,91,227,.35)" : "none",
+              }}>
+                {agreed && <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                  <path d="M2 5.5L4.5 8L9 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>}
+              </div>
+              <label onClick={() => setAgreed(!agreed)} style={{ fontSize: 13, color: "var(--t2)", fontStyle: "italic", fontWeight: 600, cursor: "pointer" }}>
+                Personal (Privacy Policy)
+              </label>
+            </div>
+
+            <button type="submit" disabled={!canSubmit} className="btn-p spr fu d300"
+              style={{ width: "100%", padding: "15px", marginTop: 6, fontSize: 15 }}>
+              {loading
+                ? <span style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+                    <span style={{ width:14, height:14, border:"2px solid rgba(255,255,255,.35)", borderTopColor:"#fff", borderRadius:"50%", display:"inline-block", animation:"spin .65s linear infinite" }}/>
+                    ...
+                  </span>
+                : t.auth.registerBtn}
+            </button>
+          </form>
+
+          <p className="fu d350" style={{ marginTop: 22, fontSize: 13, color: "var(--t3)", textAlign: "center" }}>
+            Already have an account?{" "}
+            {/* ── → Login page ── */}
+            <Link href="/login" style={{ color: "var(--accent)", fontWeight: 800, textDecoration: "none", transition: "color 150ms ease" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "var(--accent-h)")}
+              onMouseLeave={e => (e.currentTarget.style.color = "var(--accent)")}
+            >sign in</Link>
+          </p>
         </div>
 
-        {/* Подтверждение пароля */}
-        <div className="relative">
-        <input
-        name="confirmPassword"
-        type={showConfirmPassword ? "text" : "password"}
-        placeholder={t.auth.confirmPassword}
-        value={formData.confirmPassword}
-        onChange={handleChange}
-        className={`w-full px-4 py-4 pr-9 rounded-2xl border bg-white/50 focus:ring-2 outline-none text-sm ${!isPasswordMatch && formData.confirmPassword ? "border-red-500" : "border-gray-200"}`}
-        required
-        />
-        <button
-        type="button"
-        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-500 transition-colors"
-        >
-        {showConfirmPassword ? <EyeOffIcon /> : <EyeIcon />}
-        </button>
-        </div>
-        </div>
-
-        <div className="flex items-center gap-3 py-2">
-        <input type="checkbox" id="privacy" checked={agreed} onChange={() => setAgreed(!agreed)} className="w-5 h-5 cursor-pointer accent-blue-600 rounded-lg" />
-        <label htmlFor="privacy" className="text-[11px] font-bold text-gray-500 cursor-pointer uppercase tracking-wider">
-        {t.auth.privacy}
-        </label>
-        </div>
-
-        <button type="submit" disabled={!canSubmit} className={`w-full py-5 rounded-[2rem] text-xl font-black shadow-xl transition-all active:scale-95 uppercase tracking-tighter ${canSubmit ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}>
-        {loading ? "..." : t.auth.registerBtn}
-        </button>
-        </form>
-        </div>
+      /* ── OTP SCREEN ── */
       ) : (
-        <div className="otp-animate z-20 w-full max-w-sm bg-white/80 backdrop-blur-3xl p-10 rounded-[3rem] shadow-2xl border border-white/50 flex flex-col items-center">
-        <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 mb-6">
-        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-        </svg>
-        </div>
-        <h2 className="text-2xl font-black text-gray-800 uppercase mb-2">Verify</h2>
-        <p className="text-center text-gray-400 text-[10px] font-bold uppercase mb-8">
-        Enter 6-digit code sent to {formData.email}
-        </p>
-        <input type="text" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} placeholder="000000" className="w-full text-center text-4xl font-black tracking-[0.2em] py-5 rounded-2xl bg-gray-100/50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all text-blue-600 mb-8" />
-        <button onClick={handleOtpVerify} disabled={otp.length !== 6 || loading} className={`w-full py-5 rounded-[1.8rem] font-black uppercase shadow-lg transition-all mb-4 ${otp.length === 6 ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-400"}`}>
-        {loading ? "..." : "Confirm"}
-        </button>
-        <button onClick={() => { setShowOtp(false); setOtp(""); }} className="group text-[10px] font-black text-gray-400 hover:text-red-500 uppercase tracking-[0.3em] transition-all flex items-center gap-2">
-        <span>←</span> Back
-        </button>
+        <div className="otp" style={{
+          position: "relative", zIndex: 10,
+          width: "100%", maxWidth: 360,
+          background: "var(--card)", borderRadius: 28, padding: "44px 36px",
+          boxShadow: "var(--sh-lg)", border: "1px solid var(--brd)",
+          display: "flex", flexDirection: "column", alignItems: "center",
+        }}>
+          <div className="pop" style={{
+            width: 64, height: 64, borderRadius: 18, marginBottom: 20,
+            background: "rgba(45,91,227,.08)", border: "1px solid rgba(45,91,227,.2)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <ShieldCheck size={30} color="var(--accent)" />
+          </div>
+
+          <h2 className="fu" style={{ fontFamily:"var(--font)", fontSize:24, fontWeight:900, color:"var(--t1)", textTransform:"uppercase", letterSpacing:"-.01em", marginBottom:6 }}>
+            Verify
+          </h2>
+          <p className="fu d50" style={{ fontSize:12, color:"var(--t3)", fontWeight:700, textAlign:"center", marginBottom:28, textTransform:"uppercase", letterSpacing:".08em" }}>
+            Код надіслано на{" "}<span style={{ color:"var(--accent)" }}>{form.email}</span>
+          </p>
+
+          <input type="text" maxLength={6} value={otp}
+            onChange={e => setOtp(e.target.value.replace(/\D/g, ""))}
+            className="otp-inp fu d100" placeholder="000000"
+            style={{ marginBottom: 16 }}
+          />
+
+          {/* Progress dots */}
+          <div className="fu d150" style={{ display:"flex", gap:7, marginBottom:24 }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} style={{
+                width:9, height:9, borderRadius:"50%",
+                background: i < otp.length ? "var(--accent)" : "var(--bg2)",
+                border: "1px solid var(--brd2)",
+                transition: "background 200ms ease, transform 200ms var(--spring)",
+                transform: i < otp.length ? "scale(1.35)" : "scale(1)",
+              }} />
+            ))}
+          </div>
+
+          <button onClick={handleVerify} disabled={otp.length !== 6 || loading}
+            className="btn-p" style={{ width:"100%", padding:"14px", marginBottom:12, fontSize:15 }}>
+            {loading
+              ? <span style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+                  <span style={{ width:14, height:14, border:"2px solid rgba(255,255,255,.35)", borderTopColor:"#fff", borderRadius:"50%", display:"inline-block", animation:"spin .65s linear infinite" }}/>
+                  Перевірка...
+                </span>
+              : "Confirm"}
+          </button>
+
+          <button onClick={() => { setShowOtp(false); setOtp(""); }}
+            className="btn-g spr"
+            style={{ width:"100%", padding:"11px", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+            <ArrowLeft size={13}/> Назад
+          </button>
         </div>
       )}
-      </div>
+    </div>
   );
 }
