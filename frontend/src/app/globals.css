@@ -1,26 +1,161 @@
-@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap');
 
+/* ─── CSS Tokens ─── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --font:     'Barlow', sans-serif;
+  --bg:       #ebebee;
+  --bg2:      #e2e2e6;
+  --white:    #ffffff;
+  --card:     #ffffff;
+  --t1:       #1a2035;
+  --t2:       #5a6278;
+  --t3:       #9aa0b0;
+  --accent:   #2d5be3;
+  --accent-h: #1e47cc;
+  --accent-s: rgba(45,91,227,0.10);
+  --brd:      rgba(0,0,0,0.07);
+  --brd2:     rgba(0,0,0,0.12);
+  --sh-sm:    0 2px 8px rgba(0,0,0,0.06);
+  --sh-md:    0 6px 24px rgba(0,0,0,0.09);
+  --sh-lg:    0 14px 44px rgba(0,0,0,0.13);
+  --spring:   cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ─── Keyframes ─── */
+@keyframes fadeUp      { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
+@keyframes fadeIn      { from{opacity:0} to{opacity:1} }
+@keyframes slideLeft   { from{opacity:0;transform:translateX(-28px)} to{opacity:1;transform:none} }
+@keyframes scaleUp     { from{opacity:0;transform:scale(.88)} to{opacity:1;transform:scale(1)} }
+@keyframes popBounce   { 0%{opacity:0;transform:scale(.6)} 65%{transform:scale(1.08)} 100%{opacity:1;transform:scale(1)} }
+@keyframes badgePop    { 0%{opacity:0;transform:scale(.5) translateY(-6px)} 70%{transform:scale(1.12)} 100%{opacity:1;transform:scale(1)} }
+@keyframes cardDrop    { from{opacity:0;transform:translateY(-26px) scale(.97)} to{opacity:1;transform:none} }
+@keyframes shieldFloat { 0%,100%{transform:translateY(0) rotate(-5deg)} 50%{transform:translateY(-14px) rotate(-5deg)} }
+@keyframes rowIn       { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:none} }
+@keyframes saveFlash   { 0%{opacity:0;transform:scale(.5) translateY(-8px)} 60%{transform:scale(1.1)} 100%{opacity:1;transform:none} }
+@keyframes avatarIn    { 0%{opacity:0;transform:scale(.7) rotate(-8deg)} 70%{transform:scale(1.06) rotate(1deg)} 100%{opacity:1;transform:none} }
+@keyframes tabSlide    { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+@keyframes lineGrow    { from{width:0} to{width:100%} }
+@keyframes countUp     { from{opacity:0;transform:translateY(12px) scale(.9)} to{opacity:1;transform:none} }
+@keyframes shake       { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-6px)} 40%,80%{transform:translateX(6px)} }
+@keyframes slideUp     { from{opacity:0;transform:translateY(22px) scale(.96)} to{opacity:1;transform:none} }
+@keyframes spin        { to{transform:rotate(360deg)} }
+
+/* ─── Animation classes ─── */
+.fu   { animation: fadeUp    340ms var(--spring) both; }
+.fi   { animation: fadeIn    260ms ease both; }
+.sl   { animation: slideLeft 320ms var(--spring) both; }
+.su   { animation: scaleUp   280ms var(--spring) both; }
+.pop  { animation: popBounce 420ms var(--spring) both; }
+.bp   { animation: badgePop  380ms var(--spring) both; }
+.cd   { animation: cardDrop  500ms var(--spring) both; }
+.cnt  { animation: countUp   400ms var(--spring) both; }
+.av   { animation: avatarIn  500ms var(--spring) both; }
+.tsld { animation: tabSlide  300ms var(--spring) both; }
+.row  { animation: rowIn     300ms var(--spring) both; }
+.otp  { animation: slideUp   420ms var(--spring) both; }
+.shake{ animation: shake     360ms var(--spring); }
+
+/* ─── Stagger delays ─── */
+.d50  { animation-delay:  50ms; } .d100 { animation-delay: 100ms; }
+.d150 { animation-delay: 150ms; } .d200 { animation-delay: 200ms; }
+.d250 { animation-delay: 250ms; } .d300 { animation-delay: 300ms; }
+.d350 { animation-delay: 350ms; } .d400 { animation-delay: 400ms; }
+.d450 { animation-delay: 450ms; } .d500 { animation-delay: 500ms; }
+
+/* ─── Interactions ─── */
+.spr { transition: transform 170ms var(--spring), box-shadow 170ms ease, background 150ms ease; }
+.spr:hover  { transform: translateY(-2px) scale(1.025); }
+.spr:active { transform: scale(0.96); }
+
+.cl { transition: transform 220ms var(--spring), box-shadow 220ms ease; }
+.cl:hover { transform: translateY(-4px); box-shadow: var(--sh-lg); }
+
+/* ─── Sidebar ─── */
+.sidebar {
+  width: 236px;
+  background: var(--white);
+  border-right: 1px solid var(--brd);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  box-shadow: var(--sh-sm);
+}
+.nav-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 13px; border-radius: 12px;
+  font-size: .875rem; font-weight: 600; color: var(--t2);
+  cursor: pointer; width: 100%; border: none; background: none;
+  transition: background 150ms ease, color 150ms ease, transform 150ms var(--spring);
+}
+.nav-item:hover  { background: var(--bg); color: var(--t1); transform: translateX(3px); }
+.nav-item.active { background: var(--accent-s); color: var(--accent); }
+
+/* ─── Input ─── */
+.inp {
+  width: 100%; padding: 13px 16px;
+  background: var(--bg); border: 1.5px solid transparent;
+  border-radius: 13px; color: var(--t1);
+  font-family: var(--font); font-size: .9rem; outline: none;
+  transition: border-color 150ms ease, background 150ms ease,
+              box-shadow 150ms ease, transform 150ms var(--spring);
+}
+.inp::placeholder { color: var(--t3); font-style: italic; }
+.inp:focus {
+  border-color: var(--accent); background: var(--white);
+  box-shadow: 0 0 0 3px var(--accent-s); transform: scale(1.004);
+}
+.inp.ok  { border-color: #22c55e; }
+.inp.err { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.12); }
+
+/* ─── Buttons ─── */
+.btn-p {
+  background: var(--accent); color: #fff;
+  font-family: var(--font); font-weight: 800; font-size: 14px;
+  letter-spacing: .06em; text-transform: uppercase;
+  border: none; border-radius: 999px; cursor: pointer;
+  transition: background 150ms ease, transform 170ms var(--spring), box-shadow 170ms ease;
+}
+.btn-p:hover    { background: var(--accent-h); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(45,91,227,.32); }
+.btn-p:active   { transform: scale(.96); }
+.btn-p:disabled { background: #c8cdd8; color: #9aa0b0; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.btn-g {
+  background: var(--white); color: var(--t2);
+  font-family: var(--font); font-weight: 700; font-size: 13px;
+  border: 1.5px solid var(--brd2); border-radius: 999px; cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease, transform 170ms var(--spring);
+}
+.btn-g:hover  { background: var(--bg); color: var(--t1); border-color: var(--accent); transform: translateY(-1px); }
+.btn-g:active { transform: scale(.96); }
+
+/* ─── Badges ─── */
+.badge  { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:99px; font-family:var(--font); font-size:10px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+.b-ok   { background:rgba(34,197,94,.1);  color:#16a34a; border:1px solid rgba(34,197,94,.3); }
+.b-adm  { background:rgba(45,91,227,.1);  color:var(--accent); border:1px solid rgba(45,91,227,.25); }
+.b-warn { background:rgba(245,158,11,.1); color:#d97706; border:1px solid rgba(245,158,11,.3); }
+.b-run  { background:rgba(245,158,11,.12);color:#d97706; border:1px solid rgba(245,158,11,.3); }
+.b-open { background:rgba(45,91,227,.1);  color:var(--accent); border:1px solid rgba(45,91,227,.25); }
+
+/* ─── Shield watermark ─── */
+.shield-wm {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; z-index: 0; opacity: .07;
+  animation: shieldFloat 6s ease-in-out infinite;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ─── OTP input ─── */
+.otp-inp {
+  width: 100%; text-align: center; font-size: 38px;
+  font-family: var(--font); font-weight: 900; letter-spacing: .22em;
+  padding: 18px 14px; border-radius: 18px;
+  background: var(--bg); border: 2px solid var(--brd2);
+  color: var(--accent); outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms var(--spring);
 }
+.otp-inp:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-s); transform: scale(1.015); }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+/* ─── Misc ─── */
+.act-item { transition: background 150ms ease; }
+.act-item:hover { background: rgba(45,91,227,.04); border-radius: 12px; }
+.pw-bar { height: 3px; border-radius: 99px; transition: width 300ms var(--spring), background 300ms ease; }
