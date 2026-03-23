@@ -15,6 +15,7 @@ export default function LoginPage() {
 
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -46,7 +47,6 @@ export default function LoginPage() {
         return;
       }
 
-      // Зберігаємо токен у localStorage
       localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("user", JSON.stringify(data.user));
 
@@ -90,13 +90,12 @@ export default function LoginPage() {
       className="reveal-drop opacity-0 -translate-y-10 z-10 w-full max-w-md bg-white/70 backdrop-blur-2xl p-10 rounded-[2.5rem] shadow-2xl shadow-blue-900/5 border border-white/50 flex flex-col items-center"
       >
 
-      {/* Название проекта */}
       <h1 className="text-4xl font-black text-gray-800 mb-10 tracking-tighter uppercase text-center">
       {t.auth.loginTitle}
       </h1>
 
       <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
-      {/* Поле Login */}
+
       <input
       type="text"
       placeholder={t.auth.login}
@@ -106,24 +105,40 @@ export default function LoginPage() {
       required
       />
 
-      {/* Поле Password */}
+      {/* Поле Password с кнопкой показа */}
+      <div className="relative">
       <input
-      type="password"
+      type={showPassword ? "text" : "password"}
       placeholder={t.auth.password}
       value={password}
       onChange={(e) => setPassword(e.target.value)}
-      className="w-full px-5 py-4 rounded-2xl border border-gray-200 bg-white/50 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all placeholder:italic text-sm"
+      className="w-full px-5 py-4 pr-12 rounded-2xl border border-gray-200 bg-white/50 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all placeholder:italic text-sm"
       required
       />
+      <button
+      type="button"
+      onClick={() => setShowPassword(!showPassword)}
+      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-500 transition-colors"
+      >
+      {showPassword ? (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+        </svg>
+      ) : (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+        </svg>
+      )}
+      </button>
+      </div>
 
-      {/* Помилка */}
       {error && (
         <p className="text-red-500 text-xs font-bold uppercase tracking-wide text-center">
         {error}
         </p>
       )}
 
-      {/* Кнопка Sign In */}
       <button
       type="submit"
       disabled={loading || !login || !password}
@@ -137,7 +152,6 @@ export default function LoginPage() {
       </button>
       </form>
 
-      {/* --- ССЫЛКА НА РЕГИСТРАЦИЮ --- */}
       <div className="mt-10 text-center">
       <span className="text-gray-400 text-xs font-bold uppercase tracking-widest">
       {t.auth.noAccount}{" "}
