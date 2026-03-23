@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useEffect, useRef, useState, FormEvent } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 
+const API_URL =
+typeof window !== "undefined" && window.location.hostname === "localhost"
+? "http://localhost:8000"
+: "https://site-turing-crutchmasters-team-s.onrender.com";
+
 export default function LoginPage() {
   const { t } = useLanguage();
   const cardRef = useRef<HTMLDivElement>(null);
@@ -28,7 +33,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:8000/api/login", {
+      const res = await fetch(`${API_URL}/api/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ login, password }),
@@ -63,7 +68,7 @@ export default function LoginPage() {
       `}</style>
 
       {/* Фоновый логотип (водяной знак) */}
-      <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
+      <div className="fixed inset-0 flex items-center justify-center opacity-10 pointer-events-none z-0">
       <img
       src="/logo_backround1.svg"
       alt="Watermark"

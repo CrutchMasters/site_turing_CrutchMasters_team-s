@@ -5,11 +5,14 @@ import { useState, ChangeEvent, FormEvent, useEffect, useRef, useMemo } from "re
 import { useLanguage } from "@/context/LanguageContext";
 import { createBrowserClient } from "@supabase/ssr";
 
+const API_URL =
+typeof window !== "undefined" && window.location.hostname === "localhost"
+? "http://localhost:8000"
+: "https://site-turing-crutchmasters-team-s.onrender.com";
+
 export default function RegisterPage() {
   const { t } = useLanguage();
 
-  // 1. Инициализируем клиент через useMemo, чтобы он создавался один раз
-  // и не падал при отсутствии переменных в момент сборки
   const supabase = useMemo(() => {
     return createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
@@ -17,7 +20,6 @@ export default function RegisterPage() {
     );
   }, []);
 
-  // Состояния для полей формы
   const [formData, setFormData] = useState({
     username: "",
     login: "",
@@ -33,12 +35,10 @@ export default function RegisterPage() {
 
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // Валидация
   const isPasswordMatch = formData.password === formData.confirmPassword;
   const passwordsNotEmpty = formData.password.length > 0;
   const canSubmit = agreed && isPasswordMatch && passwordsNotEmpty && !loading;
 
-  // Анимация появления
   useEffect(() => {
     if (cardRef.current && !showOtp) {
       const timer = setTimeout(() => {
@@ -54,12 +54,10 @@ export default function RegisterPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // 1. Отправка данных на регистрацию
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
 
-    // Защитная проверка переменных перед запросом
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
       alert("System Error: Supabase keys are missing.");
       return;
@@ -87,13 +85,11 @@ export default function RegisterPage() {
     }
   };
 
-  // 2. Проверка OTP кода
   const handleOtpVerify = async () => {
     if (otp.length !== 6) return;
 
     setLoading(true);
     try {
-      // Крок 1: верифікація OTP (як було)
       const { error } = await supabase.auth.verifyOtp({
         email: formData.email,
         token: otp,
@@ -101,8 +97,7 @@ export default function RegisterPage() {
       });
       if (error) throw error;
 
-      // Крок 2: записуємо дані в таблицю account через бекенд ← НОВИЙ КОД
-      const res = await fetch("http://localhost:8000/api/register", {
+      const res = await fetch(`${API_URL}/api/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -139,7 +134,7 @@ export default function RegisterPage() {
       `}</style>
 
       {/* Watermark */}
-      <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
+      <div className="fixed inset-0 flex items-center justify-center opacity-10 pointer-events-none z-0">
       <img src="/logo_backround1.svg" alt="Watermark" className="w-[800px] h-[800px] object-contain" />
       </div>
 
