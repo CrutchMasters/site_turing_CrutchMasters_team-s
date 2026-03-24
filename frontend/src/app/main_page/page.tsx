@@ -1,219 +1,149 @@
-"use client";
-
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import {
-  LayoutDashboard, Trophy, Users, UserCircle,
-  Settings, LogOut, ExternalLink, Upload,
-  ChevronRight, FileText
+import React from 'react';
+import { 
+  LayoutDashboard, 
+  Trophy, 
+  Users, 
+  UserCircle, 
+  Settings, 
+  LogOut, 
+  ExternalLink, 
+  Upload, 
+  ChevronRight,
+  FileText
 } from 'lucide-react';
 
-/* ── Shield watermark ── */
-function ShieldWM() {
+export default function HomePage() {
   return (
-    <div className="shield-wm">
-      <svg viewBox="0 0 200 230" fill="none" style={{ width:"min(70vw,580px)", height:"auto" }}>
-        <path d="M100 10L190 50V110C190 160 150 200 100 220C50 200 10 160 10 110V50L100 10Z" fill="#1a2035"/>
-        <path d="M100 30L175 64V110C175 152 142 186 100 204C58 186 25 152 25 110V64L100 30Z"
-          fill="none" stroke="white" strokeWidth="4" strokeOpacity=".15"/>
-        <path d="M82 115L95 128L122 98" stroke="white" strokeWidth="8"
-          strokeLinecap="round" strokeLinejoin="round" strokeOpacity=".3"/>
-      </svg>
-    </div>
-  );
-}
-
-/* ── Sidebar ── */
-function Sidebar({ onProfile }: { onProfile: () => void }) {
-  const router = useRouter();
-
-  const handleLogout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("user");
-    router.push("/login");
-  };
-
-  return (
-    <aside className="sidebar sl">
-      <div style={{ padding:"18px 14px", borderBottom:"1px solid var(--brd)" }}>
-        {/* ── Profile button → Profile page ── */}
-        <button onClick={onProfile} className="spr"
-          style={{ display:"flex", alignItems:"center", gap:11, width:"100%", padding:"9px 11px", borderRadius:13, background:"none", border:"none", cursor:"pointer", transition:"background 150ms ease" }}
-          onMouseEnter={e => (e.currentTarget.style.background = "var(--bg)")}
-          onMouseLeave={e => (e.currentTarget.style.background = "none")}
-        >
-          <div style={{
-            width:36, height:36, borderRadius:"50%", flexShrink:0,
-            background:"linear-gradient(135deg,var(--accent),#6b8ff7)",
-            display:"flex", alignItems:"center", justifyContent:"center",
-            color:"#fff", fontWeight:900, fontSize:13,
-            boxShadow:"0 3px 10px rgba(45,91,227,.3)",
-            transition:"transform 200ms var(--spring)",
-          }}>
+    <div className="flex min-h-screen bg-[#F8FAFC]">
+      {/* Sidebar - залишаємо темним для професійного контрасту */}
+      <aside className="w-64 bg-[#1E293B] text-slate-300 flex flex-col shrink-0">
+        <div className="p-6 flex items-center gap-3 border-b border-slate-800">
+          <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg font-bold">
             AP
           </div>
-          <div style={{ overflow:"hidden", textAlign:"left", flex:1 }}>
-            <p style={{ fontSize:13, fontWeight:800, color:"var(--t1)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Anton Petrov</p>
-            <p style={{ fontSize:10, color:"var(--accent)", textTransform:"uppercase", letterSpacing:".07em", fontWeight:700 }}>Профіль →</p>
+          <div className="overflow-hidden">
+            <p className="text-sm font-bold text-white truncate">Anton Petrov</p>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Admin Role</p>
           </div>
-        </button>
-      </div>
+        </div>
 
-      <nav style={{ flex:1, padding:"10px", display:"flex", flexDirection:"column", gap:2 }}>
-        {[
-          { icon:<LayoutDashboard size={17}/>, label:"Dashboard", active:true },
-          { icon:<Trophy size={17}/>,          label:"Турніри" },
-          { icon:<Users size={17}/>,           label:"Команди" },
-          { icon:<UserCircle size={17}/>,      label:"Гравці" },
-          { icon:<Settings size={17}/>,        label:"Налаштування" },
-        ].map((item, i) => (
-          <button key={item.label}
-            className={`nav-item sl d${(i+1)*50} ${item.active ? "active" : ""}`}>
-            {item.icon}<span>{item.label}</span>
+        <nav className="flex-1 p-4 space-y-1">
+          <NavItem icon={<LayoutDashboard size={18} />} label="Dashboard" active />
+          <NavItem icon={<Trophy size={18} />} label="Турніри" />
+          <NavItem icon={<Users size={18} />} label="Команди" />
+          <NavItem icon={<UserCircle size={18} />} label="Гравці" />
+          <NavItem icon={<Settings size={18} />} label="Налаштування" />
+        </nav>
+
+        <div className="p-4 mt-auto border-t border-slate-800">
+          <button className="flex items-center gap-3 px-4 py-2 hover:text-red-400 transition-colors w-full text-sm font-medium">
+            <LogOut size={18} /> Вихід
           </button>
-        ))}
-      </nav>
+        </div>
+      </aside>
 
-      <div style={{ padding:"10px", borderTop:"1px solid var(--brd)" }} className="fi d400">
-        <button className="nav-item spr" style={{ color:"var(--t3)" }}
-          onClick={handleLogout}
-          onMouseEnter={e => (e.currentTarget.style.color = "#ef4444")}
-          onMouseLeave={e => (e.currentTarget.style.color = "var(--t3)")}
-        >
-          <LogOut size={17}/><span>Вихід</span>
-        </button>
-      </div>
-    </aside>
-  );
-}
-
-/* ── Main page ── */
-export default function MainPage() {
-  const router = useRouter();
-
-  /* ── → Profile page ── */
-  const goProfile = () => router.push("/profile");
-
-  return (
-    <div style={{ display:"flex", minHeight:"100vh", background:"var(--bg)", position:"relative", overflow:"hidden" }}>
-      <ShieldWM />
-      <Sidebar onProfile={goProfile} />
-
-      <main style={{ flex:1, padding:"32px 36px", overflowY:"auto", position:"relative", zIndex:1 }}>
-        {/* Header */}
-        <header className="fu" style={{ marginBottom:28 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:7, fontSize:11, color:"var(--t3)", marginBottom:6, fontWeight:700, textTransform:"uppercase", letterSpacing:".08em" }}>
-            <span>Головна</span><ChevronRight size={11}/><span style={{ color:"var(--t2)" }}>Дашборд</span>
+      {/* Main Content Area */}
+      <main className="flex-1 p-8 overflow-y-auto">
+        <header className="mb-8">
+          <div className="flex items-center gap-2 text-xs text-slate-400 mb-2 font-medium">
+            <span>Головна</span>
+            <ChevronRight size={12} />
+            <span className="text-slate-600">Дашборд</span>
           </div>
-          <h1 style={{ fontFamily:"var(--font)", fontSize:22, fontWeight:900, color:"var(--t1)", textTransform:"uppercase", letterSpacing:"-.02em" }}>
-            Головна сторінка — Огляд
-          </h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">8. Головна сторінка - Огляд</h1>
         </header>
 
-        <div style={{ maxWidth:940, display:"flex", flexDirection:"column", gap:24 }}>
-
-          {/* ── Tournaments table ── */}
-          <section className="fu d100 cl" style={{
-            background:"var(--card)", borderRadius:20,
-            boxShadow:"var(--sh-md)", border:"1px solid var(--brd)", overflow:"hidden",
-          }}>
-            <div style={{ padding:"18px 24px", borderBottom:"1px solid var(--brd)", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
-              <h2 style={{ fontFamily:"var(--font)", fontWeight:900, fontSize:16, color:"var(--t1)", textTransform:"uppercase" }}>
-                Список турнірів
-              </h2>
-              <div style={{ display:"flex", gap:6 }}>
-                {["Всі","Registration Open","Running","Finished"].map((lbl, i) => (
-                  <button key={lbl} className="spr" style={{
-                    padding:"5px 12px", borderRadius:999, fontSize:11, fontWeight:800,
-                    background: i===0 ? "var(--accent)" : "var(--bg)",
-                    color: i===0 ? "#fff" : "var(--t2)",
-                    border: i===0 ? "none" : "1.5px solid var(--brd2)",
-                    cursor:"pointer",
-                    boxShadow: i===0 ? "0 3px 12px rgba(45,91,227,.3)" : "none",
-                    transition:"all 150ms ease",
-                    textTransform:"uppercase", letterSpacing:".05em",
-                  }}>{lbl}</button>
-                ))}
+        <div className="max-w-6xl space-y-8">
+          
+          {/* 1. Список турнірів */}
+          <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <h2 className="font-bold text-lg text-slate-800">1. Список турнірів</h2>
+              <div className="flex flex-wrap gap-2">
+                <FilterButton label="Всі" active />
+                <FilterButton label="Registration Open" />
+                <FilterButton label="Running" />
+                <FilterButton label="Finished" />
               </div>
             </div>
-            <table style={{ width:"100%", borderCollapse:"collapse" }}>
-              <thead>
-                <tr style={{ borderBottom:"1px solid var(--brd)", background:"rgba(0,0,0,.015)" }}>
-                  {["Назва турніру","Статус","Дата старту","Ваша участь",""].map(h => (
-                    <th key={h} style={{ padding:"10px 20px", textAlign: h==="" ? "right" : "left", fontSize:10, fontWeight:800, color:"var(--t3)", textTransform:"uppercase", letterSpacing:".08em", whiteSpace:"nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { title:"Весняний хакатон 2026", status:"Running",      cls:"b-run",  date:"12.01.2026", part:"Дати",  delay:200 },
-                  { title:"Summer Code Jam",       status:"Registration", cls:"b-open", date:"02.01.2026", part:"—",     delay:280, special:true },
-                ].map(row => (
-                  <tr key={row.title} className="row" style={{ animationDelay:`${row.delay}ms`, cursor:"default" }}
-                    onMouseEnter={e => Array.from(e.currentTarget.cells).forEach(c => (c.style.background="rgba(0,0,0,.015)"))}
-                    onMouseLeave={e => Array.from(e.currentTarget.cells).forEach(c => (c.style.background=""))}
-                  >
-                    <td style={{ padding:"13px 20px", fontSize:13, color:"var(--t1)", fontWeight:800, borderBottom:"1px solid var(--brd)", whiteSpace:"nowrap" }}>{row.title}</td>
-                    <td style={{ padding:"13px 20px", borderBottom:"1px solid var(--brd)", whiteSpace:"nowrap" }}>
-                      <span className={`badge ${row.cls}`}>{row.status}</span>
-                    </td>
-                    <td style={{ padding:"13px 20px", fontSize:13, color:"var(--t2)", borderBottom:"1px solid var(--brd)", whiteSpace:"nowrap" }}>{row.date}</td>
-                    <td style={{ padding:"13px 20px", fontSize:13, color:"var(--t2)", borderBottom:"1px solid var(--brd)", whiteSpace:"nowrap" }}>{row.part}</td>
-                    <td style={{ padding:"13px 20px", borderBottom:"1px solid var(--brd)", textAlign:"right" }}>
-                      {row.special ? (
-                        <button className="btn-p spr" style={{ padding:"6px 14px", fontSize:11 }}>Зареєструватись</button>
-                      ) : (
-                        <button className="spr" style={{ background:"none", border:"none", cursor:"pointer", padding:6, borderRadius:8, color:"var(--t3)", transition:"color 150ms ease" }}
-                          onMouseEnter={e => (e.currentTarget.style.color="var(--accent)")}
-                          onMouseLeave={e => (e.currentTarget.style.color="var(--t3)")}
-                        ><ExternalLink size={16}/></button>
-                      )}
-                    </td>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50 text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                    <th className="px-6 py-4">Назва турніру</th>
+                    <th className="px-6 py-4">Статус</th>
+                    <th className="px-6 py-4">Дата старту</th>
+                    <th className="px-6 py-4">Ваша участь</th>
+                    <th className="px-6 py-4 text-right">Дії</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="text-sm divide-y divide-slate-50">
+                  <TournamentRow 
+                    title="Весняний хакатон 2026" 
+                    status="Running" 
+                    statusType="warning" 
+                    date="12.01.2026" 
+                    participation="Дати" 
+                  />
+                  <TournamentRow 
+                    title="Summer Code Jam" 
+                    status="Registration" 
+                    statusType="info" 
+                    date="02.01.2026" 
+                    participation="—" 
+                    isSpecialAction 
+                  />
+                </tbody>
+              </table>
+            </div>
           </section>
 
-          {/* ── Team card ── */}
-          <section className="fu d200 cl" style={{
-            background:"var(--card)", borderRadius:20,
-            boxShadow:"var(--sh-md)", border:"1px solid var(--brd)", padding:"24px",
-          }}>
-            <h2 style={{ fontFamily:"var(--font)", fontWeight:900, fontSize:16, color:"var(--t1)", marginBottom:18, display:"flex", alignItems:"center", gap:8, textTransform:"uppercase" }}>
-              <Users size={18} color="var(--accent)"/> Команда: Team Alpha
+          {/* 2. Команда: Team Alpha - ТЕПЕР У СВІТЛІЙ ТЕМІ */}
+          <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 relative overflow-hidden">
+            {/* Декоративний елемент на фоні */}
+            <div className="absolute -right-8 -top-8 w-32 h-32 bg-indigo-50 rounded-full blur-3xl opacity-60" />
+            
+            <h2 className="font-bold text-lg text-slate-800 mb-6 flex items-center gap-2">
+              <Users className="text-indigo-600" size={20} /> 2. Команда: Team Alpha
             </h2>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
-              {[
-                { label:"Поточний турнір", content:(
-                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                      <a href="#" style={{ fontWeight:800, fontSize:13, color:"var(--t1)", textDecoration:"none", display:"flex", alignItems:"center", gap:5, transition:"color 150ms ease" }}
-                        onMouseEnter={e=>(e.currentTarget.style.color="var(--accent)")}
-                        onMouseLeave={e=>(e.currentTarget.style.color="var(--t1)")}
-                      >Весняний хакатон <ExternalLink size={12}/></a>
-                      <span className="badge b-run" style={{ fontSize:9 }}>Running</span>
-                    </div>
-                  )},
-                { label:"Ваше завдання", content:<p style={{ fontSize:13, fontWeight:600, color:"var(--t1)" }}>Створення API для авторизації</p> },
-                { label:"Останній сабміт", content:(
-                    <div style={{ display:"flex", alignItems:"center", gap:7, color:"var(--accent)" }}>
-                      <FileText size={15}/><span style={{ fontSize:13, fontWeight:700, fontStyle:"italic" }}>v2_final_build.zip</span>
-                    </div>
-                  )},
-              ].map((c, i) => (
-                <div key={c.label} className={`su d${(i+2)*100}`}
-                  style={{ background:"var(--bg)", borderRadius:14, padding:"14px 16px", border:"1px solid var(--brd)" }}>
-                  <p style={{ fontSize:10, fontWeight:800, color:"var(--t3)", textTransform:"uppercase", letterSpacing:".08em", marginBottom:8 }}>{c.label}</p>
-                  {c.content}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
+              {/* Поточний турнір */}
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Поточний турнір</p>
+                <div className="flex items-center justify-between">
+                  <a href="#" className="font-bold text-slate-900 hover:text-indigo-600 transition-colors flex items-center gap-1.5">
+                    Весняний хакатон 2026 <ExternalLink size={14} />
+                  </a>
+                  <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 border border-orange-200">
+                    Running
+                  </span>
                 </div>
-              ))}
+              </div>
+
+              {/* Ваше завдання */}
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ваше завдання</p>
+                <p className="font-semibold text-slate-800">Створення API для авторизації</p>
+              </div>
+
+              {/* Ваш сабміт */}
+              <div className="p-4 rounded-xl bg-indigo-50/50 border border-indigo-100">
+                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">Останній сабміт</p>
+                <div className="flex items-center gap-2 text-indigo-700">
+                  <FileText size={16} />
+                  <p className="text-sm font-bold italic">v2_final_build.zip</p>
+                </div>
+              </div>
             </div>
-            <div style={{ marginTop:18, paddingTop:18, borderTop:"1px solid var(--brd)", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
-              <p style={{ fontSize:12, color:"var(--t3)", fontStyle:"italic" }}>
-                <span style={{ color:"var(--t2)", fontStyle:"normal", fontWeight:700 }}>Статус:</span> Файли перевіряються автоматичною системою...
+
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-slate-100">
+              <p className="text-xs text-slate-500">
+                <span className="font-bold text-slate-400 italic">Статус:</span> Файли перевіряються автоматичною системою...
               </p>
-              <button className="btn-p spr" style={{ padding:"11px 22px", display:"flex", alignItems:"center", gap:7, flexShrink:0 }}>
-                <Upload size={15}/> Здати нову версію
+              <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-bold text-sm shadow-md shadow-indigo-200 transition-all active:scale-95 flex items-center gap-2 w-full sm:w-auto justify-center">
+                <Upload size={18} /> Здати нову версію
               </button>
             </div>
           </section>
@@ -221,5 +151,62 @@ export default function MainPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+// Допоміжні компоненти
+function NavItem({ icon, label, active = false }: { icon: any, label: string, active?: boolean }) {
+  return (
+    <button className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+      active 
+      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/20' 
+      : 'hover:bg-slate-800 hover:text-white'
+    }`}>
+      {icon} <span>{label}</span>
+    </button>
+  );
+}
+
+function FilterButton({ label, active = false }: { label: string, active?: boolean }) {
+  return (
+    <button className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+      active 
+      ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-100' 
+      : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200/50'
+    }`}>
+      {label}
+    </button>
+  );
+}
+
+function TournamentRow({ title, status, statusType, date, participation, isSpecialAction }: any) {
+  const statusStyles = {
+    warning: 'text-orange-600 bg-orange-50 border-orange-100',
+    info: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+    success: 'text-emerald-600 bg-emerald-50 border-emerald-100'
+  };
+
+  return (
+    <tr className="hover:bg-slate-50/50 transition-colors group">
+      <td className="px-6 py-5 font-bold text-slate-700 underline-offset-4 decoration-indigo-200 group-hover:underline">{title}</td>
+      <td className="px-6 py-5">
+        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded border ${statusStyles[statusType as keyof typeof statusStyles]}`}>
+          {status}
+        </span>
+      </td>
+      <td className="px-6 py-5 text-slate-500 font-medium">{date}</td>
+      <td className="px-6 py-5 text-slate-700 font-medium">{participation}</td>
+      <td className="px-6 py-5 text-right">
+        {isSpecialAction ? (
+          <button className="text-indigo-600 font-black text-[10px] uppercase tracking-tighter hover:bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 transition-all">
+            Зареєструватись
+          </button>
+        ) : (
+          <button className="p-2 text-slate-300 group-hover:text-indigo-600 group-hover:bg-indigo-50 rounded-lg transition-all">
+            <ExternalLink size={18} />
+          </button>
+        )}
+      </td>
+    </tr>
   );
 }
