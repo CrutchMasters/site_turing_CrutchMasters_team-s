@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 export default function DashboardPage() {
-  const revealRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const revealRefs = useRef<(HTMLElement | null)[]>([]);
   const router = useRouter();
   useEffect(() => {
     const observer = new IntersectionObserver(
