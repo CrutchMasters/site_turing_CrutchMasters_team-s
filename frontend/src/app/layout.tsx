@@ -1,18 +1,13 @@
-// src/app/layout.tsx
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Barlow } from "next/font/google"; // Импортируем Barlow
 import "./globals.css";
-// Импортируем провайдер
 import { LanguageProvider } from "@/context/LanguageContext";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Настраиваем шрифт
+const barlow = Barlow({
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
+  variable: "--font-barlow", // Имя переменной для CSS
 });
 
 export const metadata: Metadata = {
@@ -26,15 +21,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-    <body
-    className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-    >
-    {/* Оборачиваем все приложение здесь */}
+    <html lang="en" className={barlow.variable}><body className="antialiased">
     <LanguageProvider>
     {children}
     </LanguageProvider>
-    </body>
-    </html>
+    </body></html>
   );
 }
