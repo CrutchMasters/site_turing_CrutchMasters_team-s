@@ -202,6 +202,46 @@ export default function UserProfile() {
         </div>
       ))}
       </div>
+      {member.name}
+      </td>
+      <td className="px-4 py-3 text-slate-500 font-medium">{member.role}</td>
+      <td className="px-4 py-3 text-right">
+      <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${member.status === 'Online' ? 'text-green-600 bg-green-50' : 'text-slate-400 bg-slate-100'}`}>
+      {member.status}
+      </span>
+      </td>
+      </tr>
+    ))}
+    </tbody>
+    </table>
+    </div>
+    </section>
+
+    {/* 2b. Історія сабмітів */}
+    <section className="bg-white/95 backdrop-blur-md rounded-2xl shadow-sm border border-slate-200 p-6">
+    <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-800">
+    <History className="text-blue-600" size={20} /> 2b. Історія сабмітів
+    </h2>
+    <div className="space-y-3">
+    {[
+      { task: "API System", status: "success", time: "21.03.2026", color: "text-emerald-600 bg-emerald-50", Icon: CheckCircle },
+      { task: "Frontend Base", status: "pending", time: "20.03.2026", color: "text-blue-600 bg-blue-50", Icon: Clock },
+    ].map((sub, i) => (
+      <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-transparent hover:border-slate-100 transition-all">
+      <div className="flex items-center gap-3">
+      <sub.Icon className={sub.color.split(' ')[0]} size={20} />
+      <div>
+      <p className="font-bold text-sm text-slate-700">{sub.task}</p>
+      <p className="text-[10px] font-bold text-slate-400 uppercase">{sub.time}</p>
+      </div>
+      </div>
+      <span className={`text-[10px] font-black uppercase px-2 py-1 rounded border ${sub.color}`}>
+      {sub.status}
+      </span>
+      </div>
+    ))}
+    </div>
+    </section>
 
       <div className="mt-8 p-6 bg-blue-600/5 rounded-3xl border border-blue-600/10 flex items-center justify-between">
       <div>

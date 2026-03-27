@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useRef, useState } from 'react';
@@ -37,12 +37,74 @@ export default function DashboardPage() {
       { threshold: 0.1 }
     );
 
-    revealRefs.current.forEach((ref) => {
-      if (ref) observer.observe(ref);
-    });
+function NavItem({ icon, label, active = false }: { icon: any, label: string, active?: boolean }) {
+  return (
+    <button className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+      active
+      ? 'bg-blue-600 text-white shadow-md'
+      : 'text-slate-600 hover:bg-slate-100'
+    }`}>
+    {icon} <span>{label}</span>
+    </button>
+  );
+}
 
-      return () => observer.disconnect();
-  }, []);
+// --- FILTER BUTTON COMPONENT ---
+function FilterButton({ label, active = false }: { label: string, active?: boolean }) {
+  return (
+    <button className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+      active
+      ? 'bg-blue-600 text-white shadow-sm'
+      : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200/50'
+    }`}>
+    {label}
+    </button>
+  );
+}
+
+// --- TOURNAMENT ROW COMPONENT ---
+function TournamentRow({ title, status, statusType, date, participation, isSpecialAction }: any) {
+  // Исправлено: имя объекта должно совпадать с тем, что используется в логике (statusStyles)
+  const statusStyles = {
+    warning: 'text-orange-600 bg-orange-50 border-orange-100',
+    info: 'text-blue-600 bg-blue-50 border-blue-100',
+    success: 'text-emerald-600 bg-emerald-50 border-emerald-100'
+  };
+
+  // Исправлено: обращаемся к statusStyles, а не к несуществующему statusColors
+  const colors = statusStyles[statusType as keyof typeof statusStyles] || statusStyles.info;
+
+  return (
+    <tr className="hover:bg-slate-50/80 transition-colors group">
+    <td className="px-6 py-5 font-bold text-slate-700 underline-offset-4 decoration-blue-200 group-hover:underline">
+    {title}
+    </td>
+    <td className="px-6 py-5">
+    <span className={`text-[10px] font-black uppercase px-2 py-1 rounded border ${colors}`}>
+    {status}
+    </span>
+    </td>
+    <td className="px-6 py-5 text-slate-500 font-medium">{date}</td>
+    <td className="px-6 py-5 text-slate-700 font-medium">{participation}</td>
+    <td className="px-6 py-5 text-right">
+    {isSpecialAction ? (
+      <button className="text-blue-600 font-black text-[10px] uppercase tracking-tighter hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 transition-all">
+      Зареєструватись
+      </button>
+    ) : (
+      <button className="p-2 text-slate-300 group-hover:text-blue-600 group-hover:bg-blue-50 rounded-lg transition-all">
+      <ExternalLink size={18} />
+      </button>
+    )}
+    </td>
+    </tr>
+  );
+}
+
+// --- ОСНОВНАЯ СТРАНИЦА ---
+
+export default function HomePage() {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Закриття сайдбару при зміні маршруту (на мобільних)
   const navigateTo = (path: string) => {
