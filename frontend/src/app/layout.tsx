@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
-import { Barlow } from "next/font/google"; // Импортируем Barlow
+import { Barlow } from "next/font/google";
 import "./globals.css";
 import { LanguageProvider } from "@/context/LanguageContext";
 
-// Настраиваем шрифт
 const barlow = Barlow({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800", "900"],
-  variable: "--font-barlow", // Имя переменной для CSS
+  variable: "--font-barlow",
 });
 
 export const metadata: Metadata = {
@@ -21,10 +20,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={barlow.variable}><body className="antialiased">
+    <html lang="en" className={barlow.variable} suppressHydrationWarning>
+    {/* Класи bg-(--bg) та text-(--t1) тепер діють на ВСІ сторінки */}
+    <body className="antialiased bg-(--bg) text-(--t1) min-h-screen transition-colors duration-300">
     <LanguageProvider>
     {children}
     </LanguageProvider>
-    </body></html>
+    </body>
+    </html>
   );
 }
