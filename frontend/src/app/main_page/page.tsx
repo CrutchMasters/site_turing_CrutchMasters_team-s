@@ -31,6 +31,7 @@ function NavItem({ icon, label, active = false }: { icon: any, label: string, ac
   );
 }
 
+// --- FILTER BUTTON COMPONENT ---
 function FilterButton({ label, active = false }: { label: string, active?: boolean }) {
   return (
     <button className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
@@ -43,6 +44,7 @@ function FilterButton({ label, active = false }: { label: string, active?: boole
   );
 }
 
+// --- TOURNAMENT ROW COMPONENT ---
 function TournamentRow({ title, status, statusType, date, participation, isSpecialAction }: any) {
   // Исправлено: имя объекта должно совпадать с тем, что используется в логике (statusStyles)
   const statusStyles = {
