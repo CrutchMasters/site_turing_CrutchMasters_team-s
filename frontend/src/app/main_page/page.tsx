@@ -31,6 +31,7 @@ function NavItem({ icon, label, active = false }: { icon: any, label: string, ac
   );
 }
 
+// --- FILTER BUTTON COMPONENT ---
 function FilterButton({ label, active = false }: { label: string, active?: boolean }) {
   return (
     <button className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
@@ -43,12 +44,15 @@ function FilterButton({ label, active = false }: { label: string, active?: boole
   );
 }
 
+// --- TOURNAMENT ROW COMPONENT ---
 function TournamentRow({ title, status, statusType, date, participation, isSpecialAction }: any) {
   const statusStyles = {
     warning: 'text-orange-600 bg-orange-50 border-orange-100',
     info: 'text-blue-600 bg-blue-50 border-blue-100',
     success: 'text-emerald-600 bg-emerald-50 border-emerald-100'
   };
+
+  const colors = statusColors[statusType as keyof typeof statusColors] || statusColors.info;
 
   return (
     <tr className="hover:bg-slate-50/80 transition-colors group">
