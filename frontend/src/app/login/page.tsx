@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, FormEvent } from "react";
 import { useLanguage } from "@/context/LanguageContext";
+import { useTheme } from "@/hooks/useTheme"; // Импортируем хук для определения темы (для логотипа)
 
 const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -11,6 +12,7 @@ typeof window !== "undefined" && window.location.hostname === "localhost"
 
 export default function LoginPage() {
   const { t } = useLanguage();
+  const { dark } = useTheme(); // Получаем состояние темы
   const cardRef = useRef<HTMLDivElement>(null);
 
   const [login, setLogin] = useState("");
@@ -59,7 +61,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f3f4f6] flex flex-col items-center justify-center font-sans text-slate-900 relative overflow-hidden">
+    /* Заменили bg-[#f3f4f6] на bg-(--bg) и text-slate-900 на text-(--t1) */
+    <div className="min-h-screen bg-(--bg) flex flex-col items-center justify-center font-sans text-(--t1) relative overflow-hidden transition-colors duration-300">
 
     <style jsx global>{`
       .reveal-drop {
@@ -67,58 +70,58 @@ export default function LoginPage() {
       }
       `}</style>
 
-      {/* Фоновый логотип (водяной знак) */}
-      <div className="fixed inset-0 flex items-center justify-center opacity-10 pointer-events-none z-0">
+      {/* Фоновый логотип: добавили инверсию и адаптивную прозрачность */}
+      <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${dark ? 'opacity-10' : 'opacity-5'}`}>
       <img
       src="/logo_backround1.svg"
       alt="Watermark"
-      className="w-[800px] h-[800px] object-contain"
+      className={`w-[800px] h-[800px] object-contain ${dark ? 'invert' : ''}`}
       />
       </div>
 
-      {/* Кнопка возврата в стиле Plasma */}
+      {/* Кнопка возврата: заменяем текстовые цвета на переменные */}
       <Link
       href="/"
-      className="absolute top-8 left-8 text-gray-400 hover:text-blue-600 text-xs font-black uppercase tracking-[0.3em] transition-all flex items-center gap-2 group z-20"
+      className="absolute top-8 left-8 text-(--t2) hover:text-blue-600 text-xs font-black uppercase tracking-[0.3em] transition-all flex items-center gap-2 group z-20"
       >
       <span className="group-hover:-translate-x-1 transition-transform">←</span> {t.nav.backHome}
       </Link>
 
-      {/* --- КОНТЕЙНЕР ФОРМЫ (KDE PLASMA STYLE) --- */}
+      {/* --- КОНТЕЙНЕР ФОРМЫ: заменили bg-white/70 на bg-(--card)/70 и border на (--brd) --- */}
       <div
       ref={cardRef}
-      className="reveal-drop opacity-0 -translate-y-10 z-10 w-full max-w-md bg-white/70 backdrop-blur-2xl p-10 rounded-[2.5rem] shadow-2xl shadow-blue-900/5 border border-white/50 flex flex-col items-center"
+      className="reveal-drop opacity-0 -translate-y-10 z-10 w-full max-w-md bg-(--card)/70 backdrop-blur-2xl p-10 rounded-[2.5rem] shadow-2xl border border-(--brd) flex flex-col items-center"
       >
 
-      <h1 className="text-4xl font-black text-gray-800 mb-10 tracking-tighter uppercase text-center">
+      <h1 className="text-4xl font-black text-(--t1) mb-10 tracking-tighter uppercase text-center">
       {t.auth.loginTitle}
       </h1>
 
       <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
 
+      {/* Инпуты: заменили bg-white/50 на bg-(--bg)/50 и рамки на (--brd) */}
       <input
       type="text"
       placeholder={t.auth.login}
       value={login}
       onChange={(e) => setLogin(e.target.value)}
-      className="w-full px-5 py-4 rounded-2xl border border-gray-200 bg-white/50 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all placeholder:italic text-sm"
+      className="w-full px-5 py-4 rounded-2xl border border-(--brd) bg-(--bg)/50 text-(--t1) focus:ring-2 focus:ring-blue-500 focus:bg-(--card) outline-none transition-all placeholder:italic text-sm"
       required
       />
 
-      {/* Поле Password с кнопкой показа */}
       <div className="relative">
       <input
       type={showPassword ? "text" : "password"}
       placeholder={t.auth.password}
       value={password}
       onChange={(e) => setPassword(e.target.value)}
-      className="w-full px-5 py-4 pr-12 rounded-2xl border border-gray-200 bg-white/50 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all placeholder:italic text-sm"
+      className="w-full px-5 py-4 pr-12 rounded-2xl border border-(--brd) bg-(--bg)/50 text-(--t1) focus:ring-2 focus:ring-blue-500 focus:bg-(--card) outline-none transition-all placeholder:italic text-sm"
       required
       />
       <button
       type="button"
       onClick={() => setShowPassword(!showPassword)}
-      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-500 transition-colors"
+      className="absolute right-4 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-500 transition-colors"
       >
       {showPassword ? (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -144,8 +147,8 @@ export default function LoginPage() {
       disabled={loading || !login || !password}
       className={`w-full mt-4 py-5 rounded-[2rem] text-xl font-black shadow-xl transition-all active:scale-95 uppercase tracking-tighter ${
         loading || !login || !password
-        ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-        : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200"
+        ? "bg-(--brd) text-(--t2) cursor-not-allowed"
+        : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20"
       }`}
       >
       {loading ? "..." : t.auth.loginBtn}
@@ -153,7 +156,7 @@ export default function LoginPage() {
       </form>
 
       <div className="mt-10 text-center">
-      <span className="text-gray-400 text-xs font-bold uppercase tracking-widest">
+      <span className="text-(--t2) text-xs font-bold uppercase tracking-widest">
       {t.auth.noAccount}{" "}
       </span>
       <Link
