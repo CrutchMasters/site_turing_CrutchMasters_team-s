@@ -44,17 +44,23 @@ function FilterButton({ label, active = false }: { label: string, active?: boole
 }
 
 function TournamentRow({ title, status, statusType, date, participation, isSpecialAction }: any) {
+  // Исправлено: имя объекта должно совпадать с тем, что используется в логике (statusStyles)
   const statusStyles = {
     warning: 'text-orange-600 bg-orange-50 border-orange-100',
     info: 'text-blue-600 bg-blue-50 border-blue-100',
     success: 'text-emerald-600 bg-emerald-50 border-emerald-100'
   };
 
+  // Исправлено: обращаемся к statusStyles, а не к несуществующему statusColors
+  const colors = statusStyles[statusType as keyof typeof statusStyles] || statusStyles.info;
+
   return (
     <tr className="hover:bg-slate-50/80 transition-colors group">
-    <td className="px-6 py-5 font-bold text-slate-700 underline-offset-4 decoration-blue-200 group-hover:underline">{title}</td>
+    <td className="px-6 py-5 font-bold text-slate-700 underline-offset-4 decoration-blue-200 group-hover:underline">
+    {title}
+    </td>
     <td className="px-6 py-5">
-    <span className={`text-[10px] font-black uppercase px-2 py-1 rounded border ${statusStyles[statusType as keyof typeof statusStyles]}`}>
+    <span className={`text-[10px] font-black uppercase px-2 py-1 rounded border ${colors}`}>
     {status}
     </span>
     </td>
