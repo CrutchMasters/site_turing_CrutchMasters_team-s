@@ -3,35 +3,35 @@
 import { useEffect, useState } from "react";
 
 export function useTheme() {
-    // Ініціалізуємо стан значенням false (світла тема за замовчуванням)
-    const [dark, setDark] = useState<boolean>(false);
+    // Читаем тему синхронно из localStorage чтобы не было мигания
+    const [dark, setDark] = useState<boolean>(() => {
+        if (typeof window === "undefined") return false;
+        return localStorage.getItem("theme") === "dark";
+    });
 
+    // При первом рендере применяем класс к <html>
     useEffect(() => {
-        // Перевіряємо збережену тему в localStorage при завантаженні
-        const savedTheme = localStorage.getItem("theme");
-        const isDark = savedTheme === "dark";
-
+        const saved = localStorage.getItem("theme");
+        const isDark = saved === "dark";
         setDark(isDark);
-
-        if (isDark) {
-            document.documentElement.classList.add("dark");
-        } else {
-            document.documentElement.classList.remove("dark");
-        }
+        applyTheme(isDark);
     }, []);
 
     const toggle = () => {
         const newDark = !dark;
         setDark(newDark);
-
-        if (newDark) {
-            document.documentElement.classList.add("dark");
-            localStorage.setItem("theme", "dark");
-        } else {
-            document.documentElement.classList.remove("dark");
-            localStorage.setItem("theme", "light");
-        }
+        applyTheme(newDark);
+        localStorage.setItem("theme", newDark ? "dark" : "light");
     };
 
     return { dark, toggle };
+}
+
+function applyTheme(isDark: boolean) {
+    const root = document.documentElement;
+    if (isDark) {
+        root.classList.add("dark");
+    } else {
+        root.classList.remove("dark");
+    }
 }

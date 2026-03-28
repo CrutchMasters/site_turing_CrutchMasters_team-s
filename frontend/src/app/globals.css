@@ -1,41 +1,39 @@
 @import "tailwindcss";
 
+/* ── Светлая тема (по умолчанию) ── */
 :root {
-  /* Світла тема */
-  --bg: #f3f4f6;
+  --bg:   #f3f4f6;
   --card: #ffffff;
-  --t1: #0f172a;
-  --t2: #475569;
-  --brd: rgba(0, 0, 0, 0.08);
+  --t1:   #0f172a;
+  --t2:   #475569;
+  --brd:  rgba(0, 0, 0, 0.08);
 
-  /* Стандартні змінні Next.js теж прив'язуємо */
-  --background: var(--bg);
-  --foreground: var(--t1);
+  color-scheme: light;
 }
 
-/* Цей клас має додаватися до тегу HTML через useTheme */
-.dark {
-  --bg: #0f172a;
+/* ── Тёмная тема — класс .dark на <html> ── */
+:root.dark {
+  --bg:   #0f172a;
   --card: #1e293b;
-  --t1: #f8fafc;
-  --t2: #94a3b8;
-  --brd: rgba(255, 255, 255, 0.1);
+  --t1:   #f8fafc;
+  --t2:   #94a3b8;
+  --brd:  rgba(255, 255, 255, 0.1);
 
-  --background: var(--bg);
-  --foreground: var(--t1);
+  color-scheme: dark;
 }
 
+/* ── Регистрируем переменные в Tailwind v4 ── */
 @theme inline {
-  --color-bg: var(--bg);
+  --color-bg:   var(--bg);
   --color-card: var(--card);
-  --color-t1: var(--t1);
-  --color-t2: var(--t2);
-  --color-brd: var(--brd);
+  --color-t1:   var(--t1);
+  --color-t2:   var(--t2);
+  --color-brd:  var(--brd);
 }
 
 body {
-  background: var(--bg);
-  color: var(--t1);
-  font-family: var(--font-barlow), Arial, sans-serif;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  background-color: var(--bg);
+  color:            var(--t1);
+  font-family:      var(--font-barlow), Arial, sans-serif;
+  transition:       background-color 0.3s ease, color 0.3s ease;
 }

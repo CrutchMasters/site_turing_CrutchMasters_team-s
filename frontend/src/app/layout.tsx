@@ -21,12 +21,34 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={barlow.variable} suppressHydrationWarning>
-    {/* Класи bg-(--bg) та text-(--t1) тепер діють на ВСІ сторінки */}
-    <body className="antialiased bg-(--bg) text-(--t1) min-h-screen transition-colors duration-300">
-    <LanguageProvider>
-    {children}
-    </LanguageProvider>
-    </body>
-    </html>
+    <head>
+    {/*
+      Этот скрипт выполняется до рендера страницы.
+      Он читает localStorage и добавляет класс .dark на <html>
+      ещё до того как React загрузится — предотвращает мигание.
+      */}
+      <script
+      dangerouslySetInnerHTML={{
+        __html: `
+        (function() {
+          try {
+            var theme = localStorage.getItem('theme');
+            if (theme === 'dark') {
+              document.documentElement.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+            }
+          } catch(e) {}
+        })();
+        `,
+      }}
+      />
+      </head>
+      <body className="antialiased min-h-screen transition-colors duration-300" style={{ backgroundColor: "var(--bg)", color: "var(--t1)" }}>
+      <LanguageProvider>
+      {children}
+      </LanguageProvider>
+      </body>
+      </html>
   );
 }
