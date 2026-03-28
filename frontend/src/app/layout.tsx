@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
-import { Barlow } from "next/font/google"; // Импортируем Barlow
+import { Barlow } from "next/font/google";
 import "./globals.css";
 import { LanguageProvider } from "@/context/LanguageContext";
 
-// Настраиваем шрифт
 const barlow = Barlow({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800", "900"],
-  variable: "--font-barlow", // Имя переменной для CSS
+  variable: "--font-barlow",
 });
 
 export const metadata: Metadata = {
@@ -21,10 +20,35 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={barlow.variable}><body className="antialiased">
-    <LanguageProvider>
-    {children}
-    </LanguageProvider>
-    </body></html>
+    <html lang="en" className={barlow.variable} suppressHydrationWarning>
+    <head>
+    {/*
+      Этот скрипт выполняется до рендера страницы.
+      Он читает localStorage и добавляет класс .dark на <html>
+      ещё до того как React загрузится — предотвращает мигание.
+      */}
+      <script
+      dangerouslySetInnerHTML={{
+        __html: `
+        (function() {
+          try {
+            var theme = localStorage.getItem('theme');
+            if (theme === 'dark') {
+              document.documentElement.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+            }
+          } catch(e) {}
+        })();
+        `,
+      }}
+      />
+      </head>
+      <body className="antialiased min-h-screen transition-colors duration-300" style={{ backgroundColor: "var(--bg)", color: "var(--t1)" }}>
+      <LanguageProvider>
+      {children}
+      </LanguageProvider>
+      </body>
+      </html>
   );
 }
