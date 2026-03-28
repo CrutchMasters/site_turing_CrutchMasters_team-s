@@ -49,6 +49,7 @@ npm run dev
 ### ⚙️ Бэкенд
 
 ```bash
+sudo apt install python3-venv
 cd site_turing_CrutchMasters_team-s/backend/
 python3 -m venv venv
 source venv/bin/activate
