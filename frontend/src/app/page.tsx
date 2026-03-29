@@ -165,7 +165,7 @@ export default function Home() {
         {/* Лого */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <Image
-        src="/logo_homepage.svg"
+        src="/logo_homepage.png"
         alt="Logo"
         width={24}
         height={24}
@@ -199,7 +199,7 @@ export default function Home() {
         {/* Водяной знак */}
         <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${dark ? "opacity-10" : "opacity-5"}`}>
         <img
-        src="/logo_backround1.svg"
+        src="/logo_backround1.png"
         alt="Watermark"
         className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain ${dark ? "invert" : ""}`}
         />
