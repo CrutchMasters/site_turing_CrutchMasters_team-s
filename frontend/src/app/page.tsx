@@ -169,7 +169,6 @@ export default function Home() {
         alt="Logo"
         width={24}
         height={24}
-        priority
         className={`flex-shrink-0 ${dark ? "invert" : ""}`}
         />
         <span className="text-sm sm:text-lg font-bold tracking-tight text-(--t1) uppercase truncate">
