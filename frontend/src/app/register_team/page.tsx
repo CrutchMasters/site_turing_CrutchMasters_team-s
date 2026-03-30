@@ -35,7 +35,10 @@ export default function TeamRegistration() {
 
   return (
     <div className="flex min-h-screen bg-(--bg) font-sans text-(--t1) transition-colors duration-300">
-
+    {/* Watermark */}
+      <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${dark ? "opacity-10" : "opacity-5"}`}>
+      <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
+    </div>
     {/* SIDEBAR */}
     <aside className="hidden lg:flex w-64 bg-(--card) border-r border-(--brd) flex-col transition-colors duration-300">
     <div className="p-6 border-b border-(--brd)">

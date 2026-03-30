@@ -58,7 +58,7 @@ export default function LoginPage() {
 
     {/* Watermark */}
     <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${dark ? "opacity-10" : "opacity-5"}`}>
-    <img src="/logo_backround1.svg" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain ${dark ? "invert" : ""}`} />
+    <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
     </div>
 
     <Link href="/" className="absolute top-6 left-6 sm:top-8 sm:left-8 text-(--t2) hover:text-blue-600 text-xs font-black uppercase tracking-[0.3em] transition-all flex items-center gap-2 group z-20">
