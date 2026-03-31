@@ -165,11 +165,11 @@ export default function Home() {
         {/* Лого */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <img
-        src="/logo_homepage.png"
+        src={dark ? "/logo_homepage_dark.png" : "/logo_homepage_light.png"}
         alt="Logo"
         width={24}
         height={24}
-        className={`flex-shrink-0 ${dark ? "invert" : ""}`}
+        className="flex-shrink-0"
         />
         <span className="text-sm sm:text-lg font-bold tracking-tight text-(--t1) uppercase truncate">
         CodeFuture

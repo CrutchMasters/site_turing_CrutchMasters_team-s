@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useEffect, useRef, useMemo, ChangeEvent, FormEvent } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 import { useTheme } from "@/hooks/useTheme";
+import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 
 const API_URL =
@@ -26,6 +27,7 @@ const EyeOffIcon = () => (
 export default function RegisterPage() {
   const { t } = useLanguage();
   const { dark } = useTheme();
+  const router = useRouter();
 
   const supabase = useMemo(() => createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
@@ -82,15 +84,48 @@ export default function RegisterPage() {
     if (otp.length !== 6) return;
     setLoading(true);
     try {
-      const { error } = await supabase.auth.verifyOtp({ email: formData.email, token: otp, type: "signup" });
-      if (error) throw error;
+      // 1. Верифікуємо OTP — отримуємо сесію
+      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+        email: formData.email,
+        token: otp,
+        type: "signup"
+      });
+      if (verifyError) throw verifyError;
+
+      // 2. Зберігаємо реєстрацію на бекенді
       const res = await fetch(`${API_URL}/api/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: formData.username, login: formData.login, email: formData.email, password: formData.password }),
+        body: JSON.stringify({
+          username: formData.username,
+          login: formData.login,
+          email: formData.email,
+          password: formData.password
+        }),
       });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || "Failed to save user"); }
-      window.location.href = "/main_page";
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.detail || "Failed to save user");
+      }
+
+      // 3. Зберігаємо токен і юзера — щоб AuthContext не кинув на /login
+      if (verifyData.session) {
+        const token = verifyData.session.access_token;
+        const supabaseUser = verifyData.session.user;
+
+        localStorage.setItem("access_token", token);
+        localStorage.setItem("user", JSON.stringify({
+          id: supabaseUser.id,
+          email: supabaseUser.email ?? "",
+          username: formData.username,
+          login: formData.login,
+          role: "user",
+        }));
+        // Cookie для middleware
+        document.cookie = `access_token=${token}; path=/; max-age=604800`;
+      }
+
+      router.push("/main_page");
     } catch (error: any) {
       alert(error.message || "Verification failed");
     } finally {

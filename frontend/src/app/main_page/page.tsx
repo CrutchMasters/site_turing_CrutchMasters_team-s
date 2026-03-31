@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import React, { useEffect, useRef, useState } from "react";
 import { useTheme } from "@/hooks/useTheme";
 import { useLanguage } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard, Trophy, Users, UserCircle,
   Settings, LogOut, ExternalLink, Upload,
@@ -23,20 +24,37 @@ export default function DashboardPage() {
   const router = useRouter();
   const { dark, toggle } = useTheme();
   const { locale, setLocale, t } = useLanguage();
+  const { user, logout, isLoading } = useAuth();
 
   useEffect(() => {
-    fetch(`${API_URL}/api/test`)
-    .then((r) => r.json()).then((d) => setBackendMessage(d.message))
-    .catch(() => setBackendMessage("Disconnected"));
-    const obs = new IntersectionObserver(
-      (entries) => entries.forEach((e) => { if (e.isIntersecting) e.target.classList.add("fuIn"); }),
-                                         { threshold: 0.1 }
-    );
-    revealRefs.current.forEach((r) => { if (r) obs.observe(r); });
-    return () => obs.disconnect();
-  }, []);
+    if (!isLoading && !user) router.push("/login");
+  }, [user, isLoading, router]);
 
-  const go = (path: string) => { setIsSidebarOpen(false); setIsSettingsPanelOpen(false); router.push(path); };
+    useEffect(() => {
+      fetch(`${API_URL}/api/test`)
+      .then((r) => r.json()).then((d) => setBackendMessage(d.message))
+      .catch(() => setBackendMessage("Disconnected"));
+      const obs = new IntersectionObserver(
+        (entries) => entries.forEach((e) => { if (e.isIntersecting) e.target.classList.add("fuIn"); }),
+                                           { threshold: 0.1 }
+      );
+      revealRefs.current.forEach((r) => { if (r) obs.observe(r); });
+      return () => obs.disconnect();
+    }, []);
+
+    const go = (path: string) => { setIsSidebarOpen(false); setIsSettingsPanelOpen(false); router.push(path); };
+
+    // Спінер під час завантаження сесії
+    if (isLoading) return (
+      <div className="min-h-screen bg-(--bg) flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"/>
+      </div>
+    );
+
+    if (!user) return null;
+
+    // Аватар — перша літера імені
+    const avatarLetter = user.username?.charAt(0).toUpperCase() ?? "?";
 
   return (
     <div className="flex min-h-screen overflow-x-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
@@ -53,7 +71,7 @@ export default function DashboardPage() {
 
       {/* Watermark */}
       <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${dark ? "opacity-10" : "opacity-5"}`}>
-        <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
+      <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
 
       {isSidebarOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => { setIsSidebarOpen(false); setIsSettingsPanelOpen(false); }} />}
@@ -61,16 +79,18 @@ export default function DashboardPage() {
       {/* SIDEBAR */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-(--card) border-r border-(--brd) flex flex-col transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
       <button onClick={() => go("/profile")} className="p-6 flex items-center gap-3 w-full text-left hover:bg-(--bg) border-b border-(--brd) transition-colors">
-      <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">AP</div>
+      <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+      {avatarLetter}
+      </div>
       <div className="overflow-hidden">
-      <p className="text-sm font-bold text-(--t1) truncate">Anton Petrov</p>
-      <p className="text-[10px] uppercase tracking-wider font-bold text-(--t2)">Admin Role</p>
+      <p className="text-sm font-bold text-(--t1) truncate">{user.username}</p>
+      <p className="text-[10px] uppercase tracking-wider font-bold text-(--t2)">{user.role}</p>
       </div>
       </button>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
       <button onClick={() => go("/")} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all spr text-(--t2) hover:bg-(--bg) hover:text-blue-600 mb-4 border border-(--brd) border-dashed">
-      <Home size={18} /><span>На головну</span>
+      <Home size={18}/><span>На головну</span>
       </button>
       <NavItem icon={<LayoutDashboard size={18}/>} label="Dashboard" active onClick={() => go("/main_page")}/>
       <NavItem icon={<Trophy size={18}/>}          label="Турніри"   onClick={() => {}}/>
@@ -109,7 +129,7 @@ export default function DashboardPage() {
       </nav>
 
       <div className="p-4 border-t border-(--brd)">
-      <button className="flex items-center gap-3 px-4 py-2.5 w-full text-sm font-bold spr rounded-xl transition-colors text-(--t2) hover:text-red-500">
+      <button onClick={logout} className="flex items-center gap-3 px-4 py-2.5 w-full text-sm font-bold spr rounded-xl transition-colors text-(--t2) hover:text-red-500">
       <LogOut size={18}/> Вихід
       </button>
       </div>
@@ -124,7 +144,7 @@ export default function DashboardPage() {
       <span className="font-black text-xs uppercase tracking-tighter">Code Future</span>
       </div>
       <button onClick={()=>go("/profile")} className="active:scale-95 transition-transform">
-      <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs bg-blue-600 border-2 border-(--brd)">AP</div>
+      <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs bg-blue-600 border-2 border-(--brd)">{avatarLetter}</div>
       </button>
       </header>
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Barlow } from "next/font/google";
 import "./globals.css";
 import { LanguageProvider } from "@/context/LanguageContext";
+import { AuthProvider } from "@/context/AuthContext";
 
 const barlow = Barlow({
   subsets: ["latin"],
@@ -14,11 +15,7 @@ export const metadata: Metadata = {
   description: "Tournament Platform",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={barlow.variable} suppressHydrationWarning>
     <head>
@@ -45,9 +42,11 @@ export default function RootLayout({
       />
       </head>
       <body className="antialiased min-h-screen transition-colors duration-300" style={{ backgroundColor: "var(--bg)", color: "var(--t1)" }}>
+      <AuthProvider>
       <LanguageProvider>
       {children}
       </LanguageProvider>
+      </AuthProvider>
       </body>
       </html>
   );
