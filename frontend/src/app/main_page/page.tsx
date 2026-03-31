@@ -51,6 +51,11 @@ export default function DashboardPage() {
       .settings-panel{animation:slideDown 240ms cubic-bezier(.22,1,.36,1) both}
       `}</style>
 
+      {/* Watermark */}
+      <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${dark ? "opacity-10" : "opacity-5"}`}>
+        <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
+      </div>
+
       {isSidebarOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => { setIsSidebarOpen(false); setIsSettingsPanelOpen(false); }} />}
 
       {/* SIDEBAR */}

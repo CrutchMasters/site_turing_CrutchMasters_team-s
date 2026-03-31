@@ -22,7 +22,11 @@ export default function UserProfile() {
 
   return (
     <div className="flex min-h-screen bg-(--bg) text-(--t1) transition-colors duration-300">
-      {/* OVERLAY FOR MOBILE */}
+      {/* Watermark */}
+      <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${dark ? "opacity-10" : "opacity-5"}`}>
+      <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
+    </div>
+    {/* OVERLAY FOR MOBILE */}
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" 

@@ -113,7 +113,7 @@ export default function RegisterPage() {
 
       {/* Watermark */}
       <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${dark ? "opacity-10" : "opacity-5"}`}>
-      <img src="/logo_backround1.svg" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain ${dark ? "invert" : ""}`} />
+      <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
 
       {!showOtp && (

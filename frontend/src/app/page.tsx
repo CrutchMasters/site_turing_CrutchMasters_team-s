@@ -164,12 +164,11 @@ export default function Home() {
         >
         {/* Лого */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-        <Image
+        <img
         src="/logo_homepage.png"
         alt="Logo"
         width={24}
         height={24}
-        priority
         className={`flex-shrink-0 ${dark ? "invert" : ""}`}
         />
         <span className="text-sm sm:text-lg font-bold tracking-tight text-(--t1) uppercase truncate">
@@ -199,7 +198,7 @@ export default function Home() {
         {/* Водяной знак */}
         <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${dark ? "opacity-10" : "opacity-5"}`}>
         <img
-        src="/logo_backround1.png"
+        src="/logo_background1.png"
         alt="Watermark"
         className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain ${dark ? "invert" : ""}`}
         />
