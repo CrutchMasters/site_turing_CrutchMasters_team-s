@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from pydantic import BaseModel, EmailStr
 
+# --- ИНИЦИАЛИЗАЦИЯ ---
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -19,17 +20,31 @@ else:
 
 app = FastAPI()
 
+# --- CORS ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://site-turing-crutchmasters-team-s.pages.dev",  # твой Cloudflare домен
-        "*"  # или так, для тестирования
+        "https://site-turing-crutchmasters-team-s.pages.dev",
+        "*"
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- МОДЕЛИ ДАННЫХ ---
+class UserRegister(BaseModel):
+    username: str
+    login: str
+    email: EmailStr
+    password: str
+
+class UserLogin(BaseModel):
+    login: str
+    password: str
+
+# --- ЭНДПОИНТЫ ---
 
 @app.get("/api/test")
 def connection_test():
@@ -38,23 +53,19 @@ def connection_test():
         "message": "Backend status active"
     }
 
-# --- REGISTER ---
-class UserRegister(BaseModel):
-    username: str
-    login: str
-    email: EmailStr
-    password: str
-
+# 1. РЕГИСТРАЦИЯ
 @app.post("/api/register")
 async def register_user(user: UserRegister):
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not initialized")
 
     try:
+        # Проверка, существует ли пользователь
         existing = supabase.table("account").select("id").eq("email", user.email).execute()
         if existing.data:
             raise HTTPException(status_code=400, detail="User with this email already exists")
 
+        # Вставка данных в таблицу account
         result = supabase.table("account").insert({
             "username": user.username,
             "login": user.login,
@@ -71,26 +82,19 @@ async def register_user(user: UserRegister):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# --- LOGIN ---
-class UserLogin(BaseModel):
-    login: str
-    password: str
-
+# 2. ЛОГИН
 @app.post("/api/login")
 async def login_user(user: UserLogin):
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not initialized")
 
     try:
-        # Визначаємо чи введено email або login
         identifier = user.login.strip()
 
+        # Определяем, вошел ли пользователь через email или логин
         if "@" in identifier:
-            # Введено email — шукаємо напряму
             result = supabase.table("account").select("email").eq("email", identifier).execute()
         else:
-            # Введено login — знаходимо відповідний email
             result = supabase.table("account").select("email").eq("login", identifier).execute()
 
         if not result.data:
@@ -98,7 +102,7 @@ async def login_user(user: UserLogin):
 
         email = result.data[0]["email"]
 
-        # Перевіряємо пароль через Supabase Auth
+        # Аутентификация через Supabase Auth
         auth_response = supabase.auth.sign_in_with_password({
             "email": email,
             "password": user.password,
@@ -107,16 +111,34 @@ async def login_user(user: UserLogin):
         if not auth_response.user:
             raise HTTPException(status_code=401, detail="Invalid login or password")
 
-        # Повертаємо токен і дані юзера
-        user_data = supabase.table("account").select("*").eq("email", email).execute()
+        # Получаем полные данные пользователя из таблицы account
+        user_info = supabase.table("account").select("*").eq("email", email).execute()
 
         return {
             "success": True,
             "access_token": auth_response.session.access_token,
-            "user": user_data.data[0] if user_data.data else {},
+            "user": user_info.data[0] if user_info.data else {},
         }
 
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 3. ПОЛУЧЕНИЕ EMAIL ПО ЛОГИНУ
+@app.get("/api/get-email")
+async def get_email_by_login(login: str):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    try:
+        # Изменил "profiles" на "account", чтобы соответствовать остальной логике
+        result = supabase.table("account").select("email").eq("login", login).execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return {"email": result.data[0]["email"]}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

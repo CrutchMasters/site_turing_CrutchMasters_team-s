@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState, FormEvent } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 import { useTheme } from "@/hooks/useTheme";
+import { useRouter } from "next/navigation";
+import { createBrowserClient } from "@supabase/ssr";
 
 const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -13,6 +15,7 @@ typeof window !== "undefined" && window.location.hostname === "localhost"
 export default function LoginPage() {
   const { t } = useLanguage();
   const { dark } = useTheme();
+  const router = useRouter();
   const cardRef = useRef<HTMLDivElement>(null);
 
   const [login, setLogin] = useState("");
@@ -34,17 +37,61 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
+
     try {
-      const res = await fetch(`${API_URL}/api/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ login, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.detail || "Login failed"); return; }
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      window.location.href = "/main_page";
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
+      );
+
+      let email = login.trim();
+
+      // Якщо введено логін а не email — знаходимо email через FastAPI
+      if (!email.includes("@")) {
+        const res = await fetch(`${API_URL}/api/get-email?login=${email}`);
+        const data = await res.json();
+        if (!res.ok) { setError("User not found"); setLoading(false); return; }
+        email = data.email;
+      }
+
+      const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      if (authError) { setError("Invalid login or password"); setLoading(false); return; }
+
+      if (data.session) {
+        const token = data.session.access_token;
+
+        // Зберігаємо токен
+        localStorage.setItem("access_token", token);
+        // Cookie для middleware
+        document.cookie = `access_token=${token}; path=/; max-age=604800`;
+
+        // Спочатку пробуємо отримати профіль з FastAPI
+        let userData = null;
+        try {
+          const userRes = await fetch(`${API_URL}/api/user-profile`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (userRes.ok) {
+            userData = await userRes.json();
+          }
+        } catch {}
+
+        // Якщо FastAPI не відповів — будуємо профіль з даних Supabase
+        if (!userData) {
+          const supabaseUser = data.session.user;
+          userData = {
+            id: supabaseUser.id,
+            email: supabaseUser.email ?? "",
+            username: supabaseUser.user_metadata?.username ?? supabaseUser.email?.split("@")[0] ?? "User",
+            login: supabaseUser.user_metadata?.login ?? supabaseUser.email?.split("@")[0] ?? "user",
+            role: "user",
+          };
+        }
+
+        localStorage.setItem("user", JSON.stringify(userData));
+      }
+
+      router.push("/main_page");
     } catch {
       setError("Server connection error");
     } finally {
