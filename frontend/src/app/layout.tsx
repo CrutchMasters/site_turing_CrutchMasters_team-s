@@ -41,7 +41,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       }}
       />
       </head>
-      <body className="antialiased min-h-screen transition-colors duration-300" style={{ backgroundColor: "var(--bg)", color: "var(--t1)" }}>
+      <body
+      className="antialiased min-h-screen transition-colors duration-300"
+      style={{ backgroundColor: "var(--bg)", color: "var(--t1)" }}
+      suppressHydrationWarning={true}  // ← додай це
+      >
       <AuthProvider>
       <LanguageProvider>
       {children}

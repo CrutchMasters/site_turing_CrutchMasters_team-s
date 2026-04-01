@@ -1,79 +1,57 @@
 "use client";
-import { createBrowserClient } from "@supabase/ssr";
-import { useEffect, useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
-export type UserProfile = {
+interface User {
     id: string;
-    login: string;
     username: string;
+    login: string;
     email: string;
-    avatar_url: string | null;
-    role: "user" | "admin" | "superadmin";
-    status: string;
-};
+    role: "user" | "admin" | "jury" | "superadmin";
+}
 
-export function useAuth(requireAuth = true) {
-    const [profile, setProfile] = useState<UserProfile | null>(null);
-    const [loading, setLoading] = useState(true);
-    const router = useRouter();
+interface AuthContextType {
+    user: User | null;
+    token: string | null;
+    isLoading: boolean;
+    logout: () => void;
+}
 
-    const supabase = useMemo(() => createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
-    ), []);
+const AuthContext = createContext<AuthContextType>({
+    user: null, token: null, isLoading: true, logout: () => {}
+});
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+    const [user, setUser] = useState<User | null>(null);
+    const [token, setToken] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        // Перевіряємо поточну сесію
-        const getSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-
-            if (!session) {
-                setLoading(false);
-                if (requireAuth) router.push("/login");
-                return;
-            }
-
-            // Завантажуємо профіль з таблиці profiles
-            const { data } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", session.user.id)
-            .single();
-
-            setProfile(data);
-            setLoading(false);
-        };
-
-        getSession();
-
-        // Слухаємо зміни сесії (логін/логаут)
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (event, session) => {
-                if (event === "SIGNED_OUT" || !session) {
-                    setProfile(null);
-                    if (requireAuth) router.push("/login");
-                } else if (event === "SIGNED_IN" && session) {
-                    const { data } = await supabase
-                    .from("profiles")
-                    .select("*")
-                    .eq("id", session.user.id)
-                    .single();
-                    setProfile(data);
-                }
-            }
-        );
-
-        return () => subscription.unsubscribe();
+        const savedToken = localStorage.getItem("access_token");
+        const savedUser = localStorage.getItem("user");
+        if (savedToken && savedUser) {
+            try {
+                setToken(savedToken);
+                setUser(JSON.parse(savedUser));
+            } catch {}
+        }
+        setIsLoading(false);
     }, []);
 
-    const logout = async () => {
-        await supabase.auth.signOut();
-        router.push("/");
+    const logout = () => {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("user");
+        document.cookie = "access_token=; path=/; max-age=0";
+        setUser(null);
+        setToken(null);
+        // window.location.href замість router.push — повне перезавантаження
+        window.location.href = "/";
     };
 
-    const isAdmin = profile?.role === "admin" || profile?.role === "superadmin";
-    const isSuperAdmin = profile?.role === "superadmin";
-
-    return { profile, loading, logout, isAdmin, isSuperAdmin };
+    return (
+        <AuthContext.Provider value={{ user, token, isLoading, logout }}>
+        {children}
+        </AuthContext.Provider>
+    );
 }
+
+export const useAuth = () => useContext(AuthContext);

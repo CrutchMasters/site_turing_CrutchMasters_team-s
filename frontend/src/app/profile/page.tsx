@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
 import {
   User, Mail, Shield, Users, History,
   CheckCircle, Clock, XCircle, Edit2,
@@ -18,24 +17,24 @@ export default function UserProfile() {
   const router = useRouter();
   const { user, logout, isLoading } = useAuth();
 
-  useEffect(() => {
-    if (!isLoading && !user) router.push("/login");
-  }, [user, isLoading, router]);
+  // Функция навигации должна быть на уровне компонента
+  const go = (path: string) => {
+    setIsSidebarOpen(false);
+    router.push(path);
+  };
 
-    const go = (path: string) => {
-      setIsSidebarOpen(false);
-      router.push(path);
-    };
-
-    if (isLoading) return (
+  // Проверки состояния вынесены из useEffect в начало компонента
+  if (isLoading) {
+    return (
       <div className="min-h-screen bg-(--bg) flex items-center justify-center">
       <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"/>
       </div>
     );
+  }
 
-    if (!user) return null;
+  if (!user) return null;
 
-    const avatarLetter = user.username?.charAt(0).toUpperCase() ?? "?";
+  const avatarLetter = user.username?.charAt(0).toUpperCase() ?? "?";
 
   return (
     <div className="flex min-h-screen bg-(--bg) text-(--t1) transition-colors duration-300">

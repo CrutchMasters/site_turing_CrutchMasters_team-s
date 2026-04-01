@@ -91,7 +91,7 @@ export default function LoginPage() {
         localStorage.setItem("user", JSON.stringify(userData));
       }
 
-      router.push("/main_page");
+      window.location.href = "/main_page";
     } catch {
       setError("Server connection error");
     } finally {
