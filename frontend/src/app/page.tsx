@@ -82,11 +82,11 @@ export default function HomePage() {
   };
 
   // Важливо: чекаємо завантаження стану користувача
-  if (isLoading) return (
-    <div className="min-h-screen bg-(--bg) flex items-center justify-center">
-    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"/>
-    </div>
-  );
+ // if (isLoading) return (
+ //   <div className="min-h-screen bg-(--bg) flex items-center justify-center">
+//    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"/>
+//    </div>
+//  );
 
   const sections = t.infoSections || [];
   const avatarLetter = user?.username?.charAt(0).toUpperCase() ?? "?";
