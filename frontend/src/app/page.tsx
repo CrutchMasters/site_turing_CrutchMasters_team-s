@@ -4,7 +4,7 @@ import { useTheme } from "@/hooks/useTheme";
 import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
 import { useLanguage } from "@/context/LanguageContext";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 
 const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
