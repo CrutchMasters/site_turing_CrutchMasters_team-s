@@ -67,10 +67,11 @@ async def register_user(user: UserRegister):
 
         # Вставка данных в таблицу account
         result = supabase.table("account").insert({
-            "username": user.username,
-            "login": user.login,
-            "email": user.email,
-        }).execute()
+    "username": user.username,
+    "login": user.login,
+    "email": user.email,
+    "role": "user",  # ← додай це
+    }).execute()
 
         if not result.data:
             raise HTTPException(status_code=500, detail="Failed to insert user data")

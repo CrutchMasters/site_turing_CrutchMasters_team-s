@@ -26,42 +26,50 @@ export default function DashboardPage() {
   const { locale, setLocale, t } = useLanguage();
   const { user, logout, isLoading } = useAuth();
 
+  // Запросы к API и IntersectionObserver
   useEffect(() => {
-    if (!isLoading && !user) router.push("/login");
-  }, [user, isLoading, router]);
+    if (isLoading || !user) return;
 
-    useEffect(() => {
-      fetch(`${API_URL}/api/test`)
-      .then((r) => r.json()).then((d) => setBackendMessage(d.message))
-      .catch(() => setBackendMessage("Disconnected"));
-      const obs = new IntersectionObserver(
-        (entries) => entries.forEach((e) => { if (e.isIntersecting) e.target.classList.add("fuIn"); }),
-                                           { threshold: 0.1 }
-      );
-      revealRefs.current.forEach((r) => { if (r) obs.observe(r); });
-      return () => obs.disconnect();
-    }, []);
+    fetch(`${API_URL}/api/test`)
+    .then((r) => r.json())
+    .then((d) => setBackendMessage(d.message))
+    .catch(() => setBackendMessage("Disconnected"));
 
-    const go = (path: string) => { setIsSidebarOpen(false); setIsSettingsPanelOpen(false); router.push(path); };
-
-    // Спінер під час завантаження сесії
-    if (isLoading) return (
-      <div className="min-h-screen bg-(--bg) flex items-center justify-center">
-      <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"/>
-      </div>
+    const obs = new IntersectionObserver(
+      (entries) => entries.forEach((e) => {
+        if (e.isIntersecting) e.target.classList.add("fuIn");
+      }),
+      { threshold: 0.1 }
     );
 
-    if (!user) return null;
+    revealRefs.current.forEach((r) => { if (r) obs.observe(r); });
+    return () => obs.disconnect();
+  }, [isLoading, user]);
 
-    // Аватар — перша літера імені
-    const avatarLetter = user.username?.charAt(0).toUpperCase() ?? "?";
+  const go = (path: string) => {
+    setIsSidebarOpen(false);
+    setIsSettingsPanelOpen(false);
+    router.push(path);
+  };
+
+  // 1. Сначала проверяем состояние загрузки
+  if (isLoading) return (
+    <div className="min-h-screen bg-(--bg) flex items-center justify-center">
+    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"/>
+    </div>
+  );
+
+  // 2. Если пользователя нет, ничего не рендерим (редирект обычно в middleware)
+  if (!user) return null;
+
+  const avatarLetter = user.username?.charAt(0).toUpperCase() ?? "?";
 
   return (
     <div className="flex min-h-screen overflow-x-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
     <style jsx global>{`
       @keyframes fadeUp   {from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
       @keyframes cardDrop {from{opacity:0;transform:translateY(-26px) scale(.97)}to{opacity:1;transform:none}}
-      @keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+      @keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
       .fuIn{animation:fadeUp 340ms cubic-bezier(.22,1,.36,1) both}
       .cdIn{animation:cardDrop 500ms cubic-bezier(.22,1,.36,1) both}
       .spr{transition:transform 170ms cubic-bezier(.22,1,.36,1),box-shadow 170ms ease,background 150ms ease,color 150ms ease}
@@ -158,7 +166,6 @@ export default function DashboardPage() {
       </header>
 
       <div className="max-w-6xl space-y-6 sm:space-y-8">
-      {/* Tournaments table */}
       <section ref={(el)=>{revealRefs.current[0]=el;}} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
       <div className="p-4 sm:p-6 md:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd)">
       <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">🏆 Список турнірів</h2>
@@ -184,7 +191,6 @@ export default function DashboardPage() {
       </div>
       </section>
 
-      {/* Team */}
       <section ref={(el)=>{revealRefs.current[1]=el;}} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 relative overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
       <div className="absolute -right-12 -top-12 w-40 h-40 rounded-full blur-3xl opacity-10 bg-blue-600 pointer-events-none"/>
       <h2 className="font-black text-lg sm:text-xl mb-6 sm:mb-8 flex items-center gap-3 relative z-10 text-(--t1) uppercase tracking-tight">
@@ -216,27 +222,28 @@ export default function DashboardPage() {
       </main>
       </div>
   );
-}
+} // <--- Вот здесь была лишняя скобка, теперь структура верная
 
-function NavItem({icon,label,active=false,onClick}:{icon:React.ReactNode;label:string;active?:boolean;onClick:()=>void}){
-  return(
-    <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all spr ${active?"bg-blue-600 text-white shadow-lg shadow-blue-600/20":"text-(--t2) hover:bg-(--bg) hover:text-blue-600"}`}>
+// Эти функции должны быть объявлены за пределами основного компонента (или аккуратно внутри, но без лишних скобок)
+function NavItem({icon, label, active=false, onClick}: {icon:React.ReactNode; label:string; active?:boolean; onClick:()=>void}) {
+  return (
+    <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all spr ${active ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "text-(--t2) hover:bg-(--bg) hover:text-blue-600"}`}>
     {icon}<span>{label}</span>
     </button>
   );
 }
 
-function TournamentRow({title,status,statusType,date,isSpecialAction}:{title:string;status:string;statusType:string;date:string;isSpecialAction?:boolean}){
-  const colors=({warning:"bg-amber-500/10 text-amber-600 border-amber-500/30",info:"bg-blue-600/10 text-blue-600 border-blue-600/30"} as any)[statusType]??"bg-blue-600/10 text-blue-600 border-blue-600/30";
-  return(
+function TournamentRow({title, status, statusType, date, isSpecialAction}: {title:string; status:string; statusType:string; date:string; isSpecialAction?:boolean}) {
+  const colors = (({warning: "bg-amber-500/10 text-amber-600 border-amber-500/30", info: "bg-blue-600/10 text-blue-600 border-blue-600/30"} as any)[statusType]) ?? "bg-blue-600/10 text-blue-600 border-blue-600/30";
+  return (
     <tr className="transition-colors hover:bg-(--bg)/30">
     <td className="px-4 sm:px-8 py-4 sm:py-5 font-bold text-(--t1)">{title}</td>
     <td className="px-4 sm:px-8 py-4 sm:py-5"><span className={`text-[9px] font-black uppercase px-2.5 py-1.5 rounded border ${colors}`}>{status}</span></td>
     <td className="px-4 sm:px-8 py-4 sm:py-5 font-bold text-(--t2) text-xs">{date}</td>
     <td className="px-4 sm:px-8 py-4 sm:py-5 text-right">
     {isSpecialAction
-      ?<button className="font-black text-[9px] uppercase tracking-tighter px-3 py-2 rounded-lg border border-blue-600 bg-blue-600/10 text-blue-600 hover:bg-blue-600 hover:text-white transition-all">Реєстрація</button>
-      :<button className="p-2 rounded-lg text-(--t2) hover:bg-blue-600/10 hover:text-blue-600 transition-colors"><ExternalLink size={16}/></button>
+      ? <button className="font-black text-[9px] uppercase tracking-tighter px-3 py-2 rounded-lg border border-blue-600 bg-blue-600/10 text-blue-600 hover:bg-blue-600 hover:text-white transition-all">Реєстрація</button>
+      : <button className="p-2 rounded-lg text-(--t2) hover:bg-blue-600/10 hover:text-blue-600 transition-colors"><ExternalLink size={16}/></button>
     }
     </td>
     </tr>
