@@ -70,6 +70,7 @@ async def register_user(user: UserRegister):
     "username": user.username,
     "login": user.login,
     "email": user.email,
+    "status": "active",
     "role": "user",  # ← додай це
     }).execute()
 
