@@ -15,13 +15,14 @@ export default function UserProfile() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { dark } = useTheme();
   const router = useRouter();
-  const { user, logout, isLoading } = useAuth();
+  const { user, logout, isLoading } = useAuth(); //
 
   const go = (path: string) => {
     setIsSidebarOpen(false);
     router.push(path);
   };
 
+  // Відображення індикатора завантаження, поки перевіряється статус авторизації
   if (isLoading) {
     return (
       <div className="min-h-screen bg-(--bg) flex items-center justify-center">
@@ -30,20 +31,27 @@ export default function UserProfile() {
     );
   }
 
-  if (!user) return null;
+  // Якщо користувач не авторизований, компонент нічого не рендерить (або можна редіректити на /login)
+  if (!user) {
+    if (typeof window !== "undefined") router.push("/login");
+    return null;
+  }
 
-  const avatarLetter = user.username?.charAt(0).toUpperCase() ?? "?";
+  const avatarLetter = user.username?.charAt(0).toUpperCase() ?? "?"; //
 
   return (
     <div className="flex min-h-screen bg-(--bg) text-(--t1) transition-colors duration-300">
+    {/* Фоновий логотип (ватермарка) */}
     <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${dark ? "opacity-10" : "opacity-5"}`}>
     <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
     </div>
 
+    {/* Оверлей для мобільного меню */}
     {isSidebarOpen && (
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
     )}
 
+    {/* Бокова панель навігації */}
     <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-(--card) border-r border-(--brd) flex flex-col transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
     <div className="p-6 border-b border-(--brd) flex items-center gap-3">
     <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white"><Trophy size={18}/></div>
@@ -64,7 +72,9 @@ export default function UserProfile() {
     </div>
     </aside>
 
+    {/* Основний контент */}
     <main className="flex-1 flex flex-col min-w-0">
+    {/* Мобільний хедер */}
     <header className="lg:hidden p-4 flex items-center justify-between bg-(--card) border-b border-(--brd) sticky top-0 z-30">
     <button onClick={() => setIsSidebarOpen(true)} className="p-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t1) active:scale-95 transition-transform"><Menu size={24}/></button>
     <span className="font-black text-xs uppercase tracking-widest opacity-50">Профіль</span>
@@ -74,15 +84,18 @@ export default function UserProfile() {
     </header>
 
     <div className="p-4 sm:p-6 md:p-8 lg:p-12 overflow-y-auto">
+    {/* Хлібні крихти */}
     <nav className="flex items-center gap-2 text-[10px] font-black mb-4 uppercase tracking-widest text-(--t2)">
     <button onClick={() => router.push("/")} className="hover:text-blue-600">Головна</button>
     <ChevronRight size={10}/><span className="text-(--t1)">Профіль</span>
     </nav>
+
     <h1 className="text-2xl sm:text-3xl font-black text-(--t1) uppercase tracking-tight mb-6 sm:mb-8">
     Профіль — <span className="text-blue-600">{user.username}</span>
     </h1>
 
     <div className="max-w-6xl space-y-6">
+    {/* Картка базової інформації */}
     <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-6 sm:p-8 flex flex-col sm:flex-row items-center gap-6 sm:gap-8 relative overflow-hidden">
     <div className="absolute right-0 top-0 opacity-5 pointer-events-none text-(--t1) hidden md:block"><Shield size={240}/></div>
     <div className="relative flex-shrink-0">
@@ -112,6 +125,7 @@ export default function UserProfile() {
     </section>
 
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    {/* Секція команди */}
     <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-6 sm:p-8">
     <h2 className="text-lg font-black mb-6 flex items-center gap-2 uppercase tracking-tight text-(--t1)"><Users className="text-blue-600"/> 2a. Команда</h2>
     <div className="space-y-3">
@@ -127,6 +141,7 @@ export default function UserProfile() {
     </div>
     </section>
 
+    {/* Секція активності/сабмітів */}
     <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-6 sm:p-8">
     <h2 className="text-lg font-black mb-6 flex items-center gap-2 uppercase tracking-tight text-(--t1)"><History className="text-blue-600"/> 2b. Сабміти</h2>
     <div className="space-y-3">
@@ -150,6 +165,7 @@ export default function UserProfile() {
   );
 }
 
+// Допоміжний компонент для елементів навігації
 function NavItem({ icon, label, active = false, onClick }: { icon: React.ReactNode; label: string; active?: boolean; onClick: () => void }) {
   return (
     <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${active ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20 scale-[1.02]" : "text-(--t2) hover:bg-(--bg) hover:text-blue-600"}`}>

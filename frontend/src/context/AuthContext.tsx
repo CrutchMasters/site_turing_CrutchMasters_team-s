@@ -1,5 +1,6 @@
 "use client";
 
+// ДОДАНО: useContext у список імпорту
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
 export interface User {
@@ -25,7 +26,7 @@ export const AuthContext = createContext<AuthContextType>({
 });
 
 export const useAuth = () => {
-    const context = useContext(AuthContext);
+    const context = useContext(AuthContext); // Тепер useContext визначено
     if (!context) {
         throw new Error("useAuth must be used within an AuthProvider");
     }
