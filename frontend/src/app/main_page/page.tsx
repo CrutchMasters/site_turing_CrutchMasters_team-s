@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard, Trophy, Users, UserCircle,
   Settings, LogOut, ExternalLink, Upload,
-  ChevronRight, Menu, Home,
+  ChevronRight, Menu, Home, Search, // ← Додав Search
 } from "lucide-react";
 
 const API_URL =
@@ -103,7 +103,8 @@ export default function DashboardPage() {
       <NavItem icon={<LayoutDashboard size={18}/>} label="Dashboard" active onClick={() => go("/main_page")}/>
       <NavItem icon={<Trophy size={18}/>}          label="Турніри"   onClick={() => {}}/>
       <NavItem icon={<Users size={18}/>}           label="Команди"   onClick={() => {}}/>
-      <NavItem icon={<UserCircle size={18}/>}      label="Гравці"    onClick={() => {}}/>
+      <NavItem icon={<Search size={18}/>}          label="Пошук людей"   onClick={() => go("/search")}/>
+      <NavItem icon={<UserCircle size={18}/>}      label="Мій профіль"    onClick={() => go("/profile")}/>
       <NavItem icon={<Settings size={18}/>} label={t.settings.title} active={isSettingsPanelOpen} onClick={() => setIsSettingsPanelOpen(p=>!p)}/>
 
       {isSettingsPanelOpen && (
@@ -222,9 +223,8 @@ export default function DashboardPage() {
       </main>
       </div>
   );
-} // <--- Вот здесь была лишняя скобка, теперь структура верная
+}
 
-// Эти функции должны быть объявлены за пределами основного компонента (или аккуратно внутри, но без лишних скобок)
 function NavItem({icon, label, active=false, onClick}: {icon:React.ReactNode; label:string; active?:boolean; onClick:()=>void}) {
   return (
     <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all spr ${active ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "text-(--t2) hover:bg-(--bg) hover:text-blue-600"}`}>
