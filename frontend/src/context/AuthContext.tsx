@@ -1,6 +1,5 @@
 "use client";
 
-// ДОДАНО: useContext у список імпорту
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
 export interface User {
@@ -15,6 +14,7 @@ export interface AuthContextType {
     user: User | null;
     token: string | null;
     isLoading: boolean;
+    login: (user: User, token: string) => void;
     logout: () => void;
 }
 
@@ -22,11 +22,12 @@ export const AuthContext = createContext<AuthContextType>({
     user: null,
     token: null,
     isLoading: true,
-    logout: () => {}
+    login: () => {},
+                                                          logout: () => {}
 });
 
 export const useAuth = () => {
-    const context = useContext(AuthContext); // Тепер useContext визначено
+    const context = useContext(AuthContext);
     if (!context) {
         throw new Error("useAuth must be used within an AuthProvider");
     }
@@ -52,6 +53,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
     }, []);
 
+    const login = (userData: User, accessToken: string) => {
+        setUser(userData);
+        setToken(accessToken);
+    };
+
     const logout = () => {
         localStorage.removeItem("access_token");
         localStorage.removeItem("user");
@@ -62,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, isLoading, logout }}>
+        <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
         {children}
         </AuthContext.Provider>
     );
