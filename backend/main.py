@@ -44,6 +44,10 @@ class UserLogin(BaseModel):
     login: str
     password: str
 
+class ChangeRole(BaseModel):
+    target_user_id: str
+    new_role: str
+
 # --- ЭНДПОИНТЫ ---
 
 @app.get("/api/test")
@@ -142,5 +146,57 @@ async def get_email_by_login(login: str):
 
         return {"email": result.data[0]["email"]}
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# 4. ЗМІНА РОЛІ (тільки суперадмін)
+from fastapi import Header
+
+ALLOWED_ROLES = {"user", "jury", "admin", "superadmin"}
+
+@app.post("/api/change-role")
+async def change_role(payload: ChangeRole, authorization: str = Header(...)):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token = authorization.replace("Bearer ", "").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="No token provided")
+
+    if payload.new_role not in ALLOWED_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Allowed: {ALLOWED_ROLES}")
+
+    try:
+        # Verify caller via Supabase Auth
+        user_resp = supabase.auth.get_user(token)
+        if not user_resp or not user_resp.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        caller_email = user_resp.user.email
+
+        # Get caller's role from account table
+        caller_info = supabase.table("account").select("id, role").eq("email", caller_email).single().execute()
+        if not caller_info.data:
+            raise HTTPException(status_code=403, detail="Caller account not found")
+
+        if caller_info.data["role"] != "superadmin":
+            raise HTTPException(status_code=403, detail="Only superadmin can change roles")
+
+        caller_id = caller_info.data["id"]
+
+        # Prevent superadmin from changing their own role
+        if caller_id == payload.target_user_id:
+            raise HTTPException(status_code=400, detail="Cannot change your own role")
+
+        # Update target user's role
+        result = supabase.table("account").update({"role": payload.new_role}).eq("id", payload.target_user_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Target user not found")
+
+        return {"success": True, "message": f"Role changed to {payload.new_role}"}
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

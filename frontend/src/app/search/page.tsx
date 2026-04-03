@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
-import { Search, ChevronRight, Loader } from "lucide-react";
+import { Search, ChevronRight, Loader, Shield } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 
@@ -162,10 +162,20 @@ export default function SearchPage() {
                             <div className="mt-4 pt-4 border-t border-(--brd) space-y-2">
                               <div className="flex items-center justify-between">
                                 <span className="text-[10px] font-bold text-(--t2) uppercase">Роль:</span>
-                                <span className="text-[10px] font-black text-blue-600 uppercase">{person.role || "user"}</span>
+                                <span className={"text-[10px] font-black uppercase px-2 py-0.5 rounded-md border " + (
+                                  person.role === "superadmin" ? "bg-red-500/10 text-red-500 border-red-500/20" :
+                                  person.role === "admin"      ? "bg-orange-500/10 text-orange-500 border-orange-500/20" :
+                                  person.role === "jury"       ? "bg-purple-500/10 text-purple-500 border-purple-500/20" :
+                                                                 "bg-gray-500/10 text-gray-500 border-gray-500/20"
+                                )}>
+                                  {person.role || "user"}
+                                </span>
                               </div>
-                              <button className="w-full mt-3 bg-blue-600 text-white py-2 rounded-xl font-black text-[10px] uppercase tracking-wider hover:bg-blue-700 transition-all active:scale-95">
-                                Переглянути профіль
+                              <button
+                                onClick={e => { e.stopPropagation(); router.push(`/user/${person.id}`); }}
+                                className="w-full mt-3 bg-blue-600 text-white py-2 rounded-xl font-black text-[10px] uppercase tracking-wider hover:bg-blue-700 transition-all active:scale-95"
+                              >
+                                Переглянути профіль →
                               </button>
                             </div>
                           )}
