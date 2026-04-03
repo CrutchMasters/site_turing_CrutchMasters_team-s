@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -71,12 +71,12 @@ async def register_user(user: UserRegister):
 
         # Вставка данных в таблицу account
         result = supabase.table("account").insert({
-    "username": user.username,
-    "login": user.login,
-    "email": user.email,
-    "status": "active",
-    "role": "user",  # ← додай це
-    }).execute()
+            "username": user.username,
+            "login": user.login,
+            "email": user.email,
+            "status": "active",
+            "role": "user",
+        }).execute()
 
         if not result.data:
             raise HTTPException(status_code=500, detail="Failed to insert user data")
@@ -138,7 +138,6 @@ async def get_email_by_login(login: str):
         raise HTTPException(status_code=500, detail="Supabase not initialized")
 
     try:
-        # Изменил "profiles" на "account", чтобы соответствовать остальной логике
         result = supabase.table("account").select("email").eq("login", login).execute()
 
         if not result.data:
@@ -149,10 +148,7 @@ async def get_email_by_login(login: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # 4. ЗМІНА РОЛІ (тільки суперадмін)
-from fastapi import Header
-
 ALLOWED_ROLES = {"user", "jury", "admin", "superadmin"}
 
 @app.post("/api/change-role")
@@ -166,6 +162,10 @@ async def change_role(payload: ChangeRole, authorization: str = Header(...)):
 
     if payload.new_role not in ALLOWED_ROLES:
         raise HTTPException(status_code=400, detail=f"Invalid role. Allowed: {ALLOWED_ROLES}")
+
+    # Prevent assigning superadmin (optional but recommended)
+    if payload.new_role == "superadmin":
+        raise HTTPException(status_code=403, detail="Cannot assign superadmin role")
 
     try:
         # Verify caller via Supabase Auth
@@ -193,6 +193,8 @@ async def change_role(payload: ChangeRole, authorization: str = Header(...)):
         result = supabase.table("account").update({"role": payload.new_role}).eq("id", payload.target_user_id).execute()
         if not result.data:
             raise HTTPException(status_code=404, detail="Target user not found")
+
+        print(f"[ROLE CHANGE] {caller_email} -> {payload.target_user_id} = {payload.new_role}", flush=True)
 
         return {"success": True, "message": f"Role changed to {payload.new_role}"}
 
