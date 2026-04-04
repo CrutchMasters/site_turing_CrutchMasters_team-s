@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
+import { useT } from "@/context/LanguageContext";
 import { Search, ChevronRight, Loader, Shield } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
@@ -14,6 +15,7 @@ export default function SearchPage() {
   const router = useRouter();
   const { dark } = useTheme();
   const { user, isLoading } = useAuth();
+  const { t } = useT();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -56,6 +58,15 @@ export default function SearchPage() {
     }
   };
 
+  const roleBadge = (role: string) => {
+    if (role === "superadmin") return "bg-red-500/10 text-red-500 border-red-500/20";
+    if (role === "admin")      return "bg-orange-500/10 text-orange-500 border-orange-500/20";
+    if (role === "jury")       return "bg-purple-500/10 text-purple-500 border-purple-500/20";
+    return "bg-gray-500/10 text-gray-500 border-gray-500/20";
+  };
+
+  const resultsLabel = searchResults.length === 1 ? t.search.results_one : t.search.results_many;
+
   return (
     <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
       <style jsx global>{`
@@ -78,16 +89,16 @@ export default function SearchPage() {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <MobileHeader
           onOpenSidebar={() => setIsMobileSidebarOpen(true)}
-          title="Пошук"
+          title={t.search.title}
           icon={<Search size={18} className="text-blue-600" />}
         />
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
           <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-            <button onClick={() => router.push("/")} className="hover:text-blue-600">Головна</button>
-            <ChevronRight size={10} /><span className="text-(--t1)">Пошук людей</span>
+            <button onClick={() => router.push("/")} className="hover:text-blue-600">{t.nav.home}</button>
+            <ChevronRight size={10} /><span className="text-(--t1)">{t.search.title}</span>
           </nav>
-          <h1 className="text-2xl sm:text-3xl font-black text-(--t1) uppercase tracking-tight mb-8">Пошук людей</h1>
+          <h1 className="text-2xl sm:text-3xl font-black text-(--t1) uppercase tracking-tight mb-8">{t.search.title}</h1>
 
           <div className="max-w-4xl space-y-6">
             <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-xl border border-(--brd) p-6 sm:p-8">
@@ -97,7 +108,7 @@ export default function SearchPage() {
                   <input
                     ref={searchInputRef}
                     type="text"
-                    placeholder="Шукати по логіну, імені або ID..."
+                    placeholder={t.search.placeholder}
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && handleSearch()}
@@ -114,12 +125,10 @@ export default function SearchPage() {
                   }`}
                 >
                   {isSearching ? <Loader className="w-4 h-4 animate-spin" /> : <Search size={16} />}
-                  {isSearching ? "..." : "Пошук"}
+                  {isSearching ? t.search.searching : t.search.btn}
                 </button>
               </div>
-              <p className="mt-3 text-[10px] font-bold text-(--t2) uppercase tracking-widest">
-                Введіть логін, ім'я користувача або ID, щоб знайти людину
-              </p>
+              <p className="mt-3 text-[10px] font-bold text-(--t2) uppercase tracking-widest">{t.search.hint}</p>
             </div>
 
             {hasSearched && (
@@ -127,17 +136,17 @@ export default function SearchPage() {
                 {isSearching ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-4">
                     <Loader className="w-8 h-8 text-blue-600 animate-spin" />
-                    <p className="text-(--t2) font-bold text-sm">Пошук...</p>
+                    <p className="text-(--t2) font-bold text-sm">{t.search.searching}</p>
                   </div>
                 ) : searchResults.length === 0 ? (
                   <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] p-8 sm:p-12 border border-(--brd) text-center">
-                    <p className="text-lg font-black text-(--t1) mb-2">Нічого не знайдено</p>
-                    <p className="text-(--t2) text-sm">Спробуйте змінити параметри пошуку</p>
+                    <p className="text-lg font-black text-(--t1) mb-2">{t.search.notFound}</p>
+                    <p className="text-(--t2) text-sm">{t.search.notFoundHint}</p>
                   </div>
                 ) : (
                   <>
                     <div className="text-[10px] font-black uppercase tracking-widest text-(--t2) px-2">
-                      Знайдено: {searchResults.length} результат{searchResults.length > 1 ? "ів" : ""}
+                      {t.search.found}: {searchResults.length} {resultsLabel}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {searchResults.map((person, idx) => (
@@ -152,22 +161,18 @@ export default function SearchPage() {
                               {person.username?.charAt(0).toUpperCase() || person.login?.charAt(0).toUpperCase() || "?"}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-black text-(--t1) truncate group-hover:text-blue-600 transition-colors">{person.username || "N/A"}</p>
-                              <p className="text-[10px] font-bold text-(--t2) uppercase tracking-wider mb-1">Логін: {person.login || "N/A"}</p>
-                              <p className="text-[9px] font-bold text-(--t2) uppercase tracking-wider mb-2 break-all">ID: {person.id || "N/A"}</p>
+                              <p className="font-black text-(--t1) truncate group-hover:text-blue-600 transition-colors">{person.username || t.common.na}</p>
+                              <p className="text-[10px] font-bold text-(--t2) uppercase tracking-wider mb-1">{t.search.loginLabel}: {person.login || t.common.na}</p>
+                              <p className="text-[9px] font-bold text-(--t2) uppercase tracking-wider mb-2 break-all">{t.search.idLabel}: {person.id || t.common.na}</p>
                               <p className="text-[10px] text-(--t2) break-all">{person.email || ""}</p>
                             </div>
                           </div>
                           {selectedUser?.id === person.id && (
                             <div className="mt-4 pt-4 border-t border-(--brd) space-y-2">
                               <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-bold text-(--t2) uppercase">Роль:</span>
-                                <span className={"text-[10px] font-black uppercase px-2 py-0.5 rounded-md border " + (
-                                  person.role === "superadmin" ? "bg-red-500/10 text-red-500 border-red-500/20" :
-                                  person.role === "admin"      ? "bg-orange-500/10 text-orange-500 border-orange-500/20" :
-                                  person.role === "jury"       ? "bg-purple-500/10 text-purple-500 border-purple-500/20" :
-                                                                 "bg-gray-500/10 text-gray-500 border-gray-500/20"
-                                )}>
+                                <span className="text-[10px] font-bold text-(--t2) uppercase">{t.search.role}:</span>
+                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border ${roleBadge(person.role)}`}>
+                                  {person.role === "superadmin" && <Shield size={10} className="inline mr-1" />}
                                   {person.role || "user"}
                                 </span>
                               </div>
@@ -175,7 +180,7 @@ export default function SearchPage() {
                                 onClick={e => { e.stopPropagation(); router.push(`/user/${person.id}`); }}
                                 className="w-full mt-3 bg-blue-600 text-white py-2 rounded-xl font-black text-[10px] uppercase tracking-wider hover:bg-blue-700 transition-all active:scale-95"
                               >
-                                Переглянути профіль →
+                                {t.search.viewProfile}
                               </button>
                             </div>
                           )}
@@ -190,8 +195,8 @@ export default function SearchPage() {
             {!hasSearched && (
               <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] p-12 sm:p-16 border border-(--brd) text-center">
                 <Search className="w-16 h-16 text-(--t2) mx-auto mb-4 opacity-50" />
-                <p className="text-lg font-black text-(--t1) mb-2">Почніть з пошуку</p>
-                <p className="text-(--t2) text-sm max-w-md mx-auto">Введіть логін, ім'я користувача або ID у поле вище, щоб знайти людину в системі</p>
+                <p className="text-lg font-black text-(--t1) mb-2">{t.search.emptyTitle}</p>
+                <p className="text-(--t2) text-sm max-w-md mx-auto">{t.search.emptyHint}</p>
               </div>
             )}
           </div>
