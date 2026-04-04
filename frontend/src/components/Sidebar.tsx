@@ -7,11 +7,17 @@ import { useTheme } from "@/hooks/useTheme";
 import { useLanguage, LOCALES } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
 
-interface SidebarProps { backendMessage?: string; }
+const API_URL =
+typeof window !== "undefined" && window.location.hostname === "localhost"
+? "http://localhost:8000"
+: "https://site-turing-crutchmasters-team-s.onrender.com";
 
-export default function Sidebar({ backendMessage = "waiting..." }: SidebarProps) {
+interface SidebarProps {}
+
+export default function Sidebar({}: SidebarProps) {
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [backendMessage, setBackendMessage] = useState("checking...");
 
   const router   = useRouter();
   const pathname = usePathname();
@@ -35,6 +41,13 @@ export default function Sidebar({ backendMessage = "waiting..." }: SidebarProps)
 
   const go = (path: string) => router.push(path);
   const avatarLetter = user?.username?.charAt(0).toUpperCase() ?? "?";
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/test`)
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(d => setBackendMessage(d.message ?? "online"))
+    .catch(() => setBackendMessage("unavailable"));
+  }, []);
 
   return (
     <aside

@@ -203,6 +203,10 @@ async def change_role(payload: ChangeRole, authorization: str = Header(...)):
         old_role = target_check.data.get("role", "unknown")
         print(f"Step 3: Target user found - {target_username} (current role: {old_role})", flush=True)
 
+        if old_role == "superadmin":
+            print(f"ERROR: Cannot change role of another superadmin", flush=True)
+            raise HTTPException(status_code=403, detail="Cannot change the role of another superadmin")
+
         print(f"Step 4: Updating role in database...", flush=True)
         print(f"Query: UPDATE account SET role='{payload.new_role}' WHERE id='{payload.target_user_id}'", flush=True)
 
