@@ -52,8 +52,8 @@ export const useT = () => {
   return { t, locale };
 };
 
-export const LOCALES: { value: Locale; label: string; flag: string }[] = [
-  { value: "ua", label: "Українська", flag: "🇺🇦" },
-  { value: "ru", label: "Русский",    flag: "🇷🇺" },
-  { value: "en", label: "English",    flag: "🇬🇧" },
+export const LOCALES: { value: Locale; label: string;}[] = [
+  { value: "ua", label: "Українська",},
+  { value: "ru", label: "Русский", },
+  { value: "en", label: "English", },
 ];
