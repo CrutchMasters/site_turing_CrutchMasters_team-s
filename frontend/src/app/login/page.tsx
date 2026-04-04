@@ -5,8 +5,7 @@ import { useEffect, useRef, useState, FormEvent } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 import { useTheme } from "@/hooks/useTheme";
 import { useRouter } from "next/navigation";
-import { createBrowserClient } from "@supabase/ssr";
-import { useAuth } from "@/context/AuthContext"; // Импортируем наш контекст
+import { useAuth } from "@/context/AuthContext";
 
 const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -19,8 +18,6 @@ export default function LoginPage() {
   const router = useRouter();
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // Достаем функцию login из контекста и называем её authLogin,
-  // чтобы не путать со стейтом ввода логина
   const { login: authLogin } = useAuth();
 
   const [loginInput, setLoginInput] = useState("");
@@ -44,86 +41,38 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
-      );
-
-      let email = loginInput.trim();
-
-      // Если введено не email, а логин — ищем его через твой API
-      if (!email.includes("@")) {
-        const res = await fetch(`${API_URL}/api/get-email?login=${email}`);
-        if (!res.ok) {
-          setError("User not found");
-          setLoading(false);
-          return;
-        }
-        const data = await res.json();
-        email = data.email;
-      }
-
-      // Авторизация через Supabase
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const response = await fetch(`${API_URL}/api/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ login: loginInput, password }),
       });
 
-      if (authError) {
-        setError("Invalid login or password");
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.detail || "Login failed");
         setLoading(false);
         return;
       }
 
-      if (data.session) {
-        const token = data.session.access_token;
+      const token = data.access_token;
+      const userData = data.user;
 
-        // 1. Сохраняем "физически"
-        localStorage.setItem("access_token", token);
-        document.cookie = `access_token=${token}; path=/; max-age=604800`;
+      console.log("Login successful");
+      console.log("Username:", userData.username);
+      console.log("Role:", userData.role);
+      console.log("Email:", userData.email);
+      console.log("ID:", userData.id);
 
-        let userData = null;
+      localStorage.setItem("access_token", token);
+      localStorage.setItem("user", JSON.stringify(userData));
+      document.cookie = `access_token=${token}; path=/; max-age=604800`;
 
-        // Пробуем получить полный профиль с твоего бэкенда
-        try {
-          const userRes = await fetch(`${API_URL}/api/user-profile`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (userRes.ok) {
-            userData = await userRes.json();
-          }
-        } catch (err) {
-          console.error("FastAPI profile fetch failed", err);
-        }
+      authLogin(userData, token);
 
-        // Если бэкенд не ответил, собираем данные из Supabase метаданных
-        if (!userData) {
-          const supabaseUser = data.session.user;
-          userData = {
-            id: supabaseUser.id,
-            email: supabaseUser.email ?? "",
-            username:
-            supabaseUser.user_metadata?.username ??
-            supabaseUser.email?.split("@")[0] ??
-            "User",
-            login:
-            supabaseUser.user_metadata?.login ??
-            supabaseUser.email?.split("@")[0] ??
-            "user",
-            role: "user",
-          };
-        }
-
-        // 2. Сохраняем объект юзера в localStorage
-        localStorage.setItem("user", JSON.stringify(userData));
-
-        // 3. ОБНОВЛЯЕМ СОСТОЯНИЕ КОНТЕКСТА (Самое важное!)
-        authLogin(userData, token);
-
-        // 4. Редирект через роутер (теперь он будет мгновенным без белого экрана)
-        router.push("/main_page");
-      }
+      router.push("/main_page");
     } catch (err) {
+      console.error("Login error:", err);
       setError("Server connection error");
     } finally {
       setLoading(false);
@@ -138,7 +87,6 @@ export default function LoginPage() {
       }
       `}</style>
 
-      {/* Watermark */}
       <div
       className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${
         dark ? "opacity-10" : "opacity-5"
@@ -163,7 +111,7 @@ export default function LoginPage() {
 
       <div
       ref={cardRef}
-      className="reveal-drop opacity-0 -translate-y-10 z-10 w-full max-w-sm mx-4 bg-(--card)/70 backdrop-blur-2xl p-8 sm:p-10 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl border border-(--brd) flex flex-col items-center"
+      className="reveal-drop opacity-0 -translate-y-10 z-10 w-full max-w-sm mx-4 bg-(--card)/70 backdrop-blur-2xl p-8 sm:p-10 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl border border-(--brd)"
       >
       <h1 className="text-3xl sm:text-4xl font-black text-(--t1) mb-8 tracking-tighter uppercase text-center">
       {t.auth.loginTitle}
@@ -194,13 +142,38 @@ export default function LoginPage() {
       className="absolute right-4 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-500 transition-colors"
       >
       {showPassword ? (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+        <svg
+        className="w-5 h-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        >
+        <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 12a9 9 0 1118 0m0 0a9 9 0 01-18 0m0 0a9 9 0 0118 0"
+        />
         </svg>
       ) : (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+        <svg
+        className="w-5 h-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        >
+        <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+        />
+        <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+        />
         </svg>
       )}
       </button>
@@ -227,7 +200,7 @@ export default function LoginPage() {
 
       <div className="mt-8 text-center">
       <span className="text-(--t2) text-xs font-bold uppercase tracking-widest">
-      {t.auth.noAccount}{" "}
+      {t.auth.noAccount}
       </span>
       <Link
       href="/register"
