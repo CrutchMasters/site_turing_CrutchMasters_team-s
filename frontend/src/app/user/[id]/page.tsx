@@ -15,13 +15,13 @@ const API_URL =
     ? "http://localhost:8000"
     : "https://site-turing-crutchmasters-team-s.onrender.com";
 
-const ROLES = ["user", "jury", "admin"] as const;
+const ROLES = ["user", "jury", "admin", "superadmin"] as const;
 type Role = typeof ROLES[number];
 
-const roleBadge: Record<Role, string> = {
-  user:       "bg-gray-500/10 text-gray-500 border-gray-500/20",
-  jury:       "bg-purple-500/10 text-purple-500 border-purple-500/20",
-  admin:      "bg-orange-500/10 text-orange-500 border-orange-500/20",
+const roleBadgeColor: Record<Role, string> = {
+  user: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+  jury: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+  admin: "bg-orange-500/10 text-orange-500 border-orange-500/20",
   superadmin: "bg-red-500/10 text-red-500 border-red-500/20",
 };
 
