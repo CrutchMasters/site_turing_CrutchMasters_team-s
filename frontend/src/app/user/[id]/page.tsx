@@ -15,7 +15,7 @@ const API_URL =
     ? "http://localhost:8000"
     : "https://site-turing-crutchmasters-team-s.onrender.com";
 
-const ROLES = ["user", "jury", "admin", "superadmin"] as const;
+const ROLES = ["user", "jury", "admin"] as const;
 type Role = typeof ROLES[number];
 
 const roleBadge: Record<Role, string> = {
@@ -74,6 +74,7 @@ export default function PublicUserProfile() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ target_user_id: profileUser.id, new_role: selectedRole }),
       });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? t.common.error);
       setProfileUser((prev: any) => ({ ...prev, role: selectedRole }));
