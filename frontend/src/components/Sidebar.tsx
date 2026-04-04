@@ -100,10 +100,9 @@ export default function Sidebar({ backendMessage = "waiting..." }: SidebarProps)
             <div className="flex flex-col gap-2">
               <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">{t.settings.lang}</span>
               <div className="flex bg-(--card) p-1 rounded-xl gap-1 border border-(--brd)">
-                {LOCALES.map(({ value, flag }) => (
+                {LOCALES.map(({ value }) => (
                   <button key={value} onClick={() => setLocale(value)}
-                    className={`flex-1 py-1.5 text-[10px] font-black rounded-lg transition-all flex items-center justify-center gap-1 ${locale === value ? "bg-(--bg) shadow-sm text-blue-600" : "text-(--t2) hover:text-blue-400"}`}>
-                    <span>{flag}</span>
+                    className={`flex-1 py-1.5 text-[10px] font-black rounded-lg transition-all flex items-center justify-center gap-1 ${locale === value ? "bg-(--bg) shadow-sm text-blue-600" : "text-(--t2) hover:text-blue-400"}`}>  
                     <span>{value.toUpperCase()}</span>
                   </button>
                 ))}
