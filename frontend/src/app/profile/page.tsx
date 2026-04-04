@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
+import { useT } from "@/context/LanguageContext";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 
@@ -22,6 +23,7 @@ export default function UserProfile() {
   const { dark } = useTheme();
   const router = useRouter();
   const { user, isLoading } = useAuth();
+  const { t } = useT();
 
   useEffect(() => {
     if (isLoading || !user) return;
@@ -62,18 +64,18 @@ export default function UserProfile() {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <MobileHeader
           onOpenSidebar={() => setIsMobileSidebarOpen(true)}
-          title="Профіль"
+          title={t.profile.title}
           icon={<UserCircle size={18} className="text-blue-600" />}
         />
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
           <nav className="flex items-center gap-2 text-[10px] font-black mb-4 uppercase tracking-widest text-(--t2)">
-            <button onClick={() => router.push("/")} className="hover:text-blue-600">Головна</button>
-            <ChevronRight size={10} /><span className="text-(--t1)">Профіль</span>
+            <button onClick={() => router.push("/")} className="hover:text-blue-600">{t.nav.home}</button>
+            <ChevronRight size={10} /><span className="text-(--t1)">{t.profile.title}</span>
           </nav>
 
           <h1 className="text-2xl sm:text-3xl font-black text-(--t1) uppercase tracking-tight mb-6 sm:mb-8">
-            Профіль — <span className="text-blue-600">{user.username}</span>
+            {t.profile.title} — <span className="text-blue-600">{user.username}</span>
           </h1>
 
           <div className="max-w-6xl space-y-6">
@@ -89,18 +91,18 @@ export default function UserProfile() {
                 <div className="flex flex-col sm:flex-row justify-between items-center sm:items-start gap-4">
                   <div className="text-center sm:text-left">
                     <h2 className="text-lg font-black flex flex-wrap justify-center sm:justify-start items-center gap-2 uppercase tracking-tight">
-                      1. Базова інформація
-                      <span className="text-green-600 text-[9px] font-black uppercase bg-green-500/10 px-2.5 py-1 rounded-lg border border-green-500/20">Активний</span>
+                      {t.profile.basicInfo}
+                      <span className="text-green-600 text-[9px] font-black uppercase bg-green-500/10 px-2.5 py-1 rounded-lg border border-green-500/20">{t.profile.active}</span>
                     </h2>
                     <div className="mt-4 space-y-2.5 text-sm text-left">
-                      <p className="flex items-center gap-3 font-medium"><User size={16} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2)">Ім'я:</span> <span className="font-bold">{user.username}</span></p>
-                      <p className="flex items-center gap-3 font-medium"><User size={16} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2)">Логін:</span> <span className="font-bold">{user.login}</span></p>
-                      <p className="flex items-center gap-3 font-medium"><Mail size={16} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2)">Email:</span> <span className="font-bold break-all">{user.email}</span></p>
-                      <p className="flex items-center gap-3 font-bold text-blue-600"><Shield size={16} className="flex-shrink-0" /><span>Роль:</span> <span className="uppercase tracking-wider">{user.role}</span></p>
+                      <p className="flex items-center gap-3 font-medium"><User size={16} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2)">{t.profile.nameLabel}:</span> <span className="font-bold">{user.username}</span></p>
+                      <p className="flex items-center gap-3 font-medium"><User size={16} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2)">{t.profile.loginLabel}:</span> <span className="font-bold">{user.login}</span></p>
+                      <p className="flex items-center gap-3 font-medium"><Mail size={16} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2)">{t.profile.emailLabel}:</span> <span className="font-bold break-all">{user.email}</span></p>
+                      <p className="flex items-center gap-3 font-bold text-blue-600"><Shield size={16} className="flex-shrink-0" /><span>{t.profile.roleLabel}:</span> <span className="uppercase tracking-wider">{user.role}</span></p>
                     </div>
                   </div>
                   <button className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 sm:py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 active:scale-95">
-                    <Edit2 size={14} /> Редагувати
+                    <Edit2 size={14} /> {t.profile.editBtn}
                   </button>
                 </div>
                 <div className="pt-3 border-t border-(--brd) text-[9px] font-bold uppercase tracking-widest text-(--t2) text-center sm:text-left">ID: {user.id}</div>
@@ -109,7 +111,7 @@ export default function UserProfile() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-6 sm:p-8">
-                <h2 className="text-lg font-black mb-6 flex items-center gap-2 uppercase tracking-tight text-(--t1)"><Users className="text-blue-600" /> 2a. Команда</h2>
+                <h2 className="text-lg font-black mb-6 flex items-center gap-2 uppercase tracking-tight text-(--t1)"><Users className="text-blue-600" /> {t.profile.teamSection}</h2>
                 <div className="space-y-3">
                   {[{ name: "Антон Петров", role: "Team Lead" }, { name: "Марія Сидоренко", role: "Frontend" }, { name: "Олег Іванов", role: "UI/UX" }].map((m, i) => (
                     <div key={i} className="flex items-center justify-between p-3 rounded-2xl bg-(--bg)/30 border border-(--brd) hover:bg-(--bg)/50 transition-colors">
@@ -124,7 +126,7 @@ export default function UserProfile() {
               </section>
 
               <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-6 sm:p-8">
-                <h2 className="text-lg font-black mb-6 flex items-center gap-2 uppercase tracking-tight text-(--t1)"><History className="text-blue-600" /> 2b. Сабміти</h2>
+                <h2 className="text-lg font-black mb-6 flex items-center gap-2 uppercase tracking-tight text-(--t1)"><History className="text-blue-600" /> {t.profile.submitsSection}</h2>
                 <div className="space-y-3">
                   {[
                     { task: "Проєкт A - API", time: "21.03.2026", color: "text-green-600", Icon: CheckCircle },
@@ -145,7 +147,7 @@ export default function UserProfile() {
           </div>
 
           <footer className="mt-10 text-center text-[10px] font-black uppercase tracking-[0.2em] text-(--t2) opacity-50">
-            * Профіль оновлено: {new Date().toLocaleTimeString()}
+            * {t.profile.updated}: {new Date().toLocaleTimeString()}
           </footer>
         </div>
       </main>

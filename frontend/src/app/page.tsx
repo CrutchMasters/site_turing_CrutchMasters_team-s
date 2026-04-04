@@ -118,10 +118,10 @@ export default function HomePage() {
         </h3>
         <div className="space-y-4">
         <div className="flex flex-col gap-2">
-        <span className="text-sm font-bold text-(--t2)">Theme</span>
+        <span className="text-sm font-bold text-(--t2)">{t.settings.theme}</span>
         <button onClick={toggle} className="flex items-center justify-between px-3 py-2 rounded-xl bg-(--bg) hover:bg-(--brd) transition border border-(--brd)">
         <span className="text-xs font-black uppercase tracking-wide text-(--t1)">
-        {dark ? "🌙 Dark" : "☀️ Light"}
+        {dark ? `🌙 ${t.settings.dark}` : `☀️ ${t.settings.light}`}
         </span>
         <div className={`w-10 h-5 rounded-full transition-all relative ${dark ? "bg-blue-600" : "bg-gray-400"}`}>
         <div className={`absolute top-0 left-0 w-5 h-5 bg-white rounded-full shadow transition-all ${dark ? "translate-x-5" : "translate-x-0"}`} />
@@ -184,13 +184,13 @@ export default function HomePage() {
             <p className="text-[10px] font-bold text-(--t2) uppercase tracking-wider">{user.role}</p>
             </div>
             <Link href="/main_page" className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-(--t2) hover:bg-(--bg) hover:text-blue-600 transition-colors">
-            <LayoutDashboard size={16} /> Dashboard
+            <LayoutDashboard size={16} /> {t.sidebar.mainPage}
             </Link>
             <Link href="/profile" className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-(--t2) hover:bg-(--bg) hover:text-blue-600 transition-colors">
-            <UserCircle size={16} /> {locale === "en" ? "Profile" : locale === "ru" ? "Профиль" : "Профіль"}
+            <UserCircle size={16} /> {t.nav.profile}
             </Link>
             <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-500/10 transition-colors border-t border-(--brd)">
-            <LogOut size={16} /> {locale === "en" ? "Sign Out" : locale === "ru" ? "Выйти" : "Вийти"}
+            <LogOut size={16} /> {t.nav.logout}
             </button>
             </div>
           )}
@@ -219,14 +219,14 @@ export default function HomePage() {
         <div ref={(el) => { revealRefs.current[0] = el; }} className="reveal-drop opacity-0 -translate-y-10 bg-(--card)/95 backdrop-blur-sm p-6 sm:p-10 rounded-2xl sm:rounded-[2.5rem] shadow-xl border border-(--brd) flex flex-col">
         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white mb-4 sm:mb-6"><Trophy size={24} /></div>
         <h2 className="text-lg sm:text-2xl font-black mb-2 sm:mb-4 text-(--t1) uppercase tracking-tight">{t.hero.ecosystem}</h2>
-        <p className="text-(--t2) leading-relaxed text-sm">{t.hero.ecosystemDesc} <span className="font-bold text-blue-600">{t.hero.organizers}</span> {locale === "en" ? "and" : "та"} <span className="font-bold text-blue-600">{t.hero.participants}</span>.</p>
+        <p className="text-(--t2) leading-relaxed text-sm">{t.hero.ecosystemDesc} <span className="font-bold text-blue-600">{t.hero.organizers}</span> {t.hero.and} <span className="font-bold text-blue-600">{t.hero.participants}</span>.</p>
         </div>
 
         {/* Центр */}
         <div ref={(el) => { revealRefs.current[1] = el; }} className="reveal-fade opacity-0 flex flex-col items-center justify-center gap-6 sm:gap-10">
         <Link href={user ? "/main_page" : "/register"} className="w-full max-w-[260px]">
         <button className="bg-blue-600 text-white px-6 py-4 sm:px-8 sm:py-6 rounded-2xl sm:rounded-[2rem] text-lg sm:text-2xl font-black shadow-[0_20px_40px_rgba(37,99,235,0.3)] hover:bg-blue-700 hover:scale-105 transition-all w-full uppercase">
-        {user ? (locale === "en" ? "Dashboard" : "Кабінет") : t.hero.getStarted}
+        {user ? t.hero.dashboard : t.hero.getStarted}
         </button>
         </Link>
         <button onClick={scrollToContent} className="flex flex-col items-center gap-2 text-(--t2) hover:text-blue-600 transition-colors">

@@ -1,176 +1,273 @@
 // src/context/translations.ts
+// Centralized translations for all pages and components.
+// To add a new key: add it to the `en` object first, then mirror to `ru` and `ua`.
 
-export const translations = {
+const def = {
   en: {
-    nav: { signIn: "Sign In", signUp: "Sign Up", backHome: "Back to main" },
+    nav: {
+      signIn: "Sign In", signUp: "Sign Up", backHome: "Back to main",
+      home: "Home", profile: "Profile", search: "Search",
+      settings: "Settings", logout: "Log out",
+    },
     hero: {
       ecosystem: "Ecosystem",
       ecosystemDesc: "A comprehensive environment for IT tournaments connecting",
-      organizers: "organizers",
-      participants: "participants",
+      organizers: "organizers", and: "and", participants: "participants",
       functionality: "Functionality",
       funcDesc: "Our core engine handles dynamic rounds, expert reviews, and real-time statistics with ease.",
-      getStarted: "Get Started",
-      learnMore: "Learn More"
+      getStarted: "Get Started", learnMore: "Learn More", dashboard: "Dashboard",
     },
     auth: {
-      loginTitle: "Code Future",
-      registerTitle: "Registration",
-      username: "username ...",
-      login: "login ...",
-      email: "gmail ...",
-      password: "password ...",
-      confirmPassword: "conf. pass...",
-      privacy: "Privacy Policy",
-      registerBtn: "Create Account",
-      loginBtn: "Sign In",
-      haveAccount: "Already have an account?",
-      noAccount: "Don't have an account?",
-      toSignIn: "sign in",
-      toSignUp: "sign up"
+      loginTitle: "Code Future", registerTitle: "Registration",
+      username: "username ...", login: "login ...", email: "email ...",
+      password: "password ...", confirmPassword: "confirm password ...",
+      privacy: "Privacy Policy", privacyAgree: "I agree to the",
+      registerBtn: "Create Account", loginBtn: "Sign In",
+      haveAccount: "Already have an account?", noAccount: "Don't have an account?",
+      toSignIn: "sign in", toSignUp: "sign up", loading: "...",
+      otpPlaceholder: "Enter OTP code", verifyOtp: "Verify",
     },
-    settings: { title: "Settings", lang: "Language", status: "Backend Status" },
-    // ЗДЕСЬ ВСЯ ИНФОРМАЦИЯ ДЛЯ ГЛАВНОЙ СТРАНИЦЫ
+    settings: {
+      title: "Settings", lang: "Language", status: "Backend Status",
+      theme: "Theme", dark: "Dark", light: "Light",
+    },
+    sidebar: {
+      mainPage: "Main", profile: "Profile", search: "People search",
+      registerTeam: "Register team", settings: "Settings", logout: "Log out",
+    },
+    search: {
+      title: "People search",
+      placeholder: "Search by login, name or ID...",
+      hint: "Enter a login, username or ID to find a person",
+      btn: "Search", searching: "Searching...",
+      found: "Found", results_one: "result", results_many: "results",
+      notFound: "Nothing found", notFoundHint: "Try changing the search query",
+      emptyTitle: "Start with a search",
+      emptyHint: "Enter a login, username or ID in the field above to find a person in the system",
+      role: "Role", viewProfile: "View profile →",
+      loginLabel: "Login", idLabel: "ID",
+    },
+    userProfile: {
+      title: "Profile", back: "Back",
+      notFound: "User not found", notFoundHint: "This user may not exist",
+      ownProfile: "This is your profile",
+      nameLabel: "Name", loginLabel: "Login", emailLabel: "Email",
+      roleLabel: "Role", idLabel: "ID",
+      manageRole: "Role management",
+      manageRoleHint: "Only the super-administrator can change roles",
+      changeRole: "Change role", changingRole: "Changing...",
+      roleChanged: "Role changed to", roleError: "Error",
+      cantChangeSelf: "Cannot change your own role",
+    },
+    profile: {
+      title: "Profile", basicInfo: "1. Basic info", active: "Active",
+      nameLabel: "Name", loginLabel: "Login", emailLabel: "Email",
+      roleLabel: "Role", editBtn: "Edit",
+      teamSection: "2a. Team", submitsSection: "2b. Submits",
+      updated: "Profile updated", backendStatus: "Backend status",
+    },
+    mainPage: {
+      welcome: "Welcome", subtitle: "Your tournament hub",
+      dashboard: "Dashboard", overview: "Cabinet overview",
+      tournamentList: "Tournament list",
+      filterAll: "All",
+      colTournament: "Tournament", colStatus: "Status", colStart: "Start", colActions: "Actions",
+      actionOpen: "Open", actionRegister: "Register",
+      currentTournament: "Current tournament", task: "Task",
+      statusChecking: "Status: Checking...", newVersion: "New version",
+    },
     infoSections: [
-      { 
-        title: "🏆 Tournament Management", 
-        text: "Create and manage tournaments of any scale. From small local coding challenges to massive international hackathons with complex branching and rules." 
-      },
-      { 
-        title: "👥 Team Collaboration", 
-        text: "Find the best partners for your projects. Use our team-building tools to invite participants, manage roles, and coordinate efforts effectively." 
-      },
-      { 
-        title: "💻 Assignment Engine", 
-        text: "A structured workflow for delivering tasks. Supports various formats, automated test cases, and secure submission environments." 
-      },
-      { 
-        title: "⚖️ Fair Evaluation", 
-        text: "Ensuring objectivity through a mix of automated grading and expert peer reviews based on transparent, customizable criteria." 
-      },
-      { 
-        title: "🚀 Real-time Analytics", 
-        text: "Monitor progress with live leaderboards. Track every commit, submission, and score update as it happens during the event." 
-      },
-      { 
-        title: "📊 Data Insights", 
-        text: "Comprehensive reporting and export tools. Get detailed performance metrics for every participant and team in easy-to-read formats." 
-      }
-    ]
+      { title: "🏆 Tournament Management", text: "Create and manage tournaments of any scale. From small local coding challenges to massive international hackathons with complex branching and rules." },
+      { title: "👥 Team Collaboration", text: "Find the best partners for your projects. Use our team-building tools to invite participants, manage roles, and coordinate efforts effectively." },
+      { title: "💻 Assignment Engine", text: "A structured workflow for delivering tasks. Supports various formats, automated test cases, and secure submission environments." },
+      { title: "⚖️ Fair Evaluation", text: "Ensuring objectivity through a mix of automated grading and expert peer reviews based on transparent, customizable criteria." },
+      { title: "🚀 Real-time Analytics", text: "Monitor progress with live leaderboards. Track every commit, submission, and score update as it happens during the event." },
+      { title: "📊 Data Insights", text: "Comprehensive reporting and export tools. Get detailed performance metrics for every participant and team in easy-to-read formats." },
+    ],
+    common: {
+      loading: "Loading...", error: "Error", success: "Success",
+      cancel: "Cancel", save: "Save", confirm: "Confirm",
+      na: "N/A", yes: "Yes", no: "No",
+    },
   },
+
   ru: {
-    nav: { signIn: "Войти", signUp: "Регистрация", backHome: "На главную" },
+    nav: {
+      signIn: "Войти", signUp: "Регистрация", backHome: "На главную",
+      home: "Главная", profile: "Профиль", search: "Поиск",
+      settings: "Настройки", logout: "Выйти",
+    },
     hero: {
       ecosystem: "Экосистема",
       ecosystemDesc: "Комплексная среда для IT-турниров, объединяющая",
-      organizers: "организаторов",
-      participants: "участников",
+      organizers: "организаторов", and: "и", participants: "участников",
       functionality: "Функционал",
-      funcDesc: "Наш движок с легкостью управляет динамическими раундами, экспертной оценкой и статистикой в реальном времени.",
-      getStarted: "Начать",
-      learnMore: "Подробнее"
+      funcDesc: "Наш движок с лёгкостью управляет динамическими раундами, экспертной оценкой и статистикой в реальном времени.",
+      getStarted: "Начать", learnMore: "Подробнее", dashboard: "Кабинет",
     },
     auth: {
-      loginTitle: "Code Future",
-      registerTitle: "Регистрация",
-      username: "имя пользователя ...",
-      login: "логин ...",
-      email: "почта ...",
-      password: "пароль ...",
-      confirmPassword: "подтверждение...",
-      privacy: "Политика конфиденциальности",
-      registerBtn: "Создать аккаунт",
-      loginBtn: "Войти",
-      haveAccount: "Уже есть аккаунт?",
-      noAccount: "Нет аккаунта?",
-      toSignIn: "войти",
-      toSignUp: "регистрация"
+      loginTitle: "Code Future", registerTitle: "Регистрация",
+      username: "имя пользователя ...", login: "логин ...", email: "почта ...",
+      password: "пароль ...", confirmPassword: "подтверждение ...",
+      privacy: "Политика конфиденциальности", privacyAgree: "Я согласен с",
+      registerBtn: "Создать аккаунт", loginBtn: "Войти",
+      haveAccount: "Уже есть аккаунт?", noAccount: "Нет аккаунта?",
+      toSignIn: "войти", toSignUp: "регистрация", loading: "...",
+      otpPlaceholder: "Введите OTP код", verifyOtp: "Подтвердить",
     },
-    settings: { title: "Настройки", lang: "Язык", status: "Статус Бэкенда" },
-    // ЗДЕСЬ ВСЯ ИНФОРМАЦИЯ ДЛЯ ГЛАВНОЙ СТРАНИЦЫ
+    settings: {
+      title: "Настройки", lang: "Язык", status: "Статус бэкенда",
+      theme: "Тема", dark: "Тёмная", light: "Светлая",
+    },
+    sidebar: {
+      mainPage: "Главная", profile: "Профиль", search: "Поиск людей",
+      registerTeam: "Регистрация команды", settings: "Настройки", logout: "Выйти",
+    },
+    search: {
+      title: "Поиск людей",
+      placeholder: "Поиск по логину, имени или ID...",
+      hint: "Введите логин, имя пользователя или ID, чтобы найти человека",
+      btn: "Поиск", searching: "Поиск...",
+      found: "Найдено", results_one: "результат", results_many: "результатов",
+      notFound: "Ничего не найдено", notFoundHint: "Попробуйте изменить параметры поиска",
+      emptyTitle: "Начните с поиска",
+      emptyHint: "Введите логин, имя пользователя или ID в поле выше, чтобы найти человека в системе",
+      role: "Роль", viewProfile: "Открыть профиль →",
+      loginLabel: "Логин", idLabel: "ID",
+    },
+    userProfile: {
+      title: "Профиль", back: "Назад",
+      notFound: "Пользователь не найден", notFoundHint: "Возможно, такого пользователя не существует",
+      ownProfile: "Это ваш профиль",
+      nameLabel: "Имя", loginLabel: "Логин", emailLabel: "Email",
+      roleLabel: "Роль", idLabel: "ID",
+      manageRole: "Управление ролью",
+      manageRoleHint: "Только суперадминистратор может изменять роли",
+      changeRole: "Изменить роль", changingRole: "Изменение...",
+      roleChanged: "Роль изменена на", roleError: "Ошибка",
+      cantChangeSelf: "Нельзя изменить собственную роль",
+    },
+    profile: {
+      title: "Профиль", basicInfo: "1. Основная информация", active: "Активен",
+      nameLabel: "Имя", loginLabel: "Логин", emailLabel: "Email",
+      roleLabel: "Роль", editBtn: "Редактировать",
+      teamSection: "2a. Команда", submitsSection: "2b. Сабмиты",
+      updated: "Профиль обновлён", backendStatus: "Статус бэкенда",
+    },
+    mainPage: {
+      welcome: "Добро пожаловать", subtitle: "Ваш турнирный хаб",
+      dashboard: "Дашборд", overview: "Обзор кабинета",
+      tournamentList: "Список турниров",
+      filterAll: "Все",
+      colTournament: "Турнир", colStatus: "Статус", colStart: "Старт", colActions: "Действия",
+      actionOpen: "Открыть", actionRegister: "Регистрация",
+      currentTournament: "Текущий турнир", task: "Задание",
+      statusChecking: "Статус: Проверка...", newVersion: "Новая версия",
+    },
     infoSections: [
-      { 
-        title: "🏆 Организация турниров", 
-        text: "Создавайте и управляйте турнирами любого масштаба. От небольших локальных задач до масштабных международных хакатонов со сложной структурой раундов." 
-      },
-      { 
-        title: "👥 Командное взаимодействие", 
-        text: "Находите лучших партнеров для своих проектов. Используйте инструменты поиска команд, управляйте ролями и координируйте усилия эффективно." 
-      },
-      { 
-        title: "💻 Система заданий", 
-        text: "Структурированный рабочий процесс подачи задач. Поддержка различных форматов, автоматических тестов и защищенной среды для решений." 
-      },
-      { 
-        title: "⚖️ Справедливая оценка", 
-        text: "Объективность за счет сочетания автоматической проверки кода и экспертного рецензирования на основе прозрачных критериев." 
-      },
-      { 
-        title: "🚀 Аналитика в реальном времени", 
-        text: "Следите за прогрессом через живые таблицы лидеров. Отслеживайте каждую отправку решения и обновление счета прямо во время турнира." 
-      },
-      { 
-        title: "📊 Глубокие отчеты", 
-        text: "Инструменты для детального анализа и экспорта. Получайте подробные метрики эффективности каждого участника и команды в удобных форматах." 
-      }
-    ]
+      { title: "🏆 Организация турниров", text: "Создавайте и управляйте турнирами любого масштаба. От небольших локальных задач до масштабных международных хакатонов со сложной структурой раундов." },
+      { title: "👥 Командное взаимодействие", text: "Находите лучших партнёров для своих проектов. Используйте инструменты поиска команд, управляйте ролями и координируйте усилия эффективно." },
+      { title: "💻 Система заданий", text: "Структурированный рабочий процесс подачи задач. Поддержка различных форматов, автоматических тестов и защищённой среды для решений." },
+      { title: "⚖️ Справедливая оценка", text: "Объективность за счёт сочетания автоматической проверки кода и экспертного рецензирования на основе прозрачных критериев." },
+      { title: "🚀 Аналитика в реальном времени", text: "Следите за прогрессом через живые таблицы лидеров. Отслеживайте каждую отправку решения и обновление счёта прямо во время турнира." },
+      { title: "📊 Глубокие отчёты", text: "Инструменты для детального анализа и экспорта. Получайте подробные метрики эффективности каждого участника и команды в удобных форматах." },
+    ],
+    common: {
+      loading: "Загрузка...", error: "Ошибка", success: "Успешно",
+      cancel: "Отмена", save: "Сохранить", confirm: "Подтвердить",
+      na: "Н/Д", yes: "Да", no: "Нет",
+    },
   },
+
   ua: {
-    nav: { signIn: "Увійти", signUp: "Реєстрація", backHome: "На головну" },
+    nav: {
+      signIn: "Увійти", signUp: "Реєстрація", backHome: "На головну",
+      home: "Головна", profile: "Профіль", search: "Пошук",
+      settings: "Налаштування", logout: "Вийти",
+    },
     hero: {
       ecosystem: "Екосистема",
       ecosystemDesc: "Комплексне середовище для IT-турнірів, що об'єднує",
-      organizers: "організаторів",
-      participants: "учасників",
+      organizers: "організаторів", and: "та", participants: "учасників",
       functionality: "Функціонал",
       funcDesc: "Наш движок з легкістю керує динамічними раундами, експертною оцінкою та статистикою в реальному часі.",
-      getStarted: "Почати",
-      learnMore: "Докладніше"
+      getStarted: "Почати", learnMore: "Докладніше", dashboard: "Кабінет",
     },
     auth: {
-      loginTitle: "Code Future",
-      registerTitle: "Реєстрація",
-      username: "ім'я користувача ...",
-      login: "логін ...",
-      email: "пошта ...",
-      password: "пароль ...",
-      confirmPassword: "підтвердження...",
-      privacy: "Політика конфіденційності",
-      registerBtn: "Створити акаунт",
-      loginBtn: "Увійти",
-      haveAccount: "Вже є акаунт?",
-      noAccount: "Немає акаунту?",
-      toSignIn: "увійти",
-      toSignUp: "реєстрація"
+      loginTitle: "Code Future", registerTitle: "Реєстрація",
+      username: "ім'я користувача ...", login: "логін ...", email: "пошта ...",
+      password: "пароль ...", confirmPassword: "підтвердження ...",
+      privacy: "Політика конфіденційності", privacyAgree: "Я погоджуюсь з",
+      registerBtn: "Створити акаунт", loginBtn: "Увійти",
+      haveAccount: "Вже є акаунт?", noAccount: "Немає акаунту?",
+      toSignIn: "увійти", toSignUp: "реєстрація", loading: "...",
+      otpPlaceholder: "Введіть OTP код", verifyOtp: "Підтвердити",
     },
-    settings: { title: "Налаштування", lang: "Мова", status: "Статус Бекенду" },
+    settings: {
+      title: "Налаштування", lang: "Мова", status: "Статус бекенду",
+      theme: "Тема", dark: "Темна", light: "Світла",
+    },
+    sidebar: {
+      mainPage: "Головна", profile: "Профіль", search: "Пошук людей",
+      registerTeam: "Реєстрація команди", settings: "Налаштування", logout: "Вийти",
+    },
+    search: {
+      title: "Пошук людей",
+      placeholder: "Шукати по логіну, імені або ID...",
+      hint: "Введіть логін, ім'я користувача або ID, щоб знайти людину",
+      btn: "Пошук", searching: "Пошук...",
+      found: "Знайдено", results_one: "результат", results_many: "результатів",
+      notFound: "Нічого не знайдено", notFoundHint: "Спробуйте змінити параметри пошуку",
+      emptyTitle: "Почніть з пошуку",
+      emptyHint: "Введіть логін, ім'я користувача або ID у поле вище, щоб знайти людину в системі",
+      role: "Роль", viewProfile: "Переглянути профіль →",
+      loginLabel: "Логін", idLabel: "ID",
+    },
+    userProfile: {
+      title: "Профіль", back: "Назад",
+      notFound: "Користувача не знайдено", notFoundHint: "Можливо, такого користувача не існує",
+      ownProfile: "Це ваш профіль",
+      nameLabel: "Ім'я", loginLabel: "Логін", emailLabel: "Email",
+      roleLabel: "Роль", idLabel: "ID",
+      manageRole: "Управління роллю",
+      manageRoleHint: "Тільки суперадміністратор може змінювати ролі",
+      changeRole: "Змінити роль", changingRole: "Зміна...",
+      roleChanged: "Роль змінено на", roleError: "Помилка",
+      cantChangeSelf: "Не можна змінити власну роль",
+    },
+    profile: {
+      title: "Профіль", basicInfo: "1. Базова інформація", active: "Активний",
+      nameLabel: "Ім'я", loginLabel: "Логін", emailLabel: "Email",
+      roleLabel: "Роль", editBtn: "Редагувати",
+      teamSection: "2a. Команда", submitsSection: "2b. Сабміти",
+      updated: "Профіль оновлено", backendStatus: "Статус бекенду",
+    },
+    mainPage: {
+      welcome: "Ласкаво просимо", subtitle: "Ваш турнірний хаб",
+      dashboard: "Дашборд", overview: "Огляд кабінету",
+      tournamentList: "Список турнірів",
+      filterAll: "Всі",
+      colTournament: "Турнір", colStatus: "Статус", colStart: "Старт", colActions: "Дії",
+      actionOpen: "Відкрити", actionRegister: "Реєстрація",
+      currentTournament: "Поточний турнір", task: "Завдання",
+      statusChecking: "Статус: Перевірка...", newVersion: "Нова версія",
+    },
     infoSections: [
-      { 
-        title: "🏆 Організація турнірів", 
-        text: "Створюйте та керуйте турнірами будь-якого масштабу. Від невеликих локальних задач до масштабних міжнародних хакатонів зі складною структурою." 
-      },
-      { 
-        title: "👥 Командна взаємодія", 
-        text: "Знаходьте кращих партнерів для своїх проектів. Використовуйте інструменти пошуку команд, керуйте ролями та координуйте зусилля ефективно." 
-      },
-      { 
-        title: "💻 Система завдань", 
-        text: "Структурований робочий процес подачі задач. Підтримка різних форматів, автоматичних тестів та захищеного середовища для рішень." 
-      },
-      { 
-        title: "⚖️ Справедлива оцінка", 
-        text: "Об'єктивність завдяки поєднанню автоматичної перевірки коду та експертного рецензування на основі прозорих критеріїв." 
-      },
-      { 
-        title: "🚀 Аналітика в реальному часі", 
-        text: "Слідкуйте за прогресом через живі таблиці лідерів. Відстежуйте кожну відправку рішення та оновлення рахунку прямо під час турніру." 
-      },
-      { 
-        title: "📊 Глибокі звіти", 
-        text: "Інструменти для детального аналізу та експорту. Отримуйте докладні метрики ефективності кожного учасника та команди у зручних форматах." 
-      }
-    ]
-  }
-};
+      { title: "🏆 Організація турнірів", text: "Створюйте та керуйте турнірами будь-якого масштабу. Від невеликих локальних задач до масштабних міжнародних хакатонів зі складною структурою." },
+      { title: "👥 Командна взаємодія", text: "Знаходьте кращих партнерів для своїх проектів. Використовуйте інструменти пошуку команд, керуйте ролями та координуйте зусилля ефективно." },
+      { title: "💻 Система завдань", text: "Структурований робочий процес подачі задач. Підтримка різних форматів, автоматичних тестів та захищеного середовища для рішень." },
+      { title: "⚖️ Справедлива оцінка", text: "Об'єктивність завдяки поєднанню автоматичної перевірки коду та експертного рецензування на основі прозорих критеріїв." },
+      { title: "🚀 Аналітика в реальному часі", text: "Слідкуйте за прогресом через живі таблиці лідерів. Відстежуйте кожну відправку рішення та оновлення рахунку прямо під час турніру." },
+      { title: "📊 Глибокі звіти", text: "Інструменти для детального аналізу та експорту. Отримуйте докладні метрики ефективності кожного учасника та команди у зручних форматах." },
+    ],
+    common: {
+      loading: "Завантаження...", error: "Помилка", success: "Успішно",
+      cancel: "Скасувати", save: "Зберегти", confirm: "Підтвердити",
+      na: "Н/Д", yes: "Так", no: "Ні",
+    },
+  },
+} as const;
 
-export type Locale = keyof typeof translations;
+export type Locale = keyof typeof def;
+export type Translations = typeof def.en;
+export const translations = def;
