@@ -19,6 +19,7 @@ export interface AuthContextType {
     isLoading: boolean;
     login: (user: User, token: string, refreshToken?: string) => void;
     logout: () => void;
+    updateUser: (user: User) => void;
 }
 
 export const AuthContext = createContext<AuthContextType>({
@@ -26,7 +27,8 @@ export const AuthContext = createContext<AuthContextType>({
     token: null,
     isLoading: true,
     login: () => {},
-                                                          logout: () => {},
+    logout: () => {},
+    updateUser: () => {},
 });
 
 export const useAuth = () => {
@@ -35,13 +37,11 @@ export const useAuth = () => {
     return context;
 };
 
-// Создаём supabase клиент один раз вне компонента
 const supabaseClient = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
 );
 
-// Читаем exp из JWT без библиотек
 function getTokenExpiry(token: string): number {
     try {
         const payload = JSON.parse(atob(token.split(".")[1]));
@@ -52,12 +52,11 @@ function getTokenExpiry(token: string): number {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, setUser]       = useState<User | null>(null);
-    const [token, setToken]     = useState<string | null>(null);
+    const [user, setUser]           = useState<User | null>(null);
+    const [token, setToken]         = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Очищаем таймер
     const clearTimer = () => {
         if (timerRef.current) {
             clearTimeout(timerRef.current);
@@ -65,7 +64,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    // Обновляем access_token
     const doRefresh = useCallback(async (): Promise<string | null> => {
         try {
             const saved = localStorage.getItem("refresh_token");
@@ -93,14 +91,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    // Планируем следующий refresh
     const scheduleRefresh = useCallback((accessToken: string) => {
         clearTimer();
         const expiry = getTokenExpiry(accessToken);
-        const delay  = expiry - Date.now() - 5 * 60 * 1000; // за 5 мин до exp
+        const delay  = expiry - Date.now() - 5 * 60 * 1000;
 
         if (delay <= 0) {
-            // Истёк или скоро — обновляем немедленно
             doRefresh().then(t => { if (t) scheduleRefresh(t); });
             return;
         }
@@ -111,14 +107,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }, delay);
     }, [doRefresh]);
 
-    // Обновляем роль из БД (фоново, не блокирует рендер)
     const refreshRole = useCallback(async (u: User) => {
         try {
             const { data } = await supabaseClient
-            .from("account")
-            .select("id, username, login, email, role, status, avatar_url")
-            .eq("id", u.id)
-            .single();
+                .from("account")
+                .select("id, username, login, email, role, status, avatar_url")
+                .eq("id", u.id)
+                .single();
 
             if (!data) return;
 
@@ -142,7 +137,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    // Инициализация при загрузке сайта
     useEffect(() => {
         let cancelled = false;
 
@@ -150,13 +144,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const savedToken = localStorage.getItem("access_token");
             const savedUser  = localStorage.getItem("user");
 
-            // Нет сессии — просто снимаем лоадер
             if (!savedToken || !savedUser) {
                 if (!cancelled) setIsLoading(false);
                 return;
             }
 
-            // Парсим user
             let parsedUser: User;
             try {
                 parsedUser = JSON.parse(savedUser);
@@ -168,19 +160,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 return;
             }
 
-            // Сразу показываем пользователя — нет мигания
+            // Сразу показываем пользователя без мигания
             if (!cancelled) {
                 setToken(savedToken);
                 setUser(parsedUser);
             }
 
-            // Проверяем не истёк ли токен
+            // Проверяем токен
             let activeToken = savedToken;
             if (getTokenExpiry(savedToken) < Date.now()) {
                 console.log("⚠️ Token expired, refreshing...");
                 const refreshed = await doRefresh();
                 if (!refreshed) {
-                    // Refresh мёртв — разлогиниваем
                     localStorage.removeItem("access_token");
                     localStorage.removeItem("user");
                     localStorage.removeItem("refresh_token");
@@ -199,7 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setIsLoading(false);
             }
 
-            // Фоново тянем свежую роль
+            // Фоново обновляем роль
             refreshRole(parsedUser);
         };
 
@@ -208,10 +199,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!cancelled) setIsLoading(false);
         });
 
-            return () => {
-                cancelled = true;
-                clearTimer();
-            };
+        return () => {
+            cancelled = true;
+            clearTimer();
+        };
     }, [doRefresh, scheduleRefresh, refreshRole]);
 
     const login = useCallback((userData: User, accessToken: string, refreshToken?: string) => {
@@ -237,9 +228,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.location.href = "/";
     }, []);
 
+    const updateUser = useCallback((userData: User) => {
+        setUser(userData);
+        localStorage.setItem("user", JSON.stringify(userData));
+    }, []);
+
     return (
-        <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
-        {children}
+        <AuthContext.Provider value={{ user, token, isLoading, login, logout, updateUser }}>
+            {children}
         </AuthContext.Provider>
     );
 }
