@@ -47,7 +47,7 @@ export default function DashboardPage() {
 
   if (!user) return null;
 
-  coconst filterLabels = [t.mainPage.filterAll, t.mainPage.filterOpen, t.mainPage.filterRunning];
+  const filterLabels = [t.mainPage.filterAll, t.mainPage.filterOpen, t.mainPage.filterRunning];
 
   return (
     <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
