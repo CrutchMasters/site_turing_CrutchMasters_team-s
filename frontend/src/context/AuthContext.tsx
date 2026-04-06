@@ -1,15 +1,17 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
-import {
-  User, Mail, Shield, ChevronRight, UserCircle, ArrowLeft, Loader,
-} from "lucide-react";
-import { useTheme } from "@/hooks/useTheme";
-import { useAuth } from "@/context/AuthContext";
-import { supabase } from "@/lib/supabase";
-import Sidebar from "@/components/Sidebar";
-import MobileHeader from "@/components/MobileHeader";
+import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from "react";
+import { createBrowserClient } from "@supabase/ssr";
+
+export interface User {
+    id: string;
+    username: string;
+    login: string;
+    email: string;
+    role: "user" | "admin" | "jury" | "superadmin";
+    status?: string;
+    avatar_url?: string;
+}
 
 const API_URL =
   typeof window !== "undefined" && window.location.hostname === "localhost"
