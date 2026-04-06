@@ -18,6 +18,7 @@ export interface AuthContextType {
     isLoading: boolean;
     login: (user: User, token: string) => void;
     logout: () => void;
+    updateUser: (patch: Partial<User>) => void;
 }
 
 export const AuthContext = createContext<AuthContextType>({
@@ -26,6 +27,7 @@ export const AuthContext = createContext<AuthContextType>({
     isLoading: true,
     login: () => {},
                                                           logout: () => {},
+                                                          updateUser: () => {},
 });
 
 export const useAuth = () => {
@@ -84,8 +86,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.location.href = "/";
     };
 
+    const updateUser = (patch: Partial<User>) => {
+        setUser((prev) => {
+            if (!prev) return prev;
+            const next = { ...prev, ...patch };
+            localStorage.setItem("user", JSON.stringify(next));
+            return next;
+        });
+    };
+
     return (
-        <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+        <AuthContext.Provider value={{ user, token, isLoading, login, logout, updateUser }}>
         {children}
         </AuthContext.Provider>
     );
