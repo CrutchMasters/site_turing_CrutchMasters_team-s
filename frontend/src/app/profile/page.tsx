@@ -115,7 +115,7 @@ export default function ProfilePage() {
       if (updateError) throw updateError;
 
       // Оновлюємо контекст і localStorage — сайдбар одразу покаже новий аватар
-      updateUser({ currentUser, avatar_url: data.publicUrl });
+      updateUser({ ...currentUser, avatar_url: data.publicUrl });
 
       setSuccess("Avatar uploaded successfully");
     } catch (e: any) {
