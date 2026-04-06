@@ -1,9 +1,23 @@
 import os
+import base64
+import json
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from pydantic import BaseModel, EmailStr
+
+def decode_jwt_payload(token: str) -> dict:
+    """Decode JWT payload without verifying signature or expiry."""
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            raise ValueError("Invalid JWT structure")
+        payload_b64 = parts[1]
+        payload_b64 += "=" * (4 - len(payload_b64) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload_b64))
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid token format: {e}")
 
 # --- ИНИЦИАЛИЗАЦИЯ ---
 load_dotenv()
@@ -167,13 +181,12 @@ async def change_role(payload: ChangeRole, authorization: str = Header(...)):
 
     try:
         print("Step 1: Verifying token...", flush=True)
-        user_resp = supabase.auth.get_user(token)
-        if not user_resp or not user_resp.user:
-            print("ERROR: Invalid token", flush=True)
-            raise HTTPException(status_code=401, detail="Invalid token")
-
-        caller_email = user_resp.user.email
-        print(f"Step 1: Token verified for {caller_email}", flush=True)
+        jwt_payload = decode_jwt_payload(token)
+        caller_email = jwt_payload.get("email")
+        if not caller_email:
+            print("ERROR: No email in token payload", flush=True)
+            raise HTTPException(status_code=401, detail="Invalid token: no email claim")
+        print(f"Step 1: Token decoded for {caller_email}", flush=True)
 
         print("Step 2: Getting caller role...", flush=True)
         caller_info = supabase.table("account").select("id, role").eq("email", caller_email).single().execute()
@@ -202,6 +215,10 @@ async def change_role(payload: ChangeRole, authorization: str = Header(...)):
         target_username = target_check.data.get("username", "Unknown")
         old_role = target_check.data.get("role", "unknown")
         print(f"Step 3: Target user found - {target_username} (current role: {old_role})", flush=True)
+
+        if old_role == "superadmin":
+            print(f"ERROR: Cannot change role of another superadmin", flush=True)
+            raise HTTPException(status_code=403, detail="Cannot change the role of another superadmin")
 
         print(f"Step 4: Updating role in database...", flush=True)
         print(f"Query: UPDATE account SET role='{payload.new_role}' WHERE id='{payload.target_user_id}'", flush=True)
