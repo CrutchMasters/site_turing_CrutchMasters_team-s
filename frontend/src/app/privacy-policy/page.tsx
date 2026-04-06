@@ -1,4 +1,5 @@
- "use client";
+//site_turing_CrutchMasters_team-s/frontend/src/app/privacy-policy/page.tsx
+"use client";
  
 import Link from "next/link";
 import { useTheme } from "@/hooks/useTheme";
