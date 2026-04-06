@@ -132,8 +132,8 @@ export default function RegisterPage() {
         document.cookie = `access_token=${token}; path=/; max-age=604800`;
  
         // КЛЮЧЕВОЕ ОБНОВЛЕНИЕ: вызываем функцию из контекста
-        authLogin(userData, token);
- 
+        authLogin(userData, token, verifyData.session.refresh_token);
+
         router.push("/main_page");
       }
     } catch (error: any) {
