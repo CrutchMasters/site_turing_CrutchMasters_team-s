@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   User, Mail, Shield, ChevronRight, UserCircle, ArrowLeft, Loader,
