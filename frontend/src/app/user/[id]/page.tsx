@@ -17,7 +17,7 @@ typeof window !== "undefined" && window.location.hostname === "localhost"
 : "https://site-turing-crutchmasters-team-s.onrender.com";
 
 const ROLES = ["user", "jury", "admin"] as const;
-type Role = typeof ROLES[number];
+type Role = "user" | "jury" | "admin" | "superadmin";
 
 const roleBadgeColor: Record<Role, string> = {
   user: "bg-gray-500/10 text-gray-500 border-gray-500/20",
