@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useState, useEffect, useMemo } from "react";
 import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
@@ -41,7 +42,10 @@ export default function PublicUserProfile() {
   const [isChangingRole, setIsChangingRole] = useState(false);
   const [roleMsg, setRoleMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
-  const isSuperAdmin = currentUser?.role === "superadmin";
+  const isSuperAdmin = useMemo(
+  () => currentUser?.role === "superadmin",
+  [currentUser?.role]
+);
   const isOwnProfile = currentUser?.id === params.id;
 
   useEffect(() => {
