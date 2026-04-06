@@ -81,11 +81,16 @@ export default function PublicUserProfile() {
     setRoleMsg(null);
 
     try {
+      // Refresh session to get a fresh token
+      const { data: sessionData, error: sessionError } = await supabase.auth.refreshSession();
+      const freshToken = sessionData?.session?.access_token ?? token;
+      if (sessionError) console.warn("Session refresh failed, using existing token");
+
       const res = await fetch(`${API_URL}/api/change-role`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${freshToken}`,
         },
         body: JSON.stringify({
           target_user_id: profileUser.id,
