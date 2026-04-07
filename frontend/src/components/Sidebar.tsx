@@ -127,7 +127,7 @@ export default function Sidebar({}: SidebarProps) {
         {/* Nav */}
         <nav className="flex-1 flex flex-col gap-1 p-3 overflow-y-auto overflow-x-hidden">
         <NavItem icon={<UserCircle size={18} />}      label={t.sidebar.profile}      active={pathname === "/profile"}   collapsed={collapsed} onClick={() => go("/profile")} />
-        <NavItem icon={<LayoutDashboard size={18} />} label={t.sidebar.mainPage}     active={pathname === "/main_page"} collapsed={collapsed} onClick={() => go("/main_page")} />
+        <NavItem icon={<LayoutDashboard size={18} />} label={t.sidebar.mainPage}     active={pathname === "/dashboard"} collapsed={collapsed} onClick={() => go("/dashboard")} />
         <NavItem icon={<Search size={18} />}          label={t.sidebar.search}       active={pathname === "/search"}    collapsed={collapsed} onClick={() => go("/search")} />
         <NavItem
         icon={<Settings size={18} />}

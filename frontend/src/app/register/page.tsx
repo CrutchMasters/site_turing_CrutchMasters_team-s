@@ -134,7 +134,7 @@ export default function RegisterPage() {
         // КЛЮЧЕВОЕ ОБНОВЛЕНИЕ: вызываем функцию из контекста
         authLogin(userData, token, verifyData.session.refresh_token);
 
-        router.push("/main_page");
+        router.push("/dashboard");
       }
     } catch (error: any) {
       alert(error.message || "Verification failed");
@@ -201,7 +201,7 @@ export default function RegisterPage() {
         <label htmlFor="privacy" className="text-[11px] font-bold text-(--t2) cursor-pointer uppercase tracking-wider">
           {t.auth.privacy}{" "}
           <Link
-            href="/privacy-policy"
+            href="/privacy_policy"
             target="_blank"
             onClick={(e) => e.stopPropagation()}
             className="text-blue-600 hover:text-blue-500 hover:underline underline-offset-2 transition-colors"

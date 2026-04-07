@@ -45,13 +45,15 @@ export default function DashboardPage() {
     </div>
   );
 
-  if (!user) return null;
+  if (!user) {
+    return <div>Not authenticated</div>;
+  }
 
   const filterLabels = [t.mainPage.filterAll, "Open", "Running"];
   const isAdmin = user.role === "admin" || user.role === "superadmin";
 
   return (
-    <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
+    <div className="flex h-screen bg-(--bg) text-(--t1) transition-colors duration-300">
     <style jsx global>{`
       @keyframes fadeUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
       @keyframes cardDrop { from{opacity:0;transform:translateY(-26px) scale(.97)} to{opacity:1;transform:none} }
