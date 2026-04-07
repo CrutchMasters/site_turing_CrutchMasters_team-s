@@ -1,3 +1,4 @@
+//site_turing_CrutchMasters_team-s/frontend/src/app/search/page.tsx
 "use client";
 
 import { supabase } from "@/lib/supabase";
