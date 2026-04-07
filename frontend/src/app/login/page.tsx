@@ -71,7 +71,7 @@ export default function LoginPage() {
 
       authLogin(userData, token, data.refresh_token);
 
-      router.push("/main_page");
+      router.push("/dashboard");
     } catch (err) {
       console.error("Login error:", err);
       setError("Server connection error");

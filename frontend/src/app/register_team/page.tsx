@@ -77,7 +77,7 @@ export default function TeamRegistration() {
     <nav className="flex items-center gap-2 text-[10px] font-black mb-4 uppercase tracking-widest text-(--t2)">
     <button onClick={() => router.push("/")} className="hover:text-blue-600">Головна</button>
     <ChevronRight size={10} />
-    <button onClick={() => router.push("/main_page")} className="hover:text-blue-600">Дашборд</button>
+    <button onClick={() => router.push("/dashboard")} className="hover:text-blue-600">Дашборд</button>
     <ChevronRight size={10} />
     <span className="text-(--t1)">Реєстрація команди</span>
     </nav>

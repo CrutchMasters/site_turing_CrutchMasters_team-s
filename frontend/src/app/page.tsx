@@ -210,7 +210,7 @@ export default function HomePage() {
           </p>
           </div>
           <Link
-          href="/main_page"
+          href="/dashboard"
           className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-(--t2) hover:bg-(--bg) hover:text-blue-600 transition-colors"
           >
           <LayoutDashboard size={16} /> Dashboard
@@ -305,7 +305,7 @@ export default function HomePage() {
       }}
       className="reveal-fade opacity-0 flex flex-col items-center justify-center gap-6 sm:gap-10"
       >
-      <Link href={user ? "/main_page" : "/register"} className="w-full max-w-[260px]">
+      <Link href={user ? "/dashboard" : "/register"} className="w-full max-w-[260px]">
       <button className="bg-blue-600 text-white px-6 py-4 sm:px-8 sm:py-6 rounded-2xl sm:rounded-[2rem] text-lg sm:text-2xl font-black shadow-[0_20px_40px_rgba(37,99,235,0.3)] hover:bg-blue-700 hover:scale-105 transition-all w-full uppercase">
       {user
         ? locale === "en"
