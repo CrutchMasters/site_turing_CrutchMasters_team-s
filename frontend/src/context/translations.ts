@@ -30,6 +30,9 @@ const def = {
     settings: {
       title: "Settings", lang: "Language", status: "Backend Status",
       theme: "Theme", dark: "Dark", light: "Light",
+      tourney: {
+        create: "Create Tournament",
+      },
     },
     sidebar: {
       mainPage: "Main", profile: "Profile", search: "People search",
@@ -105,6 +108,10 @@ const def = {
       funcDesc: "Наш движок с лёгкостью управляет динамическими раундами, экспертной оценкой и статистикой в реальном времени.",
       getStarted: "Начать", learnMore: "Подробнее", dashboard: "Кабинет",
     },
+    tourney: {
+      create: "Создание турнира",
+    },
+
     auth: {
       loginTitle: "Code Future", registerTitle: "Регистрация",
       username: "имя пользователя ...", login: "логин ...", email: "почта ...",
@@ -241,6 +248,9 @@ const def = {
       roleLabel: "Роль", editBtn: "Редагувати",
       teamSection: "2a. Команда", submitsSection: "2b. Сабміти",
       updated: "Профіль оновлено", backendStatus: "Статус бекенду",
+    tourney: {
+        create: "Створення турніру",
+      },
     },
     mainPage: {
       welcome: "Ласкаво просимо", subtitle: "Ваш турнірний хаб",

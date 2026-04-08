@@ -58,6 +58,16 @@ export default function PublicUserProfile() {
 
     const fetchUser = async () => {
       setIsLoading(true);
+
+      // Встановлюємо сесію з localStorage токену
+      const savedToken = localStorage.getItem("access_token");
+      if (savedToken) {
+        await supabase.auth.setSession({
+          access_token: savedToken,
+          refresh_token: localStorage.getItem("refresh_token") ?? "",
+        });
+      }
+
       try {
         const { data, error } = await supabase
         .from("account")
