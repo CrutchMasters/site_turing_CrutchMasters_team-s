@@ -201,7 +201,14 @@ export default function SearchPage() {
               </span>
               </div>
               <button
-              onClick={e => { e.stopPropagation(); router.push(`/user/${person.id}`); }}
+              onClick={e => {
+                e.stopPropagation();
+                if (person.id === user?.id) {
+                  router.push('/profile');
+                } else {
+                  router.push(`/user/${person.id}`);
+                }
+              }}
               className="w-full mt-3 bg-blue-600 text-white py-2 rounded-xl font-black text-[10px] uppercase tracking-wider hover:bg-blue-700 transition-all active:scale-95"
               >
               {t.search.viewProfile}
