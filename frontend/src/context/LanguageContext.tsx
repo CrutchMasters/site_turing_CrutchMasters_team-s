@@ -1,44 +1,59 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { translations, Locale } from './translations';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { translations, Locale, Translations } from "./translations";
 
+// ── Types ────────────────────────────────────────────────────────────────────
 type LanguageContextType = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  t: typeof translations.en;
+  t: Translations;
 };
 
+// ── Context ──────────────────────────────────────────────────────────────────
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
+// ── Provider ─────────────────────────────────────────────────────────────────
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [locale, setLocaleState] = useState<Locale>('en');
+  const [locale, setLocaleState] = useState<Locale>("ua");
 
   useEffect(() => {
-    const savedLocale = localStorage.getItem('language') as Locale;
-    if (savedLocale && (savedLocale === 'en' || savedLocale === 'ru' || savedLocale === 'ua')) {
-      setLocaleState(savedLocale);
-    }
+    const saved = localStorage.getItem("language") as Locale | null;
+    if (saved && saved in translations) setLocaleState(saved);
   }, []);
 
-  const setLocale = (newLocale: Locale) => {
-    setLocaleState(newLocale);
-    localStorage.setItem('language', newLocale);
+  const setLocale = (next: Locale) => {
+    setLocaleState(next);
+    localStorage.setItem("language", next);
   };
 
-  const t = translations[locale];
-
   return (
-    <LanguageContext.Provider value={{ locale, setLocale, t }}>
+    <LanguageContext.Provider value={{ locale, setLocale, t: translations[locale] }}>
       {children}
     </LanguageContext.Provider>
   );
 };
 
+// ── Hooks ─────────────────────────────────────────────────────────────────────
+
+/** Primary hook — returns the full translation object for current locale. */
 export const useLanguage = () => {
-  const context = useContext(LanguageContext);
-  if (context === undefined) {
-    throw new Error('useLanguage must be used within a LanguageProvider');
-  }
-  return context;
+  const ctx = useContext(LanguageContext);
+  if (!ctx) throw new Error("useLanguage must be used within a LanguageProvider");
+  return ctx;
 };
+
+/**
+ * Shorthand hook — returns only `t` (translations) + `locale`.
+ * Usage:  const { t, locale } = useT();
+ */
+export const useT = () => {
+  const { t, locale } = useLanguage();
+  return { t, locale };
+};
+
+export const LOCALES: { value: Locale; label: string;}[] = [
+  { value: "ua", label: "Українська"},
+  { value: "ru", label: "Русский"},
+  { value: "en", label: "English"},
+];
