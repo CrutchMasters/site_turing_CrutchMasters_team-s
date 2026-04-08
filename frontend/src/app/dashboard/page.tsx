@@ -24,8 +24,16 @@ export default function DashboardPage() {
   const { user, isLoading } = useAuth();
   const { t } = useT();
 
+  // ✅ Redirect to login if not authenticated
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push("/login");
+    }
+  }, [isLoading, user, router]);
+
   useEffect(() => {
     if (isLoading || !user) return;
+
     fetch(`${API_URL}/api/test`)
     .then(r => r.json())
     .then(d => setBackendMessage(d.message))
@@ -39,15 +47,15 @@ export default function DashboardPage() {
     return () => obs.disconnect();
   }, [isLoading, user]);
 
+  // Show spinner while loading auth state
   if (isLoading) return (
     <div className="min-h-screen bg-(--bg) flex items-center justify-center">
     <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
-  if (!user) {
-    return <div>Not authenticated</div>;
-  }
+  // While redirect is happening, render nothing
+  if (!user) return null;
 
   const filterLabels = [t.mainPage.filterAll, "Open", "Running"];
   const isAdmin = user.role === "admin" || user.role === "superadmin";
@@ -95,7 +103,6 @@ export default function DashboardPage() {
         ref={el => { revealRefs.current[0] = el; }}
         className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 relative overflow-hidden bg-(--card) border border-blue-600/30 shadow-xl"
         >
-        {/* Декоративный фон */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl sm:rounded-[2.5rem]">
         <div className="absolute -right-16 -top-16 w-64 h-64 rounded-full blur-3xl opacity-10 bg-blue-600" />
         <div className="absolute -left-8 -bottom-8 w-40 h-40 rounded-full blur-2xl opacity-5 bg-blue-400" />
