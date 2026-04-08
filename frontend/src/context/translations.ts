@@ -17,9 +17,6 @@ const def = {
       funcDesc: "Our core engine handles dynamic rounds, expert reviews, and real-time statistics with ease.",
       getStarted: "Get Started", learnMore: "Learn More", dashboard: "Dashboard",
     },
-    tourney: {
-      create: "Create Tournament",
-    },
     auth: {
       loginTitle: "Code Future", registerTitle: "Registration",
       username: "username ...", login: "login ...", email: "email ...",
@@ -33,9 +30,10 @@ const def = {
     settings: {
       title: "Settings", lang: "Language", status: "Backend Status",
       theme: "Theme", dark: "Dark", light: "Light",
-      tourney: {
-        create: "Create Tournament",
-      },
+    },
+    tourney: {
+      create: "Create Tournament",
+      createAdmin: "Create Tournament (Admin)",
     },
     sidebar: {
       mainPage: "Main", profile: "Profile", search: "People search",
@@ -111,13 +109,6 @@ const def = {
       funcDesc: "Наш движок с лёгкостью управляет динамическими раундами, экспертной оценкой и статистикой в реальном времени.",
       getStarted: "Начать", learnMore: "Подробнее", dashboard: "Кабинет",
     },
-    tourney: {
-      create: "Создание турнира",
-    },
-
-    tourney: {
-      create: "Создание турнира",
-    },
     auth: {
       loginTitle: "Code Future", registerTitle: "Регистрация",
       username: "имя пользователя ...", login: "логин ...", email: "почта ...",
@@ -131,6 +122,10 @@ const def = {
     settings: {
       title: "Настройки", lang: "Язык", status: "Статус бэкенда",
       theme: "Тема", dark: "Тёмная", light: "Светлая",
+    },
+    tourney: {
+      create: "Создание турнира",
+      createAdmin: "Создание турнира (Admin)",
     },
     sidebar: {
       mainPage: "Главная", profile: "Профиль", search: "Поиск людей",
@@ -206,9 +201,6 @@ const def = {
       funcDesc: "Наш движок з легкістю керує динамічними раундами, експертною оцінкою та статистикою в реальному часі.",
       getStarted: "Почати", learnMore: "Докладніше", dashboard: "Кабінет",
     },
-    tourney: {
-      create: "Створення турніру",
-    },
     auth: {
       loginTitle: "Code Future", registerTitle: "Реєстрація",
       username: "ім'я користувача ...", login: "логін ...", email: "пошта ...",
@@ -222,6 +214,10 @@ const def = {
     settings: {
       title: "Налаштування", lang: "Мова", status: "Статус бекенду",
       theme: "Тема", dark: "Темна", light: "Світла",
+    },
+    tourney: {
+      create: "Створення турніру",
+      createAdmin: "Створення турніру (Admin)",
     },
     sidebar: {
       mainPage: "Головна", profile: "Профіль", search: "Пошук людей",
@@ -257,9 +253,6 @@ const def = {
       roleLabel: "Роль", editBtn: "Редагувати",
       teamSection: "2a. Команда", submitsSection: "2b. Сабміти",
       updated: "Профіль оновлено", backendStatus: "Статус бекенду",
-    tourney: {
-        create: "Створення турніру",
-      },
     },
     mainPage: {
       welcome: "Ласкаво просимо", subtitle: "Ваш турнірний хаб",
