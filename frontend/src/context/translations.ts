@@ -17,6 +17,9 @@ const def = {
       funcDesc: "Our core engine handles dynamic rounds, expert reviews, and real-time statistics with ease.",
       getStarted: "Get Started", learnMore: "Learn More", dashboard: "Dashboard",
     },
+    tourney: {
+      create: "Create Tournament",
+    },
     auth: {
       loginTitle: "Code Future", registerTitle: "Registration",
       username: "username ...", login: "login ...", email: "email ...",
@@ -112,6 +115,9 @@ const def = {
       create: "Создание турнира",
     },
 
+    tourney: {
+      create: "Создание турнира",
+    },
     auth: {
       loginTitle: "Code Future", registerTitle: "Регистрация",
       username: "имя пользователя ...", login: "логин ...", email: "почта ...",
@@ -199,6 +205,9 @@ const def = {
       functionality: "Функціонал",
       funcDesc: "Наш движок з легкістю керує динамічними раундами, експертною оцінкою та статистикою в реальному часі.",
       getStarted: "Почати", learnMore: "Докладніше", dashboard: "Кабінет",
+    },
+    tourney: {
+      create: "Створення турніру",
     },
     auth: {
       loginTitle: "Code Future", registerTitle: "Реєстрація",
