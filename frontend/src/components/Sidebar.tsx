@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { LayoutDashboard, UserCircle, Settings, LogOut, Search, ChevronDown, Menu } from "lucide-react";
+import { LayoutDashboard, UserCircle, Settings, LogOut, Search, ChevronDown, Menu, Users } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useLanguage, LOCALES } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
@@ -14,8 +14,6 @@ typeof window !== "undefined" && window.location.hostname === "localhost"
 
 interface SidebarProps {}
 
-// Читаємо collapsed одразу — без useEffect, щоб уникнути flash при навігації.
-// typeof window !== "undefined" потрібен для SSR-сумісності.
 function getInitialCollapsed(): boolean {
   if (typeof window === "undefined") return false;
   return localStorage.getItem("sidebar_collapsed") === "true";
@@ -63,19 +61,15 @@ export default function Sidebar({}: SidebarProps) {
     }`}
     >
     <style>{`
-      /* Анимация только для первоначального появления или смены collapsed */
       .lbl-anim {
         animation: fadeLabel 200ms ease forwards;
         white-space: nowrap;
       }
-
-      /* Запрещаем иконкам сжиматься, пока текст анимируется */
       .nav-icon {
         min-width: 18px;
         display: flex;
         justify-content: center;
       }
-
       @keyframes fadeLabel {
         from { opacity: 0; transform: translateX(-4px); }
         to { opacity: 1; transform: translateX(0); }
@@ -129,6 +123,16 @@ export default function Sidebar({}: SidebarProps) {
         <NavItem icon={<UserCircle size={18} />}      label={t.sidebar.profile}      active={pathname === "/profile"}   collapsed={collapsed} onClick={() => go("/profile")} />
         <NavItem icon={<LayoutDashboard size={18} />} label={t.sidebar.mainPage}     active={pathname === "/dashboard"} collapsed={collapsed} onClick={() => go("/dashboard")} />
         <NavItem icon={<Search size={18} />}          label={t.sidebar.search}       active={pathname === "/search"}    collapsed={collapsed} onClick={() => go("/search")} />
+
+        {/* Teams — новый пункт */}
+        <NavItem
+        icon={<Users size={18} />}
+        label="Команди"
+        active={pathname === "/teams" || pathname?.startsWith("/teams/")}
+        collapsed={collapsed}
+        onClick={() => go("/teams")}
+        />
+
         <NavItem
         icon={<Settings size={18} />}
         label={t.sidebar.settings}
@@ -193,7 +197,6 @@ function NavItem({ icon, label, active, collapsed, onClick, suffix }: any) {
       ${active ? "bg-blue-600 text-white shadow-lg" : "text-(--t2) hover:bg-(--bg)"}
       `}
       >
-      {/* Оборачиваем иконку в контейнер с фиксированным размером */}
       <div className="w-[18px] flex-shrink-0 flex items-center justify-center">
       {icon}
       </div>
