@@ -330,7 +330,139 @@ async def change_role(payload: ChangeRole, authorization: str = Header(...)):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. СИСТЕМА ПРИГЛАШЕНИЙ
+# 5. КОМАНДЫ
+# ─────────────────────────────────────────────────────────────────────────────
+
+class CreateTeam(BaseModel):
+    name: str
+    city_school_org: str | None = None
+    description: str | None = None
+
+class UpdateTeam(BaseModel):
+    name: str | None = None
+    city_school_org: str | None = None
+    description: str | None = None
+
+
+@app.post("/api/teams")
+async def create_team(payload: CreateTeam, authorization: str = Header(...)):
+    """Создать команду. Текущий пользователь становится капитаном."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    result = supabase.table("teams").insert({
+        "name":             payload.name,
+        "captain_id":       caller["id"],
+        "members_ids":      [],
+        "city_school_org":  payload.city_school_org,
+        "description":      payload.description,
+    }).execute()
+
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Не удалось создать команду")
+
+    print(f"[TEAM] {caller['username']} создал команду {payload.name}", flush=True)
+    return {"success": True, "team": result.data[0]}
+
+
+@app.get("/api/teams")
+async def get_teams(authorization: str = Header(...)):
+    """Получить список всех команд."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    get_caller(token)  # просто проверяем авторизацию
+
+    result = supabase.table("teams").select("*").order("name").execute()
+    return {"teams": result.data or []}
+
+
+@app.get("/api/teams/my")
+async def get_my_team(authorization: str = Header(...)):
+    """Получить команду текущего пользователя (где он капитан или участник)."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    # Команды где капитан
+    captain_res = supabase.table("teams")         .select("*")         .eq("captain_id", caller["id"])         .execute()
+
+    # Команды где участник (members_ids содержит id)
+    member_res = supabase.table("teams")         .select("*")         .contains("members_ids", [caller["id"]])         .execute()
+
+    teams = captain_res.data or []
+    for t in (member_res.data or []):
+        if t["id"] not in [x["id"] for x in teams]:
+            teams.append(t)
+
+    return {"teams": teams}
+
+
+@app.get("/api/teams/{team_id}")
+async def get_team(team_id: str, authorization: str = Header(...)):
+    """Получить команду по ID."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    get_caller(token)
+
+    team = fetch_one(supabase.table("teams").select("*").eq("id", team_id))
+    if not team:
+        raise HTTPException(status_code=404, detail="Команда не найдена")
+    return {"team": team}
+
+
+@app.patch("/api/teams/{team_id}")
+async def update_team(team_id: str, payload: UpdateTeam, authorization: str = Header(...)):
+    """Обновить команду. Только капитан."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    team = fetch_one(supabase.table("teams").select("id, captain_id").eq("id", team_id))
+    if not team:
+        raise HTTPException(status_code=404, detail="Команда не найдена")
+    if team["captain_id"] != caller["id"]:
+        raise HTTPException(status_code=403, detail="Только капитан может редактировать команду")
+
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="Нечего обновлять")
+
+    result = supabase.table("teams").update(updates).eq("id", team_id).execute()
+    return {"success": True, "team": result.data[0] if result.data else None}
+
+
+@app.delete("/api/teams/{team_id}")
+async def delete_team(team_id: str, authorization: str = Header(...)):
+    """Удалить команду. Только капитан."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    team = fetch_one(supabase.table("teams").select("id, captain_id").eq("id", team_id))
+    if not team:
+        raise HTTPException(status_code=404, detail="Команда не найдена")
+    if team["captain_id"] != caller["id"]:
+        raise HTTPException(status_code=403, detail="Только капитан может удалить команду")
+
+    supabase.table("teams").delete().eq("id", team_id).execute()
+    return {"success": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. СИСТЕМА ПРИГЛАШЕНИЙ
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/api/invitations/send")
