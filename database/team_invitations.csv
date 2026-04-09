@@ -1,0 +1,2 @@
+table_structure
+"CREATE TABLE team_invitations (id uuid, team_id uuid, inviter_id uuid, invitee_id uuid, status text, created_at timestamp with time zone);"
