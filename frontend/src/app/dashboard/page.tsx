@@ -57,7 +57,7 @@ export default function DashboardPage() {
   // While redirect is happening, render nothing
   if (!user) return null;
 
-  const filterLabels = [t.mainPage.filterAll, "Open", "Running"];
+  const filterLabels = [t.mainPage.filterAll, t.mainPage.filterOpen, t.mainPage.filterRunning];
   const isAdmin = user.role === "admin" || user.role === "superadmin";
 
   return (
@@ -172,8 +172,8 @@ export default function DashboardPage() {
       </tr>
       </thead>
       <tbody className="text-sm divide-y divide-(--brd)">
-      <TournamentRow title="Хакатон 2026" status="Running" statusType="warning" date="12.01.2026" actionLabel={t.mainPage.actionOpen} />
-      <TournamentRow title="Summer Jam"   status="Open"    statusType="info"    date="02.01.2026" actionLabel={t.mainPage.actionRegister} isSpecialAction />
+      <TournamentRow title="Хакатон 2026" status={t.mainPage.filterRunning} statusType="warning" date="12.01.2026" actionLabel={t.mainPage.actionOpen} />
+      <TournamentRow title="Summer Jam"   status={t.mainPage.filterOpen}    statusType="info"    date="02.01.2026" actionLabel={t.mainPage.actionRegister} isSpecialAction />
       </tbody>
       </table>
       </div>
