@@ -389,33 +389,46 @@ export default function RegisterTeamPage() {
       setSubmitError("");
 
       try {
-        // 1. Create team WITHOUT members — members join via invitation
-        const { data: teamData, error } = await supabase.from("teams").insert({
-          name:            teamName.trim(),
-                                                                              city_school_org: organization.trim() || null,
-                                                                              captain_id:      captain.id,
-                                                                              members_ids:     [],          // empty — filled when invitations are accepted
-                                                                              telegram_url:    telegramLink.trim() || null,
-                                                                              discord_url:     discordLink.trim()  || null,
-        }).select("id").single();
-
-        if (error) throw error;
-
-        // 2. Send invitations to all selected members via API
-        if (members.length > 0) {
-          const freshToken =
+        const token =
           (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
 
+        // 1. Створити команду через бекенд (не напряму в Supabase)
+        const teamRes = await fetch(`${API_URL}/api/teams`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization:  `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name:            teamName.trim(),
+            city_school_org: organization.trim() || null,
+            telegram_url:    telegramLink.trim() || null,
+            discord_url:     discordLink.trim()  || null,
+          }),
+        });
+
+        if (!teamRes.ok) {
+          const errData = await teamRes.json().catch(() => ({}));
+          throw new Error(errData.detail || `Помилка ${teamRes.status}`);
+        }
+
+        const teamData = await teamRes.json();
+        const teamId = teamData.team?.id;
+
+        if (!teamId) throw new Error("Не вдалося отримати ID команди");
+
+        // 2. Надіслати запрошення всім обраним учасникам через бекенд
+        if (members.length > 0) {
           const inviteResults = await Promise.allSettled(
             members.map(m =>
-            fetch(`${API_URL}/api/invitations/send`, {
-              method:  "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization:  `Bearer ${freshToken}`,
-              },
-              body: JSON.stringify({ team_id: teamData.id, invitee_id: m.id }),
-            })
+              fetch(`${API_URL}/api/invitations/send`, {
+                method:  "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization:  `Bearer ${token}`,
+                },
+                body: JSON.stringify({ team_id: teamId, invitee_id: m.id }),
+              })
             )
           );
 
