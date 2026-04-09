@@ -5,6 +5,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   User, Mail, Shield, ChevronRight, UserCircle, ArrowLeft, Loader,
+  Users, Crown, ExternalLink,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
@@ -27,7 +28,98 @@ const roleBadgeColor: Record<Role, string> = {
   superadmin: "bg-red-500/10 text-red-500 border-red-500/20",
 };
 
-export default function PublicUserProfile() {
+interface UserTeam {
+  id: string;
+  name: string;
+  city_school_org?: string;
+  captain_id?: string;
+  members_ids?: string[];
+}
+
+// ── Shared team card for profile pages ───────────────────────────────────────
+function TeamBadge({ team, userId, onClick }: { team: UserTeam; userId: string; onClick: () => void }) {
+  const isCaptain = team.captain_id === userId;
+  const memberCount = team.members_ids?.length ?? 0;
+
+  return (
+    <button
+    type="button"
+    onClick={onClick}
+    className="w-full flex items-center gap-4 p-4 rounded-2xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group text-left"
+    >
+    {/* Avatar */}
+    <div className="w-10 h-10 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-base flex-shrink-0">
+    {team.name.charAt(0).toUpperCase()}
+    </div>
+
+    {/* Info */}
+    <div className="flex-1 min-w-0">
+    <div className="flex items-center gap-2 flex-wrap">
+    <span className="font-black text-(--t1) text-sm truncate group-hover:text-blue-600 transition-colors">
+    {team.name}
+    </span>
+    {isCaptain && (
+      <span className="text-[8px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1">
+      <Crown size={8} /> Капітан
+      </span>
+    )}
+    </div>
+    <div className="flex items-center gap-3 mt-0.5">
+    {team.city_school_org && (
+      <span className="text-[10px] font-bold text-(--t2) truncate">{team.city_school_org}</span>
+    )}
+    <span className="text-[10px] font-bold text-(--t2) flex items-center gap-1 flex-shrink-0">
+    <Users size={9} /> {memberCount} уч.
+    </span>
+    </div>
+    </div>
+
+    <ExternalLink size={14} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+    </button>
+  );
+}
+
+// ── Hook: fetch teams for a user ──────────────────────────────────────────────
+function useUserTeams(userId: string | undefined) {
+  const [teams, setTeams]     = useState<UserTeam[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const fetch = async () => {
+      setLoading(true);
+      try {
+        // Teams where user is captain
+        const { data: captainTeams } = await supabase
+        .from("teams")
+        .select("id, name, city_school_org, captain_id, members_ids")
+        .eq("captain_id", userId);
+
+        // Teams where user is in members_ids array
+        const { data: memberTeams } = await supabase
+        .from("teams")
+        .select("id, name, city_school_org, captain_id, members_ids")
+        .contains("members_ids", JSON.stringify([userId]));
+
+        // Merge and deduplicate
+        const all = [...(captainTeams ?? []), ...(memberTeams ?? [])];
+        const unique = all.filter((t, i, arr) => arr.findIndex(x => x.id === t.id) === i);
+        setTeams(unique);
+      } catch (e) {
+        console.error("Failed to fetch user teams:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetch();
+  }, [userId]);
+
+  return { teams, loading };
+}
+
+export default function ProfilePage() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const { dark } = useTheme();
   const router = useRouter();
@@ -42,15 +134,13 @@ export default function PublicUserProfile() {
   const [roleMsg, setRoleMsg]               = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   const isSuperAdmin = currentUser?.role === "superadmin";
-  const isOwnProfile = true; // /profile всегда показывает свой профиль
+  const isOwnProfile = true;
+
+  const { teams: userTeams, loading: teamsLoading } = useUserTeams(currentUser?.id);
 
   useEffect(() => {
     if (authLoading) return;
-
-    if (!currentUser) {
-      router.push("/login");
-      return;
-    }
+    if (!currentUser) { router.push("/login"); return; }
 
     const fetchUser = async () => {
       setIsLoading(true);
@@ -76,55 +166,31 @@ export default function PublicUserProfile() {
 
   const handleRoleChange = async () => {
     if (!isSuperAdmin || !profileUser) return;
-
     setIsChangingRole(true);
     setRoleMsg(null);
 
     try {
-      // Берём токен напрямую из localStorage — надёжнее на хостинге
       const freshToken =
-      (typeof window !== "undefined" && localStorage.getItem("access_token")) ||
-      token;
-
+      (typeof window !== "undefined" && localStorage.getItem("access_token")) || token;
       if (!freshToken) throw new Error("No auth token found. Please log in again.");
 
-      // Проверяем что токен не протух
       const expiry = (() => {
-        try {
-          const p = JSON.parse(atob(freshToken.split(".")[1]));
-          return (p.exp ?? 0) * 1000;
-        } catch { return 0; }
+        try { const p = JSON.parse(atob(freshToken.split(".")[1])); return (p.exp ?? 0) * 1000; }
+        catch { return 0; }
       })();
-
-      if (expiry < Date.now()) {
-        throw new Error("Session expired. Please log out and log in again.");
-      }
-
-      console.log("Sending change-role request to:", API_URL);
-      console.log("Target:", profileUser.id, "→", selectedRole);
+      if (expiry < Date.now()) throw new Error("Session expired. Please log out and log in again.");
 
       const res = await fetch(`${API_URL}/api/change-role`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${freshToken}`,
-        },
-        body: JSON.stringify({
-          target_user_id: profileUser.id,
-          new_role: selectedRole,
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${freshToken}` },
+        body: JSON.stringify({ target_user_id: profileUser.id, new_role: selectedRole }),
       });
-
       const data = await res.json();
-      console.log("change-role response:", res.status, data);
-
       if (!res.ok) throw new Error(data.detail ?? `Server error: ${res.status}`);
 
-      // Обновляем локальный стейт
       setProfileUser((prev: any) => ({ ...prev, role: selectedRole }));
       setRoleMsg({ type: "ok", text: `Role changed to ${selectedRole}` });
     } catch (e: any) {
-      console.error("handleRoleChange error:", e);
       setRoleMsg({ type: "err", text: e.message });
     } finally {
       setIsChangingRole(false);
@@ -145,14 +211,10 @@ export default function PublicUserProfile() {
       <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
       <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
-
-      {isMobileSidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
-      )}
+      {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />}
       <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
       <Sidebar />
       </div>
-
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
       <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Profile" icon={<UserCircle size={18} className="text-blue-600" />} />
       <div className="flex-1 flex items-center justify-center">
@@ -171,9 +233,7 @@ export default function PublicUserProfile() {
     <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
     </div>
 
-    {isMobileSidebarOpen && (
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
-    )}
+    {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />}
     <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
     <Sidebar />
     </div>
@@ -184,8 +244,6 @@ export default function PublicUserProfile() {
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
     <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
     <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Home</button>
-    <ChevronRight size={10} />
-    <button onClick={() => router.push("/search")} className="hover:text-blue-600 transition-colors">Search</button>
     <ChevronRight size={10} />
     <span className="text-(--t1)">Profile</span>
     </nav>
@@ -201,7 +259,8 @@ export default function PublicUserProfile() {
       </div>
     ) : profileUser ? (
       <div className="max-w-2xl space-y-6">
-      {/* Profile card */}
+
+      {/* ── Profile card ── */}
       <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-6 sm:p-8 relative overflow-hidden">
       <div className="absolute right-0 top-0 opacity-5 pointer-events-none text-(--t1) hidden md:block">
       <Shield size={240} />
@@ -222,11 +281,9 @@ export default function PublicUserProfile() {
       <div className="flex-1 space-y-3 z-10 w-full text-center sm:text-left">
       <h1 className="text-2xl font-black text-(--t1) uppercase tracking-tight">{profileUser.username}</h1>
 
-      {isOwnProfile && (
-        <span className="inline-block text-[9px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg">
-        Your profile
-        </span>
-      )}
+      <span className="inline-block text-[9px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg">
+      Your profile
+      </span>
 
       <div className="mt-4 space-y-2.5 text-sm text-left">
       <p className="flex items-center gap-3 font-medium">
@@ -260,67 +317,83 @@ export default function PublicUserProfile() {
       </div>
       </section>
 
-      {/* Role management — только для superadmin */}
+      {/* ── Teams section ── */}
+      <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-6 sm:p-8">
+      <div className="flex items-center justify-between mb-5">
+      <h2 className="text-sm font-black uppercase tracking-widest text-(--t1) flex items-center gap-2">
+      <Users size={16} className="text-blue-600" /> Команди
+      </h2>
+      {!teamsLoading && userTeams.length > 0 && (
+        <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg bg-(--bg) border border-(--brd) text-(--t2)">
+        {userTeams.length}
+        </span>
+      )}
+      </div>
+
+      {teamsLoading ? (
+        <div className="flex items-center gap-2 text-(--t2) py-2">
+        <Loader size={14} className="animate-spin" />
+        <span className="text-[11px] font-bold uppercase tracking-wider">Завантаження...</span>
+        </div>
+      ) : userTeams.length === 0 ? (
+        <div className="text-center py-6">
+        <Users className="w-10 h-10 text-(--t2) mx-auto mb-3 opacity-30" />
+        <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Не перебуває в жодній команді</p>
+        <button
+        onClick={() => router.push("/register_team")}
+        className="mt-4 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline"
+        >
+        Створити команду →
+        </button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+        {userTeams.map(team => (
+          <TeamBadge
+          key={team.id}
+          team={team}
+          userId={profileUser.id}
+          onClick={() => router.push(`/teams/${team.id}`)}
+          />
+        ))}
+        </div>
+      )}
+      </section>
+
+      {/* ── Role management ── */}
       {isSuperAdmin && !isOwnProfile && profileUser.role !== "superadmin" && (
         <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-red-500/30 p-6 sm:p-8">
         <h2 className="text-sm font-black mb-1 uppercase tracking-widest text-red-500 flex items-center gap-2">
         <Shield size={16} /> Role Management
         </h2>
-        <p className="text-[10px] text-(--t2) font-bold uppercase tracking-wider mb-5">
-        Only superadmin can change roles
-        </p>
+        <p className="text-[10px] text-(--t2) font-bold uppercase tracking-wider mb-5">Only superadmin can change roles</p>
 
         <div className="flex flex-col gap-3 max-w-xs">
         <div>
-        <label className="text-[10px] font-bold text-(--t2) uppercase tracking-wider block mb-2">
-        Select New Role
-        </label>
+        <label className="text-[10px] font-bold text-(--t2) uppercase tracking-wider block mb-2">Select New Role</label>
         <select
         value={selectedRole}
         onChange={(e) => setSelectedRole(e.target.value as Role)}
         disabled={isChangingRole}
         className="w-full px-4 py-3 rounded-xl bg-(--bg) border border-(--brd) text-sm font-bold uppercase tracking-widest text-(--t1) focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
         >
-        {ROLES.map((role) => (
-          <option key={role} value={role}>{role}</option>
-        ))}
+        {ROLES.map(role => <option key={role} value={role}>{role}</option>)}
         </select>
         </div>
-
         <button
         onClick={handleRoleChange}
         disabled={isChangingRole || selectedRole === profileUser.role}
-        className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${
-          isChangingRole || selectedRole === profileUser.role
-          ? "bg-(--brd) text-(--t2) cursor-not-allowed"
-          : "bg-red-600 text-white hover:bg-red-700 shadow-lg shadow-red-600/20"
-        }`}
+        className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${isChangingRole || selectedRole === profileUser.role ? "bg-(--brd) text-(--t2) cursor-not-allowed" : "bg-red-600 text-white hover:bg-red-700 shadow-lg shadow-red-600/20"}`}
         >
-        {isChangingRole ? (
-          <><Loader size={14} className="animate-spin" /> Changing...</>
-        ) : (
-          <><Shield size={14} /> Change Role</>
-        )}
+        {isChangingRole ? <><Loader size={14} className="animate-spin" /> Changing...</> : <><Shield size={14} /> Change Role</>}
         </button>
         </div>
 
         {roleMsg && (
-          <div className={`mt-4 p-3 rounded-xl text-[10px] font-black uppercase tracking-widest ${
-            roleMsg.type === "ok"
-            ? "bg-green-500/10 text-green-500 border border-green-500/20"
-            : "bg-red-500/10 text-red-500 border border-red-500/20"
-          }`}>
+          <div className={`mt-4 p-3 rounded-xl text-[10px] font-black uppercase tracking-widest ${roleMsg.type === "ok" ? "bg-green-500/10 text-green-500 border border-green-500/20" : "bg-red-500/10 text-red-500 border border-red-500/20"}`}>
           {roleMsg.text}
           </div>
         )}
-        </section>
-      )}
-
-      {!isSuperAdmin && !isOwnProfile && (
-        <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-6 sm:p-8">
-        <p className="text-[10px] font-bold text-(--t2) uppercase tracking-wider">
-        Only superadmin users can change roles
-        </p>
         </section>
       )}
       </div>
