@@ -11,29 +11,21 @@ import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import {
     Users, Search, Plus, ChevronRight, Loader,
-    Crown, Shield, User as UserIcon,
+    Crown, Star,
 } from "lucide-react";
 
 interface Team {
     id: string;
     name: string;
-    organization?: string;
-    captain_username?: string;
+    city_school_org?: string;
     captain_id?: string;
-    member_count?: number;
+    captain_username?: string;
+    captain_login?: string;
+    members_ids?: string[];
+    telegram_url?: string;
+    discord_url?: string;
     created_at?: string;
-    status?: string;
 }
-
-// ── Mock data (замените на реальный запрос к Supabase/API когда таблица teams будет готова) ──
-const MOCK_TEAMS: Team[] = [
-    { id: "1", name: "Team Alpha",   organization: "СШ №100",       captain_username: "alex_dev",  captain_id: "u1", member_count: 4, created_at: "2026-01-12", status: "active" },
-{ id: "2", name: "Code Ninjas",  organization: "Polytechnic",   captain_username: "ninja_pro", captain_id: "u2", member_count: 3, created_at: "2026-02-01", status: "active" },
-{ id: "3", name: "ByteForce",    organization: "IT Academy",     captain_username: "byteking",  captain_id: "u3", member_count: 5, created_at: "2026-02-14", status: "active" },
-{ id: "4", name: "Debug Squad",  organization: "КПІ",            captain_username: "debugger",  captain_id: "u4", member_count: 2, created_at: "2026-03-01", status: "active" },
-{ id: "5", name: "Stack Wolves", organization: "Kharkiv Uni",   captain_username: "stackwolf", captain_id: "u5", member_count: 4, created_at: "2026-03-20", status: "active" },
-{ id: "6", name: "NullPointers", organization: "Online School", captain_username: "nullpro",   captain_id: "u6", member_count: 3, created_at: "2026-04-01", status: "active" },
-];
 
 export default function TeamsPage() {
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -42,10 +34,11 @@ export default function TeamsPage() {
     const { user, isLoading } = useAuth();
     const { t } = useT();
 
-    const [searchQuery, setSearchQuery]   = useState("");
-    const [teams, setTeams]               = useState<Team[]>(MOCK_TEAMS);
-    const [filtered, setFiltered]         = useState<Team[]>(MOCK_TEAMS);
-    const [isSearching, setIsSearching]   = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [teams, setTeams]             = useState<Team[]>([]);
+    const [filtered, setFiltered]       = useState<Team[]>([]);
+    const [loading, setLoading]         = useState(true);
+    const [hasMyTeam, setHasMyTeam]     = useState(false);
     const searchInputRef = useRef<HTMLInputElement>(null);
 
     // Redirect if not authenticated
@@ -53,7 +46,61 @@ export default function TeamsPage() {
         if (!isLoading && !user) router.push("/login");
     }, [isLoading, user, router]);
 
-        // Filter teams on query change
+        // Fetch all teams from Supabase with captain info joined
+        useEffect(() => {
+            if (!user) return;
+
+            const fetchTeams = async () => {
+                setLoading(true);
+                try {
+                    // Fetch teams
+                    const { data: teamsData, error } = await supabase
+                    .from("teams")
+                    .select("id, name, city_school_org, captain_id, members_ids, telegram_url, discord_url, created_at")
+                    .order("created_at", { ascending: false });
+
+                    if (error) throw error;
+
+                    const rawTeams: Team[] = teamsData ?? [];
+
+                    // Collect unique captain ids to batch-fetch usernames
+                    const captainIds = [...new Set(rawTeams.map(t => t.captain_id).filter(Boolean))] as string[];
+
+                    let captainMap: Record<string, { username: string; login: string }> = {};
+                    if (captainIds.length > 0) {
+                        const { data: accounts } = await supabase
+                        .from("account")
+                        .select("id, username, login")
+                        .in("id", captainIds);
+
+                        (accounts ?? []).forEach(a => {
+                            captainMap[a.id] = { username: a.username, login: a.login };
+                        });
+                    }
+
+                    // Merge captain info into teams
+                    const enriched: Team[] = rawTeams.map(team => ({
+                        ...team,
+                        captain_username: team.captain_id ? captainMap[team.captain_id]?.username : undefined,
+                        captain_login:    team.captain_id ? captainMap[team.captain_id]?.login    : undefined,
+                    }));
+
+                    setTeams(enriched);
+                    setFiltered(enriched);
+
+                    // Check if current user is captain of any team
+                    setHasMyTeam(enriched.some(t => t.captain_id === user.id));
+                } catch (err) {
+                    console.error("Failed to fetch teams:", err);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            fetchTeams();
+        }, [user]);
+
+        // Filter on search query change
         useEffect(() => {
             if (!searchQuery.trim()) {
                 setFiltered(teams);
@@ -62,10 +109,11 @@ export default function TeamsPage() {
             const q = searchQuery.toLowerCase();
             setFiltered(
                 teams.filter(
-                    t =>
-                    t.name.toLowerCase().includes(q) ||
-                    t.organization?.toLowerCase().includes(q) ||
-                    t.captain_username?.toLowerCase().includes(q)
+                    team =>
+                    team.name.toLowerCase().includes(q) ||
+                    team.city_school_org?.toLowerCase().includes(q) ||
+                    team.captain_username?.toLowerCase().includes(q) ||
+                    team.captain_login?.toLowerCase().includes(q)
                 )
             );
         }, [searchQuery, teams]);
@@ -78,42 +126,26 @@ export default function TeamsPage() {
             );
         }
 
-        const memberCountLabel = (n?: number) =>
-        n === 1 ? "1 учасник" : `${n ?? 0} учасників`;
-
         return (
             <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
             <style jsx global>{`
                 @keyframes fadeUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
                 @keyframes cardDrop { from{opacity:0;transform:translateY(-20px) scale(.97)} to{opacity:1;transform:none} }
-                .fuIn  { animation: fadeUp   340ms cubic-bezier(.22,1,.36,1) both }
-                .cdIn  { animation: cardDrop 400ms cubic-bezier(.22,1,.36,1) both }
-                .spr   { transition: transform 170ms cubic-bezier(.22,1,.36,1), box-shadow 170ms ease, background 150ms ease }
+                .fuIn { animation: fadeUp   340ms cubic-bezier(.22,1,.36,1) both }
+                .cdIn { animation: cardDrop 400ms cubic-bezier(.22,1,.36,1) both }
+                .spr  { transition: transform 170ms cubic-bezier(.22,1,.36,1), box-shadow 170ms ease, background 150ms ease }
                 .spr:hover { transform: translateY(-2px) scale(1.015); box-shadow: 0 8px 24px rgba(37,99,235,0.12); }
                 `}</style>
 
                 {/* Watermark */}
                 <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
-                <img
-                src="/logo_background1.png"
-                alt=""
-                className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`}
-                />
+                <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
                 </div>
 
-                {/* Mobile sidebar overlay */}
                 {isMobileSidebarOpen && (
-                    <div
-                    className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
-                    onClick={() => setIsMobileSidebarOpen(false)}
-                    />
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
                 )}
-
-                <div
-                className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${
-                    isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-                }`}
-                >
+                <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
                 <Sidebar />
                 </div>
 
@@ -139,12 +171,24 @@ export default function TeamsPage() {
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 sm:mb-10">
                 <div>
                 <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-(--t1) uppercase">
-                🏅 Команди
+                 Команди
                 </h1>
                 <p className="text-(--t2) text-xs font-bold uppercase tracking-widest mt-1">
-                {filtered.length} команд у системі
+                {loading ? "Завантаження..." : `${filtered.length} команд у системі`}
                 </p>
                 </div>
+
+                <div className="flex gap-3 flex-col sm:flex-row w-full sm:w-auto">
+                {/* "My teams" button — shown only if user is captain of at least one team */}
+                {hasMyTeam && (
+                    <button
+                    onClick={() => router.push("/my_teams")}
+                    className="cdIn flex items-center justify-center gap-2 bg-(--card) border border-amber-500/40 text-amber-500 font-black text-xs uppercase tracking-widest rounded-2xl px-6 py-4 hover:bg-amber-500/10 active:scale-95 transition-all w-full sm:w-auto"
+                    >
+                    <Star size={15} className="fill-amber-500" />
+                    Мої команди
+                    </button>
+                )}
 
                 <button
                 onClick={() => router.push("/register_team")}
@@ -153,6 +197,7 @@ export default function TeamsPage() {
                 <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
                 Створити команду
                 </button>
+                </div>
                 </div>
 
                 {/* Search bar */}
@@ -173,12 +218,21 @@ export default function TeamsPage() {
                 </p>
                 </div>
 
-                {/* Teams grid */}
-                {filtered.length === 0 ? (
+                {/* Loading state */}
+                {loading ? (
+                    <div className="flex items-center justify-center py-24">
+                    <div className="flex flex-col items-center gap-4">
+                    <Loader className="w-8 h-8 text-blue-600 animate-spin" />
+                    <p className="text-[11px] font-black uppercase tracking-widest text-(--t2)">Завантаження команд...</p>
+                    </div>
+                    </div>
+                ) : filtered.length === 0 ? (
                     <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) p-12 sm:p-16 text-center">
                     <Users className="w-16 h-16 text-(--t2) mx-auto mb-4 opacity-40" />
                     <p className="text-lg font-black text-(--t1) mb-2">Команд не знайдено</p>
-                    <p className="text-(--t2) text-sm">Спробуйте змінити запит або створіть першу команду</p>
+                    <p className="text-(--t2) text-sm">
+                    {searchQuery ? "Спробуйте змінити запит" : "Станьте першим — створіть команду!"}
+                    </p>
                     <button
                     onClick={() => router.push("/register_team")}
                     className="mt-6 inline-flex items-center gap-2 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl px-6 py-3 hover:bg-blue-700 transition-all active:scale-95"
@@ -194,9 +248,7 @@ export default function TeamsPage() {
                         team={team}
                         idx={idx}
                         currentUserId={user.id}
-                        onOpen={() => {
-                            // TODO: router.push(`/teams/${team.id}`) when team detail page is ready
-                        }}
+                        onOpen={() => router.push(`/teams/${team.id}`)}
                         />
                     ))}
                     </div>
@@ -220,10 +272,8 @@ function TeamCard({
     onOpen: () => void;
 }) {
     const isMyTeam = team.captain_id === currentUserId;
+    const memberCount = team.members_ids?.length ?? 0;
 
-    const avatarLetter = team.name.charAt(0).toUpperCase();
-
-    // Unique gradient per team based on idx
     const gradients = [
         "from-blue-500 to-blue-700",
         "from-violet-500 to-violet-700",
@@ -240,16 +290,14 @@ function TeamCard({
         style={{ animationDelay: `${idx * 60}ms` }}
         onClick={onOpen}
         >
-        {/* Card top accent */}
+        {/* Top accent bar */}
         <div className={`h-1.5 w-full bg-gradient-to-r ${gradient}`} />
 
         <div className="p-5 sm:p-6">
-        {/* Avatar + name row */}
+        {/* Avatar + name */}
         <div className="flex items-start gap-4 mb-4">
-        <div
-        className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-black text-lg flex-shrink-0 shadow-md`}
-        >
-        {avatarLetter}
+        <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-black text-lg flex-shrink-0 shadow-md`}>
+        {team.name.charAt(0).toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
@@ -257,14 +305,14 @@ function TeamCard({
         {team.name}
         </h3>
         {isMyTeam && (
-            <span className="text-[8px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2 py-0.5 rounded-md flex-shrink-0">
-            Моя
+            <span className="text-[8px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1">
+            <Crown size={8} /> Моя
             </span>
         )}
         </div>
-        {team.organization && (
+        {team.city_school_org && (
             <p className="text-[10px] font-bold text-(--t2) uppercase tracking-wider mt-0.5 truncate">
-            {team.organization}
+            {team.city_school_org}
             </p>
         )}
         </div>
@@ -275,7 +323,7 @@ function TeamCard({
         <div className="flex items-center gap-1.5 text-(--t2)">
         <Users size={13} />
         <span className="text-[10px] font-black uppercase tracking-wider">
-        {team.member_count ?? 0} уч.
+        {memberCount} уч.
         </span>
         </div>
 
@@ -283,7 +331,7 @@ function TeamCard({
             <div className="flex items-center gap-1.5 text-(--t2) min-w-0">
             <Crown size={13} className="flex-shrink-0" />
             <span className="text-[10px] font-bold truncate">
-            {team.captain_username}
+            @{team.captain_login ?? team.captain_username}
             </span>
             </div>
         )}
@@ -298,6 +346,22 @@ function TeamCard({
             </div>
         )}
         </div>
+
+        {/* Social links row */}
+        {(team.telegram_url || team.discord_url) && (
+            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-(--brd)">
+            {team.telegram_url && (
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-lg bg-sky-500/10 text-sky-500 border border-sky-500/20">
+                TG
+                </span>
+            )}
+            {team.discord_url && (
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-lg bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                DC
+                </span>
+            )}
+            </div>
+        )}
         </div>
         </div>
     );

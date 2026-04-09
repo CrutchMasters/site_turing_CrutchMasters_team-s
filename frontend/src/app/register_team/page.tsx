@@ -266,6 +266,49 @@ function SectionHeader({ num, title, right }: { num: string; title: string; righ
   );
 }
 
+// ── Draft persistence (sessionStorage, TTL 5 min) ────────────────────────────
+const DRAFT_KEY = "register_team_draft";
+const DRAFT_TTL = 5 * 60 * 1000; // 5 minutes in ms
+
+interface DraftData {
+  teamName: string;
+  organization: string;
+  contactEmail: string;
+  showDiscord: boolean;
+  showTelegram: boolean;
+  discordLink: string;
+  telegramLink: string;
+  captain: SearchedUser | null;
+  members: SearchedUser[];
+  savedAt: number;
+}
+
+function loadDraft(): DraftData | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const data: DraftData = JSON.parse(raw);
+    if (Date.now() - data.savedAt > DRAFT_TTL) {
+      sessionStorage.removeItem(DRAFT_KEY);
+      return null;
+    }
+    return data;
+  } catch { return null; }
+}
+
+function saveDraft(data: Omit<DraftData, "savedAt">) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ ...data, savedAt: Date.now() }));
+  } catch {}
+}
+
+function clearDraft() {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(DRAFT_KEY);
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function RegisterTeamPage() {
   const { dark } = useTheme();
@@ -273,19 +316,44 @@ export default function RegisterTeamPage() {
   const router = useRouter();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  const [teamName, setTeamName]         = useState("");
-  const [organization, setOrganization] = useState("");
-  const [contactEmail, setContactEmail] = useState("");
-  const [showDiscord, setShowDiscord]   = useState(false);
-  const [showTelegram, setShowTelegram] = useState(false);
-  const [discordLink, setDiscordLink]   = useState("");
-  const [telegramLink, setTelegramLink] = useState("");
-  const [captain, setCaptain]           = useState<SearchedUser | null>(null);
-  const [members, setMembers]           = useState<SearchedUser[]>([]);
+  // ── Restore from draft on first render ──
+  const draft = typeof window !== "undefined" ? loadDraft() : null;
+
+  const [teamName, setTeamName]         = useState(draft?.teamName     ?? "");
+  const [organization, setOrganization] = useState(draft?.organization ?? "");
+  const [contactEmail, setContactEmail] = useState(draft?.contactEmail ?? "");
+  const [showDiscord, setShowDiscord]   = useState(draft?.showDiscord  ?? false);
+  const [showTelegram, setShowTelegram] = useState(draft?.showTelegram ?? false);
+  const [discordLink, setDiscordLink]   = useState(draft?.discordLink  ?? "");
+  const [telegramLink, setTelegramLink] = useState(draft?.telegramLink ?? "");
+  const [captain, setCaptain]           = useState<SearchedUser | null>(draft?.captain ?? null);
+  const [members, setMembers]           = useState<SearchedUser[]>(draft?.members ?? []);
   const [submitting, setSubmitting]     = useState(false);
   const [submitted, setSubmitted]       = useState(false);
 
+  // ── Auto-save draft on every change ──
   useEffect(() => {
+    saveDraft({ teamName, organization, contactEmail, showDiscord, showTelegram, discordLink, telegramLink, captain, members });
+  }, [teamName, organization, contactEmail, showDiscord, showTelegram, discordLink, telegramLink, captain, members]);
+
+  const [discordError, setDiscordError]   = useState("");
+  const [telegramError, setTelegramError] = useState("");
+  const [submitError, setSubmitError]     = useState("");
+
+  // ── Link validators ──
+  const validateDiscord = (val: string) => {
+    if (!val) return "";
+    const ok = /^https:\/\/(discord\.gg|discord\.com\/invite)\/[a-zA-Z0-9\-_]+$/.test(val.trim());
+    return ok ? "" : "Введіть коректне посилання: https://discord.gg/... або https://discord.com/invite/...";
+  };
+  const validateTelegram = (val: string) => {
+    if (!val) return "";
+    const ok = /^https:\/\/t\.me\/[a-zA-Z0-9_\-\+]+/.test(val.trim());
+    return ok ? "" : "Введіть коректне посилання: https://t.me/...";
+  };
+
+  useEffect(() => {
+    // Set captain to current user only if draft had no captain saved
     if (user && !captain) {
       setCaptain({ id: user.id, username: user.username, login: user.login, email: user.email, role: user.role, avatar_url: user.avatar_url });
     }
@@ -305,11 +373,38 @@ export default function RegisterTeamPage() {
     const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!teamName.trim() || !captain) return;
+
+      // Validate links before submitting
+      const dErr = validateDiscord(discordLink);
+      const tErr = validateTelegram(telegramLink);
+      setDiscordError(dErr);
+      setTelegramError(tErr);
+      if (dErr || tErr) return;
+
       setSubmitting(true);
-      await new Promise(r => setTimeout(r, 900));
-      setSubmitting(false);
-      setSubmitted(true);
-      setTimeout(() => router.push("/teams"), 1600);
+      setSubmitError("");
+
+      try {
+        const { error } = await supabase.from("teams").insert({
+          name:            teamName.trim(),
+                                                              city_school_org: organization.trim() || null,
+                                                              captain_id:      captain.id,
+                                                              members_ids:     members.map(m => m.id),
+                                                              telegram_url:    telegramLink.trim() || null,
+                                                              discord_url:     discordLink.trim()  || null,
+        });
+
+        if (error) throw error;
+
+        clearDraft(); // wipe saved form data on success
+        setSubmitted(true);
+        setTimeout(() => router.push("/teams"), 1600);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Невідома помилка";
+        setSubmitError(`Помилка збереження: ${msg}`);
+      } finally {
+        setSubmitting(false);
+      }
     };
 
     if (isLoading || !user) {
@@ -432,15 +527,37 @@ export default function RegisterTeamPage() {
         {showDiscord && (
           <div className="fadeIn flex flex-col gap-1.5">
           <label className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.15em] ml-1">Посилання на Discord сервер</label>
-          <input type="url" placeholder="https://discord.gg/..." value={discordLink} onChange={e => setDiscordLink(e.target.value)}
-          className="w-full px-4 py-3 rounded-2xl border border-indigo-600/30 bg-(--bg) text-(--t1) focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 focus:bg-(--card) outline-none text-sm transition-all" />
+          <input
+          type="text"
+          placeholder="https://discord.gg/..."
+          value={discordLink}
+          onChange={e => { setDiscordLink(e.target.value); setDiscordError(validateDiscord(e.target.value)); }}
+          onBlur={e => setDiscordError(validateDiscord(e.target.value))}
+          className={`w-full px-4 py-3 rounded-2xl border bg-(--bg) text-(--t1) focus:ring-2 focus:bg-(--card) outline-none text-sm transition-all ${discordError ? "border-red-500/60 focus:ring-red-500/20 focus:border-red-500" : "border-indigo-600/30 focus:ring-indigo-500/20 focus:border-indigo-600"}`}
+          />
+          {discordError && (
+            <p className="text-[10px] font-bold text-red-500 ml-1 flex items-center gap-1">
+            <AlertCircle size={10} /> {discordError}
+            </p>
+          )}
           </div>
         )}
         {showTelegram && (
           <div className="fadeIn flex flex-col gap-1.5">
           <label className="text-[10px] font-black text-sky-400 uppercase tracking-[0.15em] ml-1">Посилання на Telegram канал/чат</label>
-          <input type="url" placeholder="https://t.me/..." value={telegramLink} onChange={e => setTelegramLink(e.target.value)}
-          className="w-full px-4 py-3 rounded-2xl border border-sky-600/30 bg-(--bg) text-(--t1) focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 focus:bg-(--card) outline-none text-sm transition-all" />
+          <input
+          type="text"
+          placeholder="https://t.me/..."
+          value={telegramLink}
+          onChange={e => { setTelegramLink(e.target.value); setTelegramError(validateTelegram(e.target.value)); }}
+          onBlur={e => setTelegramError(validateTelegram(e.target.value))}
+          className={`w-full px-4 py-3 rounded-2xl border bg-(--bg) text-(--t1) focus:ring-2 focus:bg-(--card) outline-none text-sm transition-all ${telegramError ? "border-red-500/60 focus:ring-red-500/20 focus:border-red-500" : "border-sky-600/30 focus:ring-sky-500/20 focus:border-sky-600"}`}
+          />
+          {telegramError && (
+            <p className="text-[10px] font-bold text-red-500 ml-1 flex items-center gap-1">
+            <AlertCircle size={10} /> {telegramError}
+            </p>
+          )}
           </div>
         )}
         </div>
@@ -512,8 +629,8 @@ export default function RegisterTeamPage() {
         <div className="fuIn flex flex-col sm:flex-row gap-3 pt-2" style={{ animationDelay: "200ms" }}>
         <button
         type="submit"
-        disabled={!teamName.trim() || !captain || submitting}
-        className={`flex items-center justify-center gap-2 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex-1 sm:flex-none ${!teamName.trim() || !captain || submitting ? "bg-(--brd) text-(--t2) cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/25"}`}
+        disabled={!teamName.trim() || !captain || submitting || !!discordError || !!telegramError}
+        className={`flex items-center justify-center gap-2 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex-1 sm:flex-none ${!teamName.trim() || !captain || submitting || !!discordError || !!telegramError ? "bg-(--brd) text-(--t2) cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/25"}`}
         >
         {submitting ? <><Loader size={14} className="animate-spin" /> Створення...</> : <><Users size={14} /> Створити команду</>}
         </button>
@@ -522,6 +639,12 @@ export default function RegisterTeamPage() {
         Скасувати
         </button>
         </div>
+
+        {submitError && (
+          <div className="flex items-center gap-2 text-[11px] font-bold text-red-500 bg-red-500/5 border border-red-500/20 rounded-2xl px-4 py-3">
+          <AlertCircle size={14} className="flex-shrink-0" /> {submitError}
+          </div>
+        )}
 
         </form>
         </div>
