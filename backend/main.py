@@ -101,19 +101,56 @@ ALLOWED_ROLES = {"user", "jury", "admin"}
 # ─────────────────────────────────────────────────────────────────────────────
 
 def get_caller(token: str) -> dict:
-    """Декодируем токен и возвращаем строку аккаунта из БД."""
+    """
+    Декодируем токен и возвращаем строку аккаунта из БД.
+    Ищем сначала по auth_id (sub из JWT), затем fallback по email.
+    """
     jwt_payload  = decode_jwt_payload(token)
+    auth_id      = jwt_payload.get("sub")
     caller_email = jwt_payload.get("email")
-    if not caller_email:
-        raise HTTPException(status_code=401, detail="Invalid token: no email claim")
 
-    account = fetch_one(
-        supabase.table("account")
-            .select("id, username, email, role")
-            .eq("email", caller_email)
-    )
+    print(f"[get_caller] auth_id(sub)={auth_id!r} email={caller_email!r}", flush=True)
+
+    if not caller_email and not auth_id:
+        raise HTTPException(status_code=401, detail="Invalid token: no email or sub claim")
+
+    account = None
+
+    # Сначала ищем по auth_id (надёжнее)
+    if auth_id:
+        try:
+            account = fetch_one(
+                supabase.table("account")
+                    .select("id, username, email, role")
+                    .eq("auth_id", auth_id)
+            )
+        except Exception as e:
+            print(f"[get_caller] DB error (auth_id lookup): {e}", flush=True)
+
+    # Fallback — ищем по email (для старых записей без auth_id)
+    if not account and caller_email:
+        try:
+            account = fetch_one(
+                supabase.table("account")
+                    .select("id, username, email, role")
+                    .eq("email", caller_email)
+            )
+            # Если нашли по email — попутно заполняем auth_id чтобы в следующий раз было быстрее
+            if account and auth_id and not account.get("auth_id"):
+                try:
+                    supabase.table("account")                         .update({"auth_id": auth_id})                         .eq("id", account["id"])                         .execute()
+                    print(f"[get_caller] auto-filled auth_id for {caller_email}", flush=True)
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[get_caller] DB error (email lookup): {e}", flush=True)
+
+    print(f"[get_caller] account found: {account}", flush=True)
     if not account:
-        raise HTTPException(status_code=403, detail="Аккаунт не найден")
+        raise HTTPException(
+            status_code=403,
+            detail=f"Аккаунт не найден. email={caller_email!r} auth_id={auth_id!r}"
+        )
     return account
 
 
@@ -150,16 +187,35 @@ async def register_user(user: UserRegister):
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not initialized")
     try:
+        # Проверяем дубликат email в нашей таблице
         existing = supabase.table("account").select("id").eq("email", user.email).execute()
         if existing.data:
             raise HTTPException(status_code=400, detail="Пользователь с таким email уже существует")
 
+        # Создаём пользователя в Supabase Auth (получаем auth_id)
+        try:
+            auth_response = supabase.auth.admin.create_user({
+                "email":            user.email,
+                "password":         user.password,
+                "email_confirm":    True,
+                "user_metadata": {
+                    "username": user.username,
+                    "login":    user.login,
+                },
+            })
+            auth_id = auth_response.user.id if auth_response.user else None
+        except Exception as auth_err:
+            print(f"[REGISTER] Auth error: {auth_err}", flush=True)
+            raise HTTPException(status_code=400, detail=f"Ошибка создания Auth пользователя: {auth_err}")
+
+        # Создаём запись в таблице account с auth_id
         result = supabase.table("account").insert({
             "username": user.username,
             "login":    user.login,
             "email":    user.email,
             "status":   "active",
             "role":     "user",
+            "auth_id":  auth_id,
         }).execute()
 
         if not result.data:
