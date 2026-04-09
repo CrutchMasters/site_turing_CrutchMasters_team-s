@@ -1,0 +1,2 @@
+table_structure
+"CREATE TABLE notifications (id uuid, user_id uuid, type text, title text, message text, meta jsonb, read boolean, created_at timestamp with time zone);"
