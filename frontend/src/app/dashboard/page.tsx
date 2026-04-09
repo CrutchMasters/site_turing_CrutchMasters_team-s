@@ -116,7 +116,7 @@ export default function DashboardPage() {
 
         <div>
         <span className="inline-block text-[9px] font-black uppercase tracking-widest bg-blue-600/10 text-blue-500 border border-blue-500/30 px-2.5 py-1 rounded-lg mb-2">
-        {user.role === "superadmin" ? "⚡ Superadmin" : "🛡 Admin"} panel
+        {user.role === "superadmin" ? " Superadmin" : " Admin"} panel
         </span>
         <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight leading-tight">
         Управление турнирами
@@ -154,7 +154,7 @@ export default function DashboardPage() {
       {/* Tournaments */}
       <section ref={el => { revealRefs.current[1] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
       <div className="p-4 sm:p-6 md:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd)">
-      <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">🏆 {t.mainPage.tournamentList}</h2>
+      <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight"> {t.mainPage.tournamentList}</h2>
       <div className="flex flex-wrap gap-2">
       {filterLabels.map((l, i) => (
         <button key={l} className={`px-3 sm:px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all spr ${i === 0 ? "bg-blue-600 text-white shadow-md" : "bg-(--bg) text-(--t2) border border-(--brd)"}`}>{l}</button>
