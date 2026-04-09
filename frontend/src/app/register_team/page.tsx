@@ -14,6 +14,11 @@ import {
   Send, Mail, Check, Loader, AlertCircle,
 } from "lucide-react";
 
+const API_URL =
+typeof window !== "undefined" && window.location.hostname === "localhost"
+? "http://localhost:8000"
+: "https://site-turing-crutchmasters-team-s.onrender.com";
+
 interface SearchedUser {
   id: string;
   username: string;
@@ -374,7 +379,6 @@ export default function RegisterTeamPage() {
       e.preventDefault();
       if (!teamName.trim() || !captain) return;
 
-      // Validate links before submitting
       const dErr = validateDiscord(discordLink);
       const tErr = validateTelegram(telegramLink);
       setDiscordError(dErr);
@@ -385,20 +389,45 @@ export default function RegisterTeamPage() {
       setSubmitError("");
 
       try {
-        const { error } = await supabase.from("teams").insert({
+        // 1. Create team WITHOUT members — members join via invitation
+        const { data: teamData, error } = await supabase.from("teams").insert({
           name:            teamName.trim(),
-                                                              city_school_org: organization.trim() || null,
-                                                              captain_id:      captain.id,
-                                                              members_ids:     members.map(m => m.id),
-                                                              telegram_url:    telegramLink.trim() || null,
-                                                              discord_url:     discordLink.trim()  || null,
-        });
+                                                                              city_school_org: organization.trim() || null,
+                                                                              captain_id:      captain.id,
+                                                                              members_ids:     [],          // empty — filled when invitations are accepted
+                                                                              telegram_url:    telegramLink.trim() || null,
+                                                                              discord_url:     discordLink.trim()  || null,
+        }).select("id").single();
 
         if (error) throw error;
 
-        clearDraft(); // wipe saved form data on success
+        // 2. Send invitations to all selected members via API
+        if (members.length > 0) {
+          const freshToken =
+          (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+
+          const inviteResults = await Promise.allSettled(
+            members.map(m =>
+            fetch(`${API_URL}/api/invitations/send`, {
+              method:  "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization:  `Bearer ${freshToken}`,
+              },
+              body: JSON.stringify({ team_id: teamData.id, invitee_id: m.id }),
+            })
+            )
+          );
+
+          const failed = inviteResults.filter(r => r.status === "rejected").length;
+          if (failed > 0) {
+            console.warn(`${failed} invitations failed to send`);
+          }
+        }
+
+        clearDraft();
         setSubmitted(true);
-        setTimeout(() => router.push("/teams"), 1600);
+        setTimeout(() => router.push("/teams"), 2000);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Невідома помилка";
         setSubmitError(`Помилка збереження: ${msg}`);
@@ -468,12 +497,17 @@ export default function RegisterTeamPage() {
         {/* Success */}
         {submitted && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center bg-(--bg)/80 backdrop-blur-md">
-          <div className="success-pop bg-(--card) border border-green-500/30 rounded-3xl p-10 text-center shadow-2xl">
+          <div className="success-pop bg-(--card) border border-green-500/30 rounded-3xl p-10 text-center shadow-2xl max-w-sm mx-4">
           <div className="w-16 h-16 rounded-full bg-green-500/10 border-2 border-green-500/30 flex items-center justify-center mx-auto mb-4">
           <Check size={32} className="text-green-500" />
           </div>
           <p className="text-xl font-black text-(--t1) uppercase tracking-tight mb-1">Команду створено!</p>
-          <p className="text-sm text-(--t2) font-bold">Перенаправляємо на список команд...</p>
+          {members.length > 0 && (
+            <p className="text-sm text-blue-500 font-bold mt-2">
+            📨 Запрошення надіслано {members.length} учасник{members.length === 1 ? "у" : "ам"}
+            </p>
+          )}
+          <p className="text-sm text-(--t2) font-bold mt-1">Перенаправляємо на список команд...</p>
           </div>
           </div>
         )}
@@ -620,6 +654,11 @@ export default function RegisterTeamPage() {
         {members.length === 0 && (
           <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest opacity-60">
           Команда може бути без учасників — додайте їх пізніше
+          </p>
+        )}
+        {members.length > 0 && (
+          <p className="text-[10px] font-bold text-blue-500/70 uppercase tracking-widest flex items-center gap-1">
+          📨 Запрошення буде надіслано — учасники потраплять до команди після підтвердження
           </p>
         )}
         </div>

@@ -69,7 +69,10 @@ export default function Sidebar({}: SidebarProps) {
   useEffect(() => {
     if (!isNotificationsPanelOpen) return;
     setNotifLoading(true);
-    fetch(`${API_URL}/api/notifications?limit=3`, { credentials: "include" })
+    const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+    fetch(`${API_URL}/api/notifications?limit=3`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
     .then(r => r.ok ? r.json() : Promise.reject())
     .then(data => {
       const list: Notification[] = data.notifications ?? data ?? [];
@@ -82,7 +85,11 @@ export default function Sidebar({}: SidebarProps) {
 
   // Fetch unread count on mount
   useEffect(() => {
-    fetch(`${API_URL}/api/notifications/unread-count`, { credentials: "include" })
+    const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+    if (!token) return;
+    fetch(`${API_URL}/api/notifications/unread-count`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
     .then(r => r.ok ? r.json() : Promise.reject())
     .then(data => setUnreadCount(data.count ?? 0))
     .catch(() => {});
