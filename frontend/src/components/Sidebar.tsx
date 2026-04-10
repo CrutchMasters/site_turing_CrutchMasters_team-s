@@ -13,11 +13,19 @@ typeof window !== "undefined" && window.location.hostname === "localhost"
 : "https://site-turing-crutchmasters-team-s.onrender.com";
 
 interface Notification {
-  id: number;
+  id: string;
+  type: string;
   title: string;
   message: string;
+  meta: string | Record<string, any> | null;
   read: boolean;
   created_at: string;
+}
+
+function parseSidebarMeta(raw: string | Record<string, any> | null): Record<string, any> {
+  if (!raw) return {};
+  if (typeof raw === "object") return raw;
+  try { return JSON.parse(raw); } catch { return {}; }
 }
 
 interface SidebarProps {}
@@ -35,6 +43,8 @@ export default function Sidebar({}: SidebarProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [responding, setResponding] = useState<Record<string, "accept" | "decline" | null>>({});
+  const [responded, setResponded]   = useState<Record<string, "accepted" | "declined">>({});
 
   const router   = useRouter();
   const pathname = usePathname();
@@ -70,7 +80,7 @@ export default function Sidebar({}: SidebarProps) {
     if (!isNotificationsPanelOpen) return;
     setNotifLoading(true);
     const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
-    fetch(`${API_URL}/api/notifications?limit=3`, {
+    fetch(`${API_URL}/api/notifications?limit=2`, {
       headers: { Authorization: `Bearer ${token}` }
     })
     .then(r => r.ok ? r.json() : Promise.reject())
@@ -100,6 +110,26 @@ export default function Sidebar({}: SidebarProps) {
       setIsNotificationsPanelOpen(p => !p);
       if (isSettingsPanelOpen) setIsSettingsPanelOpen(false);
     }
+  };
+
+  const respondInvitation = async (notif: Notification, accept: boolean) => {
+    const meta = parseSidebarMeta(notif.meta);
+    const invitationId = meta.invitation_id;
+    if (!invitationId) return;
+    setResponding(prev => ({ ...prev, [notif.id]: accept ? "accept" : "decline" }));
+    try {
+      const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+      const res = await fetch(`${API_URL}/api/invitations/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ invitation_id: invitationId, accept }),
+      });
+      if (res.ok) {
+        setResponded(prev => ({ ...prev, [notif.id]: accept ? "accepted" : "declined" }));
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
+    } catch {}
+    finally { setResponding(prev => ({ ...prev, [notif.id]: null })); }
   };
 
   const formatTime = (iso: string) => {
@@ -204,8 +234,8 @@ export default function Sidebar({}: SidebarProps) {
         <div className="border-b border-(--brd) flex-shrink-0 px-3 py-1">
         <button
         onClick={handleNotificationsClick}
-        title={collapsed ? "Сповіщення" : undefined}
-        className={`flex items-center gap-3 transition-colors w-full text-left
+        title={collapsed ? t.sidebar.notifications : undefined}
+        className={`flex items-center gap-3 transition-colors w-full text-left rounded-xl
           ${collapsed ? "justify-center p-3" : "px-4 py-3"}
           ${isNotificationsPanelOpen ? "bg-blue-600 text-white shadow-lg" : "hover:bg-(--bg) text-(--t2)"}
           `}
@@ -224,7 +254,7 @@ export default function Sidebar({}: SidebarProps) {
 
           {!collapsed && (
             <>
-            <span className="flex-1 text-sm font-bold lbl-anim">Сповіщення</span>
+            <span className="flex-1 text-sm font-bold lbl-anim">{t.sidebar.notifications}</span>
             <ChevronDown
             size={13}
             className={`transition-transform flex-shrink-0 ${isNotificationsPanelOpen ? "rotate-180" : ""}`}
@@ -243,30 +273,65 @@ export default function Sidebar({}: SidebarProps) {
             ) : notifications.length === 0 ? (
               <div className="py-5 px-4 text-center">
               <Bell size={20} className="mx-auto mb-2 text-(--t2) opacity-40" />
-              <p className="text-[11px] font-bold text-(--t2)">Немає сповіщень</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-(--t2)">{t.sidebar.noNotifications}</p>
               </div>
             ) : (
               <div className="divide-y divide-(--brd)">
-              {notifications.map(n => (
-                <div
-                key={n.id}
-                className={`px-4 py-2.5 flex gap-2.5 items-start ${!n.read ? "bg-blue-500/5" : ""}`}
-                >
-                <div className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${!n.read ? "bg-blue-500" : "bg-transparent"}`} />
-                <div className="flex-1 min-w-0">
-                <p className={`text-[11px] font-black truncate ${!n.read ? "text-(--t1)" : "text-(--t2)"}`}>{n.title}</p>
-                <p className="text-[10px] text-(--t2) line-clamp-2 leading-relaxed mt-0.5">{n.message}</p>
-                <p className="text-[9px] text-(--t2) opacity-60 mt-1">{formatTime(n.created_at)}</p>
-                </div>
-                </div>
-              ))}
+              {notifications.map(n => {
+                const isInvite = n.type === "team_invitation";
+                const res = responded[n.id];
+                const rsp = responding[n.id];
+                return (
+                  <div
+                  key={n.id}
+                  className={`px-4 py-3 flex gap-2.5 items-start ${!n.read ? "bg-blue-500/5" : ""}`}
+                  >
+                  <div className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${!n.read ? "bg-blue-500" : "bg-transparent"}`} />
+                  <div className="flex-1 min-w-0">
+                  <p className={`text-[11px] font-black uppercase tracking-wide truncate ${!n.read ? "text-(--t1)" : "text-(--t2)"}`}>{n.title}</p>
+                  <p className="text-[10px] font-bold text-(--t2) line-clamp-2 leading-relaxed mt-0.5">{n.message}</p>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-(--t2) opacity-60 mt-1">{formatTime(n.created_at)}</p>
+                  {/* Accept / Decline buttons for invitations */}
+                  {isInvite && !res && (
+                    <div className="flex gap-1.5 mt-2.5">
+                    <button
+                    onClick={() => respondInvitation(n, true)}
+                    disabled={!!rsp}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-600 text-white font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                    {rsp === "accept"
+                      ? <><span className="w-2.5 h-2.5 border border-white border-t-transparent rounded-full animate-spin inline-block" /> {t.sidebar.notifAccepting}</>
+                      : t.sidebar.notifAccept
+                    }
+                    </button>
+                    <button
+                    onClick={() => respondInvitation(n, false)}
+                    disabled={!!rsp}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                    {rsp === "decline"
+                      ? <><span className="w-2.5 h-2.5 border border-current border-t-transparent rounded-full animate-spin inline-block" /> {t.sidebar.notifDeclining}</>
+                      : t.sidebar.notifDecline
+                    }
+                    </button>
+                    </div>
+                  )}
+                  {isInvite && res && (
+                    <span className={`mt-2 inline-flex items-center text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${res === "accepted" ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}`}>
+                    {res === "accepted" ? t.sidebar.notifAccepted : t.sidebar.notifDeclined}
+                    </span>
+                  )}
+                  </div>
+                  </div>
+                );
+              })}
               </div>
             )}
             <button
             onClick={() => go("/notifications")}
-            className="w-full py-2.5 text-[10px] font-black uppercase tracking-widest text-blue-500 hover:bg-blue-500/10 transition-colors border-t border-(--brd)"
+            className="w-full py-2.5 mx-0 text-[10px] font-black uppercase tracking-widest text-blue-500 hover:bg-blue-500/10 transition-colors border-t border-(--brd) rounded-b-2xl"
             >
-            Ще →
+            {t.sidebar.notifMore}
             </button>
             </div>
           )}

@@ -287,10 +287,10 @@ function NotificationCard({
         <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-3">
         <div className="flex-1">
-        <p className={`text-sm font-black ${notif.read ? "text-(--t2)" : "text-(--t1)"}`}>
+        <p className={`text-sm font-black uppercase tracking-wide ${notif.read ? "text-(--t2)" : "text-(--t1)"}`}>
         {notif.title}
         </p>
-        <p className="text-[11px] text-(--t2) mt-1 leading-relaxed">{notif.message}</p>
+        <p className="text-[11px] font-bold text-(--t2) mt-1 leading-relaxed">{notif.message}</p>
         </div>
 
         {/* Unread dot */}
@@ -316,13 +316,13 @@ function NotificationCard({
 
         {/* Inviter info */}
         {isInvite && meta.inviter_name && (
-            <p className="mt-1 text-[10px] font-bold text-(--t2) flex items-center gap-1">
+            <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-(--t2) flex items-center gap-1">
             <Crown size={9} className="text-amber-500" /> Від: {meta.inviter_name}
             </p>
         )}
 
         {/* Timestamp */}
-        <p className="mt-2 text-[9px] font-bold text-(--t2) uppercase tracking-widest opacity-60">
+        <p className="mt-2 text-[9px] font-black uppercase tracking-widest text-(--t2) opacity-60">
         {timeAgo(notif.created_at)}
         </p>
 
