@@ -339,4 +339,4 @@ const def = {
 
 export type Locale = keyof typeof def;
 export type Translations = typeof def["en"];
-export const translations = def as Record<Locale, Translations>;
+export const translations = def as unknown as Record<Locale, Translations>;
