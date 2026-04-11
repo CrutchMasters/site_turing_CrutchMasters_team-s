@@ -338,5 +338,5 @@ const def = {
 } as const;
 
 export type Locale = keyof typeof def;
-export type Translations = typeof def[Locale];
-export const translations = def;
+export type Translations = typeof def["en"];
+export const translations = def as Record<Locale, Translations>;
