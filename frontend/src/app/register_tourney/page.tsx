@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Bold, Italic, Underline, List, Quote, Type, Zap
+  Bold, Italic, Underline, List, Quote, Type,
+  Zap, Trophy, Clock, Users, Layers, ChevronRight, ArrowLeft,
 } from 'lucide-react';
 
 import Sidebar from "@/components/Sidebar";
@@ -25,6 +26,15 @@ export default function RegisterTourney() {
   const [accessState, setAccessState] = useState<AccessState>('loading');
   const [countdown, setCountdown] = useState(COUNTDOWN_SEC);
   const [teamCount, setTeamCount] = useState(0);
+  const [roundCount, setRoundCount] = useState<number | null>(null);
+
+  // datetime states: [date, time]
+  const [startDate, setStartDate]   = useState('');
+  const [startTime, setStartTime]   = useState('');
+  const [regStartDate, setRegStartDate] = useState('');
+  const [regStartTime, setRegStartTime] = useState('');
+  const [regEndDate, setRegEndDate] = useState('');
+  const [regEndTime, setRegEndTime] = useState('');
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -50,19 +60,21 @@ export default function RegisterTourney() {
   const handleConfirmYes = () => { if (timerRef.current) clearInterval(timerRef.current); setAccessState('denied'); };
   const handleConfirmNo  = () => { if (timerRef.current) clearInterval(timerRef.current); router.push('/login'); };
 
+  /* ── Loading ── */
   if (accessState === 'loading' || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
+      <div className="min-h-screen flex items-center justify-center bg-(--bg)">
         <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
+  /* ── Checking (unauthorized warning) ── */
   if (accessState === 'checking') {
     const progress = ((COUNTDOWN_SEC - countdown) / COUNTDOWN_SEC) * 100;
     const circumference = 2 * Math.PI * 28;
     return (
-      <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ background: 'var(--bg)', color: 'var(--t1)' }}>
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-(--bg) text-(--t1)">
         <style>{`
           @keyframes fadeInModal { from{opacity:0;transform:scale(0.95) translateY(16px)} to{opacity:1;transform:scale(1) translateY(0)} }
           @keyframes pulse-ring  { 0%{box-shadow:0 0 0 0 rgba(239,68,68,0.35)} 70%{box-shadow:0 0 0 14px rgba(239,68,68,0)} 100%{box-shadow:0 0 0 0 rgba(239,68,68,0)} }
@@ -70,39 +82,61 @@ export default function RegisterTourney() {
           .pulse-btn{animation:pulse-ring 1.4s ease-out infinite}
         `}</style>
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full opacity-[0.07] blur-3xl" style={{ background: 'radial-gradient(circle, #ef4444, transparent)' }} />
-          <div className="absolute -bottom-40 -right-40 w-[500px] h-[500px] rounded-full opacity-[0.07] blur-3xl" style={{ background: 'radial-gradient(circle, #f97316, transparent)' }} />
+          <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full opacity-[0.07] blur-3xl bg-red-500" />
+          <div className="absolute -bottom-40 -right-40 w-[500px] h-[500px] rounded-full opacity-[0.07] blur-3xl bg-orange-500" />
         </div>
-        <div className="modal-card relative z-10 w-full max-w-md mx-4 rounded-2xl p-8 border" style={{ background: 'var(--card)', borderColor: 'rgba(239,68,68,0.3)', boxShadow: '0 0 60px rgba(239,68,68,0.08), 0 24px 48px rgba(0,0,0,0.15)' }}>
+
+        <div
+          className="modal-card relative z-10 w-full max-w-md mx-4 bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-2xl border border-red-500/30 p-8"
+        >
           <div className="flex flex-col items-center mb-6">
             <div className="relative w-20 h-20 mb-4">
               <svg className="w-20 h-20 -rotate-90" viewBox="0 0 64 64">
                 <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(239,68,68,0.15)" strokeWidth="4" />
-                <circle cx="32" cy="32" r="28" fill="none" stroke="#ef4444" strokeWidth="4" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={circumference * (progress / 100)} style={{ transition: 'stroke-dashoffset 0.9s linear' }} />
+                <circle cx="32" cy="32" r="28" fill="none" stroke="#ef4444" strokeWidth="4"
+                  strokeLinecap="round" strokeDasharray={circumference}
+                  strokeDashoffset={circumference * (progress / 100)}
+                  style={{ transition: 'stroke-dashoffset 0.9s linear' }} />
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-2xl font-black tabular-nums" style={{ color: '#ef4444' }}>{countdown}</span>
+                <span className="text-2xl font-black tabular-nums text-red-500">{countdown}</span>
               </div>
             </div>
-            <h2 className="text-xl font-black text-center mb-1" style={{ color: 'var(--t1)' }}>⚠️ Ограниченный доступ</h2>
-            <p className="text-sm text-center" style={{ color: 'var(--t2)' }}>У вас нет прав для просмотра этой страницы</p>
+            <h2 className="text-xl font-black uppercase tracking-tight text-center mb-1 text-(--t1)">
+              ⚠️ Обмежений доступ
+            </h2>
+            <p className="text-sm text-center text-(--t2)">У вас немає прав для перегляду цієї сторінки</p>
           </div>
-          <div className="h-px mb-6" style={{ background: 'var(--brd)' }} />
-          <p className="text-base font-semibold text-center mb-2" style={{ color: 'var(--t1)' }}>Точно хотите просмотреть данную страницу?</p>
-          <p className="text-xs text-center mb-6" style={{ color: 'var(--t2)' }}>Через <span className="font-bold text-red-500">{countdown} сек</span> вы автоматически увидите, что ждёт нарушителей 🐇</p>
+
+          <div className="h-px mb-6 bg-(--brd)" />
+
+          <p className="text-base font-black uppercase tracking-tight text-center mb-2 text-(--t1)">
+            Точно хочете переглянути цю сторінку?
+          </p>
+          <p className="text-xs text-center mb-6 text-(--t2)">
+            Через <span className="font-black text-red-500">{countdown} сек</span> ви автоматично побачите, що чекає на порушників 🐇
+          </p>
+
           <div className="flex gap-3">
-            <button onClick={handleConfirmYes} className="pulse-btn flex-1 py-3 rounded-xl font-black text-sm uppercase tracking-wider text-white transition-all active:scale-95" style={{ background: '#ef4444' }}>Да, показать</button>
-            <button onClick={handleConfirmNo} className="flex-1 py-3 rounded-xl font-black text-sm uppercase tracking-wider border transition-all active:scale-95 hover:opacity-80" style={{ borderColor: 'var(--brd)', color: 'var(--t2)', background: 'var(--bg)' }}>Нет, уйти</button>
+            <button onClick={handleConfirmYes}
+              className="pulse-btn flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest text-white bg-red-500 active:scale-95 transition-all">
+              Так, показати
+            </button>
+            <button onClick={handleConfirmNo}
+              className="flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) text-(--t2) bg-(--bg) active:scale-95 transition-all hover:opacity-80">
+              Ні, піти
+            </button>
           </div>
-          <p className="text-center text-xs mt-4" style={{ color: 'var(--t2)', opacity: 0.5 }}>«Нет» → вернёт на страницу входа</p>
+          <p className="text-center text-[10px] mt-4 text-(--t2) opacity-50">«Ні» → повернути на сторінку входу</p>
         </div>
       </div>
     );
   }
 
+  /* ── Denied (403) ── */
   if (accessState === 'denied') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden" style={{ background: 'var(--bg)', color: 'var(--t1)' }}>
+      <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden bg-(--bg) text-(--t1)">
         <style>{`
           @keyframes glitch {
             0%  {clip-path:inset(0 0 95% 0);transform:translate(-4px,0) skewX(-1deg)}
@@ -131,209 +165,316 @@ export default function RegisterTourney() {
           .fade-up-2{animation:fadeSlideUp 0.7s cubic-bezier(.22,1,.36,1) 0.30s both}
         `}</style>
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full opacity-10 blur-3xl" style={{ background: 'radial-gradient(circle, #3b82f6, transparent)' }} />
-          <div className="absolute -bottom-32 -right-32 w-[400px] h-[400px] rounded-full opacity-10 blur-3xl" style={{ background: 'radial-gradient(circle, #8b5cf6, transparent)' }} />
+          <div className="absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full opacity-10 blur-3xl bg-blue-500" />
+          <div className="absolute -bottom-32 -right-32 w-[400px] h-[400px] rounded-full opacity-10 blur-3xl bg-violet-500" />
         </div>
         <div className="scanline" />
         <span className="rabbit-falling select-none" aria-hidden="true">🐇</span>
         <div className="relative z-10 text-center px-6 max-w-lg">
-          <div className="glitch-text text-[120px] sm:text-[160px] font-black leading-none mb-4 select-none fade-up" data-text="403" style={{ color: 'var(--t1)', letterSpacing: '-0.05em' }}>403</div>
-          <p className="fade-up-1 text-lg sm:text-2xl font-black uppercase tracking-tight mb-2" style={{ color: 'var(--t1)' }}>Ах ты коварный искатель потайных путей,</p>
-          <p className="fade-up-1 text-lg sm:text-2xl font-black uppercase tracking-tight mb-8" style={{ color: '#3b82f6' }}>привет от Белого Кролика 🐇</p>
-          <p className="fade-up-2 text-xs font-bold uppercase tracking-[0.3em] mb-10" style={{ color: 'var(--t2)' }}>Эта страница только для администраторов</p>
+          <div className="glitch-text text-[120px] sm:text-[160px] font-black leading-none mb-4 select-none fade-up text-(--t1)" data-text="403" style={{ letterSpacing: '-0.05em' }}>403</div>
+          <p className="fade-up-1 text-lg sm:text-2xl font-black uppercase tracking-tight mb-2 text-(--t1)">Ах ти хитрий шукач потаємних шляхів,</p>
+          <p className="fade-up-1 text-lg sm:text-2xl font-black uppercase tracking-tight mb-8 text-blue-600">привіт від Білого Кролика 🐇</p>
+          <p className="fade-up-2 text-xs font-black uppercase tracking-[0.3em] mb-10 text-(--t2)">Ця сторінка тільки для адміністраторів</p>
           <div className="fade-up-2 flex flex-col sm:flex-row gap-3 justify-center">
-            <button onClick={() => router.push('/dashboard')} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20">← Вернуться на дашборд</button>
-            <button onClick={() => router.push('/')} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest border transition-all active:scale-95" style={{ borderColor: 'var(--brd)', color: 'var(--t2)', background: 'var(--bg)' }}>На главную</button>
+            <button onClick={() => router.push('/main_page')}
+              className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20">
+              ← Повернутись на дашборд
+            </button>
+            <button onClick={() => router.push('/')}
+              className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) text-(--t2) bg-(--bg) active:scale-95 transition-all hover:opacity-80">
+              На головну
+            </button>
           </div>
         </div>
       </div>
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // RENDER: Основной вид (только admin / superadmin)
-  // ══════════════════════════════════════════════════════════════════════════
+  /* ── Main form (admin only) ── */
   return (
-    <div className="flex h-screen font-sans transition-colors" style={{ background: 'var(--bg)', color: 'var(--t1)' }}>
+    <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
+      <style jsx global>{`
+        @keyframes fadeUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
+        @keyframes cardDrop { from{opacity:0;transform:translateY(-26px) scale(.97)} to{opacity:1;transform:none} }
+        .fuIn { animation: fadeUp 340ms cubic-bezier(.22,1,.36,1) both }
+        .cdIn { animation: cardDrop 500ms cubic-bezier(.22,1,.36,1) both }
+      `}</style>
 
+      {/* Background watermark */}
       <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
         <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
-      </div>
-
-      <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform duration-300 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-        <Sidebar />
       </div>
 
       {isMobileSidebarOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
       )}
 
-      <main className="flex-1 overflow-y-auto relative z-10">
-        <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title={t.tourney?.create ?? 'Створення турніру'} />
+      <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+        <Sidebar />
+      </div>
 
-        <div className="p-6 md:p-10 max-w-4xl mx-auto">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <MobileHeader
+          onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+          title={t.tourney?.create ?? 'Створення турніру'}
+          icon={<Trophy size={18} className="text-blue-600" />}
+        />
 
-          <div className="mb-8">
-            <h1 className="text-2xl font-semibold">{t.tourney?.createAdmin ?? 'Створення турніру (Admin)'}</h1>
-          </div>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
 
-          <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+          {/* Breadcrumb */}
+          <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
+            <button onClick={() => router.push('/')} className="hover:text-blue-600 transition-colors">Головна</button>
+            <ChevronRight size={10} />
+            <button onClick={() => router.push('/main_page')} className="hover:text-blue-600 transition-colors">Дашборд</button>
+            <ChevronRight size={10} />
+            <span className="text-(--t1)">{t.tourney?.createAdmin ?? 'Створення турніру'}</span>
+          </nav>
 
-            {/* ── ОСТРОВОК 1 ── */}
-            <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--card)', borderColor: 'var(--brd)' }}>
-              <div className="px-5 py-3 border-b" style={{ borderColor: 'var(--brd)' }}>
-                <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--t2)' }}>
+          <button
+            onClick={() => router.back()}
+            className="mb-6 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors"
+          >
+            <ArrowLeft size={14} /> Назад
+          </button>
+
+          <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-(--t1) mb-8 sm:mb-10">
+            {t.tourney?.createAdmin ?? 'Створення турніру'}
+          </h1>
+
+          <form className="max-w-4xl space-y-6" onSubmit={(e) => e.preventDefault()}>
+
+            {/* ── Section 1: General ── */}
+            <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
+              <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-(--bg)/50">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
+                  <Trophy size={16} />
+                </div>
+                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">
                   1. {t.tourney?.general ?? 'Загальна інформація'}
                 </span>
               </div>
 
-              <div className="p-5 border-b" style={{ borderColor: 'var(--brd)' }}>
-                <label className="block text-sm font-medium mb-2" style={{ color: 'var(--t2)' }}>
-                  {t.tourney?.name ?? 'Назва турніру'}
-                </label>
+              {/* Tournament name */}
+              <div className="p-6 sm:p-8 border-b border-(--brd)">
+                <div className="flex justify-between items-center mb-3">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
+                    {t.tourney?.name ?? 'Назва турніру'}
+                  </label>
+                  <span className="text-[10px] font-black uppercase text-red-500 flex items-center gap-1">
+                    <Zap className="w-3 h-3 fill-red-500" />
+                    {t.common?.required ?? "Обов'язково"}
+                  </span>
+                </div>
                 <input
                   type="text"
-                  placeholder={t.tourney?.namePlaceholder ?? 'Назва турніру (покажчик)'}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                  style={{ background: 'var(--bg)', borderColor: 'var(--brd)', color: 'var(--t1)' }}
+                  placeholder={t.tourney?.namePlaceholder ?? 'Назва турніру...'}
+                  className="w-full px-5 py-4 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none transition-all"
                 />
               </div>
 
-              <div className="p-5">
-                <label className="block text-sm font-medium mb-2" style={{ color: 'var(--t2)' }}>
+              {/* Description */}
+              <div className="p-6 sm:p-8">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-3">
                   {t.tourney?.desc ?? 'Опис / Правила'}
                 </label>
-                <div className="border rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500" style={{ borderColor: 'var(--brd)' }}>
-                  <div className="border-b px-3 py-2 flex items-center space-x-1" style={{ background: 'var(--bg)', borderColor: 'var(--brd)' }}>
+                <div className="border border-(--brd) rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-600 transition-all">
+                  <div className="border-b border-(--brd) px-4 py-2.5 flex items-center gap-1 bg-(--bg)/60">
                     {[Bold, Italic, Underline, List, Quote, Type].map((Icon, i) => (
-                      <button key={i} type="button" className="p-1.5 rounded transition-opacity hover:opacity-60">
-                        <Icon className="w-4 h-4" style={{ color: 'var(--t2)' }} />
+                      <button key={i} type="button"
+                        className="p-2 rounded-xl hover:bg-(--card) text-(--t2) hover:text-blue-600 transition-all">
+                        <Icon className="w-3.5 h-3.5" />
                       </button>
                     ))}
                   </div>
                   <textarea
                     rows={4}
                     placeholder={t.tourney?.descPlaceholder ?? 'Введіть опис турніру...'}
-                    className="w-full px-4 py-3 outline-none resize-y text-sm bg-transparent"
-                    style={{ color: 'var(--t1)' }}
+                    className="w-full px-5 py-4 outline-none resize-y text-sm bg-transparent text-(--t1) placeholder:text-(--t2)/50"
                   />
                 </div>
               </div>
-            </div>
+            </section>
 
-            {/* ── ОСТРОВОК 2 ── */}
-            <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--card)', borderColor: 'var(--brd)' }}>
-              <div className="px-5 py-3 border-b" style={{ borderColor: 'var(--brd)' }}>
-                <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--t2)' }}>
+            {/* ── Section 2: Time & Conditions ── */}
+            <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden" style={{ animationDelay: '80ms' }}>
+              <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-(--bg)/50">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
+                  <Clock size={16} />
+                </div>
+                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">
                   2. {t.tourney?.time ?? 'Час та Умови'}
                 </span>
               </div>
 
-              {/* Старт */}
-              <div className="p-5 border-b" style={{ borderColor: 'var(--brd)' }}>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-sm font-medium" style={{ color: 'var(--t2)' }}>
+              {/* Start datetime */}
+              <div className="p-6 sm:p-8 border-b border-(--brd)">
+                <div className="flex justify-between items-center mb-3">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
                     {t.tourney?.start ?? 'Дата та час старту турніру'}
                   </label>
-                  <span className="text-xs text-red-500 flex items-center gap-1">
+                  <span className="text-[10px] font-black uppercase text-red-500 flex items-center gap-1">
                     <Zap className="w-3 h-3 fill-red-500" />
                     {t.common?.required ?? "Обов'язково"}
                   </span>
                 </div>
-                <input type="datetime-local"
-                  className="w-full px-4 py-2 border rounded-lg text-sm"
-                  style={{ background: 'var(--bg)', borderColor: 'var(--brd)', color: 'var(--t1)' }}
-                />
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-(--t2) opacity-60">Дата</span>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={e => setStartDate(e.target.value)}
+                      className="w-full px-5 py-4 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none transition-all"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-(--t2) opacity-60">Час</span>
+                    <input
+                      type="time"
+                      value={startTime}
+                      onChange={e => setStartTime(e.target.value)}
+                      className="w-full px-5 py-4 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none transition-all"
+                    />
+                  </div>
+                </div>
               </div>
 
-              {/* Вікно реєстрації */}
-              <div className="p-5 border-b" style={{ borderColor: 'var(--brd)' }}>
-                <label className="block text-sm font-medium mb-3" style={{ color: 'var(--t2)' }}>
+              {/* Registration window */}
+              <div className="p-6 sm:p-8 border-b border-(--brd)">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-4">
                   {t.tourney?.registration ?? 'Вікно реєстрації команд'}
                 </label>
-                <div className="grid md:grid-cols-2 gap-3">
-                  <div className="rounded-lg p-3 border" style={{ background: 'var(--bg)', borderColor: 'var(--brd)' }}>
-                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--t2)', opacity: 0.6 }}>
-                      Початок реєстрації
-                    </p>
-                    <input type="datetime-local" className="w-full text-sm outline-none bg-transparent" style={{ color: 'var(--t1)' }} />
+                <div className="grid md:grid-cols-2 gap-4">
+                  {/* Registration start */}
+                  <div className="rounded-2xl p-4 border border-(--brd) bg-(--bg)/50 space-y-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-(--t2) opacity-70">Початок реєстрації</p>
+                    <input
+                      type="date"
+                      value={regStartDate}
+                      onChange={e => setRegStartDate(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all"
+                    />
+                    <input
+                      type="time"
+                      value={regStartTime}
+                      onChange={e => setRegStartTime(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all"
+                    />
                   </div>
-                  <div className="rounded-lg p-3 border" style={{ background: 'var(--bg)', borderColor: 'var(--brd)' }}>
-                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--t2)', opacity: 0.6 }}>
-                      Кінець реєстрації
-                    </p>
-                    <input type="datetime-local" className="w-full text-sm outline-none bg-transparent" style={{ color: 'var(--t1)' }} />
+                  {/* Registration end */}
+                  <div className="rounded-2xl p-4 border border-(--brd) bg-(--bg)/50 space-y-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-(--t2) opacity-70">Кінець реєстрації</p>
+                    <input
+                      type="date"
+                      value={regEndDate}
+                      onChange={e => setRegEndDate(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all"
+                    />
+                    <input
+                      type="time"
+                      value={regEndTime}
+                      onChange={e => setRegEndTime(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all"
+                    />
                   </div>
                 </div>
               </div>
 
-              {/* Кількість команд */}
-              <div className="p-5">
-                <div className="flex justify-between mb-2">
-                  <label className="text-sm font-medium" style={{ color: 'var(--t2)' }}>
+              {/* Max teams */}
+              <div className="p-6 sm:p-8">
+                <div className="flex justify-between items-center mb-4">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
                     {t.tourney?.maxTeams ?? 'Максимальна кількість команд'}
                   </label>
-                  <span className="text-xs" style={{ color: 'var(--t2)' }}>({t.common?.optional ?? 'Опціонально'})</span>
+                  <span className="text-[10px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2.5 py-1 rounded-full">
+                    {t.common?.optional ?? 'Опціонально'}
+                  </span>
                 </div>
-                <div className="flex items-center overflow-hidden border rounded-lg" style={{ borderColor: 'var(--brd)' }}>
-                  <button type="button" onClick={() => setTeamCount(Math.max(0, teamCount - 1))}
-                    className="w-10 h-10 text-lg flex items-center justify-center transition-opacity hover:opacity-60"
-                    style={{ background: 'var(--bg)', color: 'var(--t2)', borderRight: '1px solid var(--brd)' }}>−</button>
-                  <input type="number" value={teamCount} onChange={e => setTeamCount(Math.max(0, +e.target.value))}
-                    className="flex-1 text-center text-sm font-semibold outline-none h-10 bg-transparent"
-                    style={{ color: 'var(--t1)' }} />
-                  <button type="button" onClick={() => setTeamCount(Math.min(256, teamCount + 1))}
-                    className="w-10 h-10 text-lg flex items-center justify-center transition-opacity hover:opacity-60"
-                    style={{ background: 'var(--bg)', color: 'var(--t2)', borderLeft: '1px solid var(--brd)' }}>+</button>
+
+                <div className="flex items-center overflow-hidden border border-(--brd) rounded-2xl w-fit">
+                  <button type="button"
+                    onClick={() => setTeamCount(Math.max(0, teamCount - 1))}
+                    className="w-12 h-12 text-lg flex items-center justify-center bg-(--bg) text-(--t2) hover:text-blue-600 transition-colors border-r border-(--brd)">
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    value={teamCount}
+                    onChange={e => setTeamCount(Math.max(0, +e.target.value))}
+                    className="w-20 text-center text-sm font-black outline-none h-12 bg-transparent text-(--t1)"
+                  />
+                  <button type="button"
+                    onClick={() => setTeamCount(Math.min(256, teamCount + 1))}
+                    className="w-12 h-12 text-lg flex items-center justify-center bg-(--bg) text-(--t2) hover:text-blue-600 transition-colors border-l border-(--brd)">
+                    +
+                  </button>
                 </div>
-                <div className="flex gap-2 mt-2 flex-wrap">
+
+                <div className="flex gap-2 mt-4 flex-wrap">
                   {[0, 8, 16, 32, 64].map(n => (
                     <button key={n} type="button" onClick={() => setTeamCount(n)}
-                      className="text-xs px-3 py-1 rounded-full border transition-all"
-                      style={teamCount === n
-                        ? { background: '#3b82f6', borderColor: '#3b82f6', color: '#fff' }
-                        : { background: 'var(--bg)', borderColor: 'var(--brd)', color: 'var(--t2)' }}>
+                      className={`text-[10px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest transition-all active:scale-95 ${
+                        teamCount === n
+                          ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/30'
+                          : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600'
+                      }`}>
                       {n === 0 ? 'Без ліміту' : n}
                     </button>
                   ))}
                 </div>
               </div>
-            </div>
+            </section>
 
-            {/* ── ОСТРОВОК 3 ── */}
-            <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--card)', borderColor: 'var(--brd)' }}>
-              <div className="px-5 py-3 border-b" style={{ borderColor: 'var(--brd)' }}>
-                <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--t2)' }}>
+            {/* ── Section 3: Format ── */}
+            <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden" style={{ animationDelay: '160ms' }}>
+              <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-(--bg)/50">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
+                  <Layers size={16} />
+                </div>
+                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">
                   3. {t.tourney?.format ?? 'Формат'}
                 </span>
               </div>
-              <div className="p-5">
-                <label className="block text-sm font-medium mb-2" style={{ color: 'var(--t2)' }}>
-                  {t.tourney?.rounds ?? 'Кількість раундів'}{' '}
-                  <span style={{ color: 'var(--t2)' }}>({t.tourney?.min1 ?? 'Мінімально - 1'})</span>
-                </label>
-                <select
-                  defaultValue=""
-                  className="w-full px-4 py-2 border rounded-lg"
-                  style={{ background: 'var(--bg)', borderColor: 'var(--brd)', color: 'var(--t1)' }}
-                >
-                  <option value="" disabled>{t.common?.choose ?? 'Обрати...'}</option>
-                  <option value="1">1 раунд</option>
-                  <option value="3">3 раунди (Bo3)</option>
-                  <option value="5">5 раундів (Bo5)</option>
-                </select>
-              </div>
-            </div>
 
-            {/* ── Кнопки ── */}
-            <div className="flex gap-3 pb-6">
+              <div className="p-6 sm:p-8">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-4">
+                  {t.tourney?.rounds ?? 'Кількість раундів'}{' '}
+                  <span className="normal-case font-bold opacity-60 ml-1">({t.tourney?.min1 ?? 'Мінімально — 1, максимально — 8'})</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setRoundCount(n)}
+                      className={`w-12 h-12 rounded-2xl font-black text-sm uppercase tracking-widest border transition-all active:scale-95 ${
+                        roundCount === n
+                          ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/25'
+                          : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                {roundCount && (
+                  <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-600">
+                    Обрано: {roundCount} {roundCount === 1 ? 'раунд' : roundCount < 5 ? 'раунди' : 'раундів'}
+                    {roundCount > 1 && <span className="text-(--t2) font-bold ml-2">(Bo{roundCount})</span>}
+                  </p>
+                )}
+              </div>
+            </section>
+
+            {/* ── Action buttons ── */}
+            <div className="flex flex-col sm:flex-row gap-3 pb-8">
               <button type="submit"
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+                className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20">
                 {t.tourney?.createBtn ?? 'Створити турнір'}
               </button>
               <button type="button" onClick={() => router.back()}
-                className="px-6 py-2.5 border text-sm rounded-lg transition-colors hover:opacity-80"
-                style={{ background: 'var(--bg)', borderColor: 'var(--brd)', color: 'var(--t2)' }}>
+                className="px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all">
                 {t.common?.cancel ?? 'Скасувати'}
               </button>
             </div>
