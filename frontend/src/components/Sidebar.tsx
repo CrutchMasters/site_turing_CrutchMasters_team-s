@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { LayoutDashboard, UserCircle, Settings, LogOut, Search, ChevronDown, Menu, Users, Bell } from "lucide-react";
+import { LayoutDashboard, UserCircle, Settings, LogOut, Search, ChevronDown, Menu, Users, Bell, Trophy } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useLanguage, LOCALES } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
@@ -240,7 +240,6 @@ export default function Sidebar({}: SidebarProps) {
           ${isNotificationsPanelOpen ? "bg-blue-600 text-white shadow-lg" : "hover:bg-(--bg) text-(--t2)"}
           `}
           >
-          {/* Bell icon with badge — same w-[18px] wrapper as NavItem */}
           <div className="w-[18px] flex-shrink-0 flex items-center justify-center">
           <div className="relative">
           <Bell size={18} />
@@ -291,7 +290,6 @@ export default function Sidebar({}: SidebarProps) {
                   <p className={`text-[11px] font-black uppercase tracking-wide truncate ${!n.read ? "text-(--t1)" : "text-(--t2)"}`}>{n.title}</p>
                   <p className="text-[10px] font-bold text-(--t2) line-clamp-2 leading-relaxed mt-0.5">{n.message}</p>
                   <p className="text-[9px] font-black uppercase tracking-widest text-(--t2) opacity-60 mt-1">{formatTime(n.created_at)}</p>
-                  {/* Accept / Decline buttons for invitations */}
                   {isInvite && !res && (
                     <div className="flex gap-1.5 mt-2.5">
                     <button
@@ -342,6 +340,15 @@ export default function Sidebar({}: SidebarProps) {
           <NavItem icon={<UserCircle size={18} />}      label={t.sidebar.profile}   active={pathname === "/profile"}   collapsed={collapsed} onClick={() => go("/profile")} />
           <NavItem icon={<LayoutDashboard size={18} />} label={t.sidebar.mainPage}  active={pathname === "/dashboard"} collapsed={collapsed} onClick={() => go("/dashboard")} />
           <NavItem icon={<Search size={18} />}          label={t.sidebar.search}    active={pathname === "/search"}    collapsed={collapsed} onClick={() => go("/search")} />
+
+          {/* ── Tournaments ── */}
+          <NavItem
+          icon={<Trophy size={18} />}
+          label="Турніри"
+          active={pathname === "/tournaments" || pathname?.startsWith("/tournaments/")}
+          collapsed={collapsed}
+          onClick={() => go("/tournaments")}
+          />
 
           {/* Teams */}
           <NavItem

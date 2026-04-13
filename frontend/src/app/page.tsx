@@ -23,6 +23,8 @@ export default function HomePage() {
   const [backendMessage, setBackendMessage] = useState("waiting...");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  // ✅ mounted guard — prevents server/client mismatch for localStorage-dependent values
+  const [mounted, setMounted] = useState(false);
 
   const revealRefs = useRef<(HTMLDivElement | null)[]>([]);
   const headerRef = useRef<HTMLDivElement>(null);
@@ -30,6 +32,8 @@ export default function HomePage() {
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    setMounted(true);
+
     fetch(`${API_URL}/api/test`)
     .then((res) => res.json())
     .then((data) => setBackendMessage(data.message))
@@ -83,12 +87,13 @@ export default function HomePage() {
   const sections = t.infoSections || [];
   const avatarLetter = user?.username?.charAt(0).toUpperCase() ?? "?";
 
+  // ✅ After mount, use real dark value; before mount, assume light (matches SSR default)
+  const isDark = mounted && dark;
 
   return (
     <div className="flex flex-col font-sans overflow-x-hidden min-h-screen bg-(--bg) text-(--t1)">
 
     {/* SETTINGS BUTTON */}
-
     <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[60]" ref={settingsRef}>
     <div
     className={`
@@ -113,17 +118,18 @@ export default function HomePage() {
       onClick={toggle}
       className="flex items-center justify-between px-3 py-2 rounded-xl bg-(--bg) hover:bg-(--brd) transition border border-(--brd)"
       >
+      {/* ✅ isDark instead of dark — safe after mount */}
       <span className="text-xs font-black uppercase tracking-wide text-(--t1)">
-      {dark ? "🌙 Dark" : "☀️ Light"}
+      {isDark ? "🌙 Dark" : "☀️ Light"}
       </span>
       <div
       className={`w-10 h-5 rounded-full transition-all relative ${
-        dark ? "bg-blue-600" : "bg-gray-400"
+        isDark ? "bg-blue-600" : "bg-gray-400"
       }`}
       >
       <div
       className={`absolute top-0 left-0 w-5 h-5 bg-white rounded-full shadow transition-all ${
-        dark ? "translate-x-5" : "translate-x-0"
+        isDark ? "translate-x-5" : "translate-x-0"
       }`}
       />
       </div>
@@ -180,7 +186,8 @@ export default function HomePage() {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-      {user ? (
+      {/* ✅ mounted && user — SSR renders sign-in/up buttons, client swaps in user menu */}
+      {mounted && user ? (
         <div className="relative" ref={userMenuRef}>
         <button
         onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
@@ -220,24 +227,16 @@ export default function HomePage() {
           className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-(--t2) hover:bg-(--bg) hover:text-blue-600 transition-colors"
           >
           <UserCircle size={16} />{" "}
-          {locale === "en"
-            ? "Profile"
-            : locale === "ru"
-            ? "Профиль"
-            : "Профіль"}
-            </Link>
-            <button
-            onClick={logout}
-            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-500/10 transition-colors border-t border-(--brd)"
-            >
-            <LogOut size={16} />{" "}
-            {locale === "en"
-              ? "Sign Out"
-              : locale === "ru"
-              ? "Выйти"
-              : "Вийти"}
-              </button>
-              </div>
+          {locale === "en" ? "Profile" : locale === "ru" ? "Профиль" : "Профіль"}
+          </Link>
+          <button
+          onClick={logout}
+          className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-500/10 transition-colors border-t border-(--brd)"
+          >
+          <LogOut size={16} />{" "}
+          {locale === "en" ? "Sign Out" : locale === "ru" ? "Выйти" : "Вийти"}
+          </button>
+          </div>
         )}
         </div>
       ) : (
@@ -261,16 +260,17 @@ export default function HomePage() {
 
       {/* HERO SECTION */}
       <main className="relative min-h-screen flex items-center justify-center px-4 pt-20 pb-10 sm:p-6 overflow-hidden">
+      {/* ✅ isDark used here too */}
       <div
       className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${
-        dark ? "opacity-10" : "opacity-5"
+        isDark ? "opacity-10" : "opacity-5"
       }`}
       >
       <img
       src="/logo_background1.png"
       alt="Watermark"
       className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain ${
-        dark ? "invert" : ""
+        isDark ? "invert" : ""
       }`}
       />
       </div>
@@ -279,9 +279,7 @@ export default function HomePage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-8 items-stretch">
       {/* Ecosystem Card */}
       <div
-      ref={(el) => {
-        revealRefs.current[0] = el;
-      }}
+      ref={(el) => { revealRefs.current[0] = el; }}
       className="reveal-drop opacity-0 -translate-y-10 bg-(--card)/95 backdrop-blur-sm p-6 sm:p-10 rounded-2xl sm:rounded-[2.5rem] shadow-xl border border-(--brd) flex flex-col"
       >
       <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white mb-4 sm:mb-6">
@@ -300,17 +298,14 @@ export default function HomePage() {
 
       {/* Center Card */}
       <div
-      ref={(el) => {
-        revealRefs.current[1] = el;
-      }}
+      ref={(el) => { revealRefs.current[1] = el; }}
       className="reveal-fade opacity-0 flex flex-col items-center justify-center gap-6 sm:gap-10"
       >
-      <Link href={user ? "/dashboard" : "/register"} className="w-full max-w-[260px]">
+      {/* ✅ mounted && user avoids href/label mismatch */}
+      <Link href={mounted && user ? "/dashboard" : "/register"} className="w-full max-w-[260px]">
       <button className="bg-blue-600 text-white px-6 py-4 sm:px-8 sm:py-6 rounded-2xl sm:rounded-[2rem] text-lg sm:text-2xl font-black shadow-[0_20px_40px_rgba(37,99,235,0.3)] hover:bg-blue-700 hover:scale-105 transition-all w-full uppercase">
-      {user
-        ? locale === "en"
-        ? "Dashboard"
-        : "Кабінет"
+      {mounted && user
+        ? locale === "en" ? "Dashboard" : "Кабінет"
         : t.hero.getStarted}
         </button>
         </Link>
@@ -327,9 +322,7 @@ export default function HomePage() {
 
         {/* Functionality Card */}
         <div
-        ref={(el) => {
-          revealRefs.current[2] = el;
-        }}
+        ref={(el) => { revealRefs.current[2] = el; }}
         className="reveal-drop opacity-0 -translate-y-10 bg-(--card)/95 backdrop-blur-sm p-6 sm:p-10 rounded-2xl sm:rounded-[2.5rem] shadow-xl border border-(--brd) flex flex-col"
         >
         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white mb-4 sm:mb-6">
@@ -354,9 +347,7 @@ export default function HomePage() {
         {sections.map((item: any, index: number) => (
           <div
           key={index}
-          ref={(el) => {
-            revealRefs.current[index + 3] = el;
-          }}
+          ref={(el) => { revealRefs.current[index + 3] = el; }}
           className="reveal-drop opacity-0 -translate-y-10 bg-(--card) p-6 sm:p-10 rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd)"
           >
           <h2 className="text-base sm:text-xl font-black mb-2 sm:mb-3 text-(--t1) uppercase tracking-tight">
