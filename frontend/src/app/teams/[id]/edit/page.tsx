@@ -11,7 +11,7 @@ import MobileHeader from "@/components/MobileHeader";
 import {
     Users, Crown, ChevronRight, ArrowLeft, Loader,
     Save, Send, MessageSquare, Pencil, Trash2,
-    UserPlus, UserMinus, Search, Check, AlertCircle, X,
+    UserPlus, UserMinus, Search, Check, AlertCircle, X, Trophy,
 } from "lucide-react";
 
 interface TeamMember {
@@ -30,9 +30,16 @@ interface Team {
     city_school_org?: string;
     captain_id?: string;
     members_ids?: string[];
+    tournament_id?: string | null;
     telegram_url?: string;
     discord_url?: string;
     created_at?: string;
+}
+
+interface TournamentOption {
+    id: string;
+    name: string;
+    status: string;
 }
 
 export default function EditTeamPage() {
@@ -53,6 +60,10 @@ export default function EditTeamPage() {
     const [saveSuccess, setSaveSuccess] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // Available tournaments for linking
+    const [tournaments, setTournaments] = useState<TournamentOption[]>([]);
+    const [selectedTournamentId, setSelectedTournamentId] = useState<string>("");
+
     // Form states
     const [name, setName] = useState("");
     const [citySchoolOrg, setCitySchoolOrg] = useState("");
@@ -72,6 +83,16 @@ export default function EditTeamPage() {
         if (!authLoading && !user) router.push("/login");
     }, [authLoading, user, router]);
 
+        // Fetch tournaments available for registration
+        const fetchTournaments = useCallback(async () => {
+            const { data } = await supabase
+            .from("tournaments")
+            .select("id, name, status")
+            .in("status", ["upcoming", "registration"])
+            .order("start_at", { ascending: true });
+            setTournaments(data ?? []);
+        }, []);
+
         // Fetch team data
         useEffect(() => {
             if (!user || !teamId) return;
@@ -81,7 +102,7 @@ export default function EditTeamPage() {
                 try {
                     const { data: teamData, error: teamErr } = await supabase
                     .from("teams")
-                    .select("id, name, city_school_org, captain_id, members_ids, telegram_url, discord_url, created_at")
+                    .select("id, name, city_school_org, captain_id, members_ids, tournament_id, telegram_url, discord_url, created_at")
                     .eq("id", teamId)
                     .single();
 
@@ -98,6 +119,7 @@ export default function EditTeamPage() {
                     setCitySchoolOrg(teamData.city_school_org ?? "");
                     setTelegramUrl(teamData.telegram_url ?? "");
                     setDiscordUrl(teamData.discord_url ?? "");
+                    setSelectedTournamentId(teamData.tournament_id ?? "");
 
                     // Fetch members
                     const allIds: string[] = [];
@@ -130,7 +152,8 @@ export default function EditTeamPage() {
             };
 
             fetchTeam();
-        }, [user, teamId]);
+            fetchTournaments();
+        }, [user, teamId, fetchTournaments]);
 
         // Search users to add
         const handleSearch = useCallback(async () => {
@@ -145,7 +168,6 @@ export default function EditTeamPage() {
                 .eq("status", "active")
                 .limit(10);
                 if (error) throw error;
-                // Exclude already-in-team users and captain
                 const currentIds = new Set([
                     team?.captain_id,
                     ...(team?.members_ids ?? []),
@@ -211,9 +233,12 @@ export default function EditTeamPage() {
                         city_school_org: citySchoolOrg.trim() || null,
                         telegram_url: telegramUrl.trim() || null,
                         discord_url: discordUrl.trim() || null,
+                        // Store tournament_id directly on the team row
+                        tournament_id: selectedTournamentId || null,
                 })
                 .eq("id", team.id);
                 if (error) throw error;
+                setTeam(prev => prev ? { ...prev, tournament_id: selectedTournamentId || null } : prev);
                 setSaveSuccess(true);
                 setTimeout(() => setSaveSuccess(false), 2500);
             } catch (e: any) {
@@ -431,9 +456,58 @@ export default function EditTeamPage() {
             </div>
             </section>
 
+            {/* ─── Tournament Link ─── */}
+            <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) shadow-sm overflow-hidden" style={{ animationDelay: "50ms" }}>
+            <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd)">
+            <Trophy size={14} className="text-blue-600" />
+            <h2 className="text-xs font-black uppercase tracking-widest text-(--t1)">Турнір</h2>
+            </div>
+            <div className="p-6 sm:p-8 space-y-4">
+            <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest">
+            Оберіть турнір, до якого хочете приєднатися. Це поле зберігається разом із рештою даних команди.
+            </p>
+
+            {/* Current tournament badge */}
+            {team?.tournament_id && (
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-blue-600/10 border border-blue-600/20">
+                <Trophy size={14} className="text-blue-600 flex-shrink-0" />
+                <p className="text-xs font-black text-blue-600 uppercase tracking-wider truncate">
+                {tournaments.find(t => t.id === team.tournament_id)?.name ?? "Завантаження..."}
+                </p>
+                <button
+                onClick={() => setSelectedTournamentId("")}
+                className="ml-auto flex-shrink-0 p-1 rounded-lg hover:bg-red-500/10 text-(--t2) hover:text-red-500 transition-colors"
+                title="Відв'язати турнір"
+                >
+                <X size={13} />
+                </button>
+                </div>
+            )}
+
+            <select
+            value={selectedTournamentId}
+            onChange={e => setSelectedTournamentId(e.target.value)}
+            className={`${inputClass} cursor-pointer`}
+            >
+            <option value="">— Без турніру —</option>
+            {tournaments.map(t => (
+                <option key={t.id} value={t.id}>
+                {t.name} ({t.status === "registration" ? "Реєстрація відкрита" : "Скоро"})
+                </option>
+            ))}
+            </select>
+
+            {tournaments.length === 0 && (
+                <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest text-center py-2">
+                Немає доступних турнірів для реєстрації
+                </p>
+            )}
+            </div>
+            </section>
+
             {/* ─── Captain ─── */}
             {captain && (
-                <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-amber-500/20 shadow-sm overflow-hidden" style={{ animationDelay: "60ms" }}>
+                <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-amber-500/20 shadow-sm overflow-hidden" style={{ animationDelay: "80ms" }}>
                 <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-amber-500/10 bg-amber-500/5">
                 <Crown size={14} className="text-amber-500" />
                 <h2 className="text-xs font-black uppercase tracking-widest text-amber-500">Капітан команди</h2>
@@ -445,7 +519,7 @@ export default function EditTeamPage() {
             )}
 
             {/* ─── Members ─── */}
-            <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) shadow-sm overflow-hidden" style={{ animationDelay: "100ms" }}>
+            <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) shadow-sm overflow-hidden" style={{ animationDelay: "120ms" }}>
             <div className="flex items-center justify-between px-6 sm:px-8 py-4 border-b border-(--brd)">
             <div className="flex items-center gap-3">
             <Users size={14} className="text-blue-600" />

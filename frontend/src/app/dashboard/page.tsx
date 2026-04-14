@@ -68,11 +68,11 @@ export default function DashboardPage() {
         const ids = (data ?? []).map((t: any) => t.id);
         let counts: Record<string, number> = {};
         if (ids.length) {
-          const { data: regData } = await supabase
-          .from("tournament_teams")
+          const { data: teamsData } = await supabase
+          .from("teams")
           .select("tournament_id")
           .in("tournament_id", ids);
-          (regData ?? []).forEach((r: any) => {
+          (teamsData ?? []).forEach((r: any) => {
             counts[r.tournament_id] = (counts[r.tournament_id] ?? 0) + 1;
           });
         }

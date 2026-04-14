@@ -41,7 +41,7 @@ export default function RegisterTourney() {
   const [accessState, setAccessState] = useState<AccessState>('loading');
   const [countdown, setCountdown] = useState(COUNTDOWN_SEC);
   const DRAFT_KEY = 'register_tourney_draft';
-  const DRAFT_TTL = 5 * 60 * 1000; // 5 хвилин
+  const DRAFT_TTL = 5 * 60 * 1000;
 
   const loadDraft = () => {
     if (typeof window === 'undefined') return null;
@@ -59,11 +59,9 @@ export default function RegisterTourney() {
   const [teamCount, setTeamCount] = useState<number>(draft?.teamCount ?? 0);
   const [roundCount, setRoundCount] = useState<number | null>(draft?.roundCount ?? null);
 
-  // form fields
   const [tourneyName, setTourneyName] = useState(draft?.tourneyName ?? '');
   const [description, setDescription] = useState(draft?.description ?? '');
 
-  // datetime states: [date, time]
   const [startDate, setStartDate]   = useState(draft?.startDate ?? '');
   const [startTime, setStartTime]   = useState(draft?.startTime ?? '');
   const [regStartDate, setRegStartDate] = useState(draft?.regStartDate ?? '');
@@ -71,7 +69,6 @@ export default function RegisterTourney() {
   const [regEndDate, setRegEndDate] = useState(draft?.regEndDate ?? '');
   const [regEndTime, setRegEndTime] = useState(draft?.regEndTime ?? '');
 
-  // submit state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState<boolean>(() => {
@@ -87,7 +84,6 @@ export default function RegisterTourney() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // ── Toolbar formatting ──
   const applyFormat = (syntax: string, wrap = false) => {
     const el = textareaRef.current;
     if (!el) return;
@@ -99,13 +95,11 @@ export default function RegisterTourney() {
     let newCursorEnd: number;
 
     if (wrap) {
-      // Bold (**text**), Italic (*text*), Underline (__text__)
       const wrapped = `${syntax}${selected || 'текст'}${syntax}`;
       newText = description.slice(0, start) + wrapped + description.slice(end);
       newCursorStart = selected ? start : start + syntax.length;
       newCursorEnd   = selected ? start + wrapped.length : start + syntax.length + 4;
     } else {
-      // List (- ), Quote (> ), Heading (## )
       const lineStart = description.lastIndexOf('\n', start - 1) + 1;
       const line = description.slice(lineStart, end);
       const alreadyApplied = line.startsWith(syntax);
@@ -117,14 +111,12 @@ export default function RegisterTourney() {
     }
 
     setDescription(newText);
-    // Відновити фокус і позицію курсора
     requestAnimationFrame(() => {
       el.focus();
       el.setSelectionRange(newCursorStart, newCursorEnd);
     });
   };
 
-  // ── Draft persistence (5 хвилин) ──
   const saveDraft = useCallback(() => {
     if (typeof window === 'undefined') return;
     localStorage.setItem(DRAFT_KEY, JSON.stringify({
@@ -163,7 +155,6 @@ export default function RegisterTourney() {
     const handleConfirmYes = () => { if (timerRef.current) clearInterval(timerRef.current); setAccessState('denied'); };
     const handleConfirmNo  = () => { if (timerRef.current) clearInterval(timerRef.current); router.push('/login'); };
 
-    // ── Combine date + time into ISO timestamptz ──
     const toTimestamp = (date: string, time: string): string | null => {
       if (!date) return null;
       const t = time || '00:00';
@@ -202,6 +193,7 @@ export default function RegisterTourney() {
                                                    p_registration_to: registration_to,
                                                    p_max_teams: teamCount > 0 ? teamCount : null,
                                                    p_rounds: roundCount,
+                                                   p_created_by: user?.id ?? null, // ← ВИПРАВЛЕНО: тепер передається id автора
         });
 
         if (error) throw error;
@@ -351,7 +343,6 @@ export default function RegisterTourney() {
         .cdIn { animation: cardDrop 500ms cubic-bezier(.22,1,.36,1) both }
         `}</style>
 
-        {/* Background watermark */}
         <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
         <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
         </div>
@@ -373,7 +364,6 @@ export default function RegisterTourney() {
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
 
-        {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
         <button onClick={() => router.push('/')} className="hover:text-blue-600 transition-colors">Головна</button>
         <ChevronRight size={10} />
@@ -406,7 +396,6 @@ export default function RegisterTourney() {
         </span>
         </div>
 
-        {/* Tournament name */}
         <div className="p-6 sm:p-8 border-b border-(--brd)">
         <div className="flex justify-between items-center mb-3">
         <label className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
@@ -426,7 +415,6 @@ export default function RegisterTourney() {
         />
         </div>
 
-        {/* Description */}
         <div className="p-6 sm:p-8">
         <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-3">
         {t.tourney?.desc ?? 'Опис / Правила'}
@@ -470,7 +458,6 @@ export default function RegisterTourney() {
         </span>
         </div>
 
-        {/* Start datetime */}
         <div className="p-6 sm:p-8 border-b border-(--brd)">
         <div className="flex justify-between items-center mb-3">
         <label className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
@@ -503,48 +490,28 @@ export default function RegisterTourney() {
         </div>
         </div>
 
-        {/* Registration window */}
         <div className="p-6 sm:p-8 border-b border-(--brd)">
         <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-4">
         {t.tourney?.registration ?? 'Вікно реєстрації команд'}
         </label>
         <div className="grid md:grid-cols-2 gap-4">
-        {/* Registration start */}
         <div className="rounded-2xl p-4 border border-(--brd) bg-(--bg)/50 space-y-3">
         <p className="text-[9px] font-black uppercase tracking-widest text-(--t2) opacity-70">Початок реєстрації</p>
-        <input
-        type="date"
-        value={regStartDate}
-        onChange={e => setRegStartDate(e.target.value)}
-        className="w-full px-4 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all"
-        />
-        <input
-        type="time"
-        value={regStartTime}
-        onChange={e => setRegStartTime(e.target.value)}
-        className="w-full px-4 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all"
-        />
+        <input type="date" value={regStartDate} onChange={e => setRegStartDate(e.target.value)}
+        className="w-full px-4 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all" />
+        <input type="time" value={regStartTime} onChange={e => setRegStartTime(e.target.value)}
+        className="w-full px-4 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all" />
         </div>
-        {/* Registration end */}
         <div className="rounded-2xl p-4 border border-(--brd) bg-(--bg)/50 space-y-3">
         <p className="text-[9px] font-black uppercase tracking-widest text-(--t2) opacity-70">Кінець реєстрації</p>
-        <input
-        type="date"
-        value={regEndDate}
-        onChange={e => setRegEndDate(e.target.value)}
-        className="w-full px-4 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all"
-        />
-        <input
-        type="time"
-        value={regEndTime}
-        onChange={e => setRegEndTime(e.target.value)}
-        className="w-full px-4 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all"
-        />
+        <input type="date" value={regEndDate} onChange={e => setRegEndDate(e.target.value)}
+        className="w-full px-4 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all" />
+        <input type="time" value={regEndTime} onChange={e => setRegEndTime(e.target.value)}
+        className="w-full px-4 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all" />
         </div>
         </div>
         </div>
 
-        {/* Max teams */}
         <div className="p-6 sm:p-8">
         <div className="flex justify-between items-center mb-4">
         <label className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
@@ -554,26 +521,14 @@ export default function RegisterTourney() {
         {t.common?.optional ?? 'Опціонально'}
         </span>
         </div>
-
         <div className="flex items-center overflow-hidden border border-(--brd) rounded-2xl w-fit">
-        <button type="button"
-        onClick={() => setTeamCount(Math.max(0, teamCount - 1))}
-        className="w-12 h-12 text-lg flex items-center justify-center bg-(--bg) text-(--t2) hover:text-blue-600 transition-colors border-r border-(--brd)">
-        −
-        </button>
-        <input
-        type="number"
-        value={teamCount}
-        onChange={e => setTeamCount(Math.max(0, +e.target.value))}
-        className="w-20 text-center text-sm font-black outline-none h-12 bg-transparent text-(--t1)"
-        />
-        <button type="button"
-        onClick={() => setTeamCount(Math.min(256, teamCount + 1))}
-        className="w-12 h-12 text-lg flex items-center justify-center bg-(--bg) text-(--t2) hover:text-blue-600 transition-colors border-l border-(--brd)">
-        +
-        </button>
+        <button type="button" onClick={() => setTeamCount(Math.max(0, teamCount - 1))}
+        className="w-12 h-12 text-lg flex items-center justify-center bg-(--bg) text-(--t2) hover:text-blue-600 transition-colors border-r border-(--brd)">−</button>
+        <input type="number" value={teamCount} onChange={e => setTeamCount(Math.max(0, +e.target.value))}
+        className="w-20 text-center text-sm font-black outline-none h-12 bg-transparent text-(--t1)" />
+        <button type="button" onClick={() => setTeamCount(Math.min(256, teamCount + 1))}
+        className="w-12 h-12 text-lg flex items-center justify-center bg-(--bg) text-(--t2) hover:text-blue-600 transition-colors border-l border-(--brd)">+</button>
         </div>
-
         <div className="flex gap-2 mt-4 flex-wrap">
         {[0, 8, 16, 32, 64].map(n => (
           <button key={n} type="button" onClick={() => setTeamCount(n)}
@@ -599,7 +554,6 @@ export default function RegisterTourney() {
         3. {t.tourney?.format ?? 'Формат'}
         </span>
         </div>
-
         <div className="p-6 sm:p-8">
         <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-4">
         {t.tourney?.rounds ?? 'Кількість раундів'}{' '}
@@ -607,18 +561,12 @@ export default function RegisterTourney() {
         </label>
         <div className="flex flex-wrap gap-2">
         {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-          <button
-          key={n}
-          type="button"
-          onClick={() => setRoundCount(n)}
+          <button key={n} type="button" onClick={() => setRoundCount(n)}
           className={`w-12 h-12 rounded-2xl font-black text-sm uppercase tracking-widest border transition-all active:scale-95 ${
             roundCount === n
             ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/25'
             : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600'
-          }`}
-          >
-          {n}
-          </button>
+          }`}>{n}</button>
         ))}
         </div>
         {roundCount && (
@@ -630,15 +578,10 @@ export default function RegisterTourney() {
         </div>
         </section>
 
-        {/* ── Draft restored banner ── */}
         {draftRestored && (
           <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 px-5 py-4 flex items-center justify-between gap-3">
-          <p className="text-sm font-bold text-blue-500">
-          💾 Відновлено незбережений чернетку
-          </p>
-          <button
-          type="button"
-          onClick={() => {
+          <p className="text-sm font-bold text-blue-500">💾 Відновлено незбережений чернетку</p>
+          <button type="button" onClick={() => {
             clearDraft();
             setTourneyName(''); setDescription('');
             setStartDate(''); setStartTime('');
@@ -647,38 +590,26 @@ export default function RegisterTourney() {
             setTeamCount(0); setRoundCount(null);
             setDraftRestored(false);
           }}
-          className="text-[10px] font-black uppercase tracking-widest text-blue-500 border border-blue-500/40 px-3 py-1.5 rounded-xl hover:bg-blue-500/20 transition-all whitespace-nowrap"
-          >
+          className="text-[10px] font-black uppercase tracking-widest text-blue-500 border border-blue-500/40 px-3 py-1.5 rounded-xl hover:bg-blue-500/20 transition-all whitespace-nowrap">
           Очистити
           </button>
           </div>
         )}
 
-        {/* ── Error message ── */}
         {submitError && (
           <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm font-bold text-red-500">
           ⚠️ {submitError}
           </div>
         )}
 
-        {/* ── Action buttons ── */}
         <div className="flex flex-col sm:flex-row gap-3 pb-8">
-        <button
-        type="submit"
-        disabled={isSubmitting}
-        className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-2"
-        >
-        {isSubmitting && (
-          <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-        )}
+        <button type="submit" disabled={isSubmitting}
+        className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-2">
+        {isSubmitting && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
         {isSubmitting ? 'Зберігається...' : (t.tourney?.createBtn ?? 'Створити турнір')}
         </button>
-        <button
-        type="button"
-        onClick={() => router.back()}
-        disabled={isSubmitting}
-        className="px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60"
-        >
+        <button type="button" onClick={() => router.back()} disabled={isSubmitting}
+        className="px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60">
         {t.common?.cancel ?? 'Скасувати'}
         </button>
         </div>

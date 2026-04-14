@@ -1,13 +1,29 @@
-import { createBrowserClient } from "@supabase/ssr";
+// src/lib/supabase.ts
+import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("Supabase environment variables are missing!");
-}
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+        persistSession: false,  // ми самі керуємо сесією
+        autoRefreshToken: false,
+    },
+    global: {
+        fetch: (url, options = {}) => {
+            const token =
+            typeof window !== "undefined"
+            ? localStorage.getItem("access_token")
+            : null;
 
-export const supabase = createBrowserClient(
-    supabaseUrl || "",
-    supabaseAnonKey || ""
-);
+            if (token) {
+                options.headers = {
+                    ...((options.headers as Record<string, string>) ?? {}),
+                                     Authorization: `Bearer ${token}`,
+                };
+            }
+
+            return fetch(url, options);
+        },
+    },
+});

@@ -56,7 +56,6 @@ export default function TournamentEditPage() {
     const [success, setSuccess]     = useState("");
     const [tourney, setTourney]     = useState<Tournament | null>(null);
 
-    // Form state
     const [name, setName]           = useState("");
     const [rules, setRules]         = useState("");
     const [startDate, setStartDate] = useState("");
@@ -88,7 +87,6 @@ export default function TournamentEditPage() {
                 if (error) throw error;
                 setTourney(data);
 
-                // Populate form
                 setName(data.name ?? "");
                 setRules(data.rules ?? "");
                 setStartDate(toDateStr(data.start_at));
@@ -109,12 +107,11 @@ export default function TournamentEditPage() {
 
         useEffect(() => { fetchTourney(); }, [fetchTourney]);
 
-        // Can edit full info only if NOT ongoing (or within 24h of start)
         const isOngoing = tourney?.status === "ongoing";
         const ongoingWithin24h = isOngoing &&
         tourney && (new Date().getTime() - new Date(tourney.start_at).getTime()) < 24 * 60 * 60 * 1000;
         const canEditFull = tourney?.status === "upcoming" || tourney?.status === "registration";
-        const canEditLimited = ongoingWithin24h; // within 24h can only change status to finished
+        const canEditLimited = ongoingWithin24h;
         const isFinished = tourney?.status === "finished";
 
         const handleSave = async (e: React.FormEvent) => {
@@ -136,9 +133,10 @@ export default function TournamentEditPage() {
                     max_teams: maxTeams > 0 ? maxTeams : null,
                     rounds,
                     status,
+                    updated_at: new Date().toISOString(), // ← завжди оновлюємо timestamp
                 };
 
-                // If ongoing & within 24h, only allow status change
+                // Якщо турнір ongoing і в межах 24год — тільки зміна статусу
                 if (canEditLimited && !canEditFull) {
                     delete payload.name;
                     delete payload.rules;
@@ -149,12 +147,20 @@ export default function TournamentEditPage() {
                     delete payload.rounds;
                 }
 
-                const { error: upErr } = await supabase
+                // ── ВИПРАВЛЕНО: додано .select() щоб перевірити що рядок дійсно оновився ──
+                const { data: updated, error: upErr } = await supabase
                 .from("tournaments")
                 .update(payload)
-                .eq("id", id);
+                .eq("id", id)
+                .select();
 
                 if (upErr) throw upErr;
+
+                // Якщо RLS заблокував update — повертається порожній масив без помилки
+                if (!updated || updated.length === 0) {
+                    throw new Error("Оновлення не виконано. Перевірте права доступу (RLS) у Supabase.");
+                }
+
                 setSuccess("Зміни збережено ✓");
                 await fetchTourney();
             } catch (e: any) {
@@ -212,7 +218,6 @@ export default function TournamentEditPage() {
                 />
 
                 <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
-                {/* Breadcrumb */}
                 <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2) flex-wrap">
                 <button onClick={() => router.push("/")} className="hover:text-blue-600">{t.nav.home}</button>
                 <ChevronRight size={10} />
@@ -223,7 +228,6 @@ export default function TournamentEditPage() {
                 <span className="text-(--t1)">Редагування</span>
                 </nav>
 
-                {/* Ongoing notice */}
                 {isOngoing && (
                     <div className="mb-6 flex items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl">
                     <AlertCircle size={18} className="text-amber-500 flex-shrink-0" />
@@ -282,7 +286,6 @@ export default function TournamentEditPage() {
                 </div>
 
                 <div className="p-6 sm:p-8 space-y-6">
-                {/* Start */}
                 <div>
                 <label className={labelCls}>Дата та час старту</label>
                 <div className="grid grid-cols-2 gap-3">
@@ -293,7 +296,6 @@ export default function TournamentEditPage() {
                 </div>
                 </div>
 
-                {/* Reg window */}
                 <div>
                 <label className={labelCls}>Вікно реєстрації</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -314,7 +316,6 @@ export default function TournamentEditPage() {
                 </div>
                 </div>
 
-                {/* Max teams */}
                 <div>
                 <label className={labelCls}>Максимум команд <span className="normal-case font-bold opacity-60">(0 = без ліміту)</span></label>
                 <div className="flex items-center overflow-hidden border border-(--brd) rounded-2xl w-fit">
@@ -341,7 +342,6 @@ export default function TournamentEditPage() {
                 <span className="text-xs font-black uppercase tracking-widest text-(--t2)">3. Формат</span>
                 </div>
                 <div className="p-6 sm:p-8 space-y-6">
-                {/* Rounds */}
                 <div>
                 <label className={labelCls}>Кількість раундів</label>
                 <div className="flex flex-wrap gap-2">
@@ -356,13 +356,11 @@ export default function TournamentEditPage() {
                 </div>
                 </div>
 
-                {/* Status (only change allowed when ongoing) */}
                 <div>
                 <label className={labelCls}>Статус турніру</label>
                 <div className="flex flex-wrap gap-2">
                 {(["upcoming", "registration", "ongoing", "finished"] as const).map(s => (
                     <button key={s} type="button" onClick={() => setStatus(s)}
-                    // When ongoing within 24h: can only set to "finished"
                     disabled={canEditLimited && !canEditFull && s !== "finished" && s !== tourney.status}
                     className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95 disabled:opacity-30 ${
                         status === s
@@ -381,7 +379,6 @@ export default function TournamentEditPage() {
                 </div>
                 </section>
 
-                {/* Errors & Success */}
                 {error && (
                     <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl">
                     <AlertCircle size={16} className="text-red-500 flex-shrink-0" />
@@ -395,7 +392,6 @@ export default function TournamentEditPage() {
                     </div>
                 )}
 
-                {/* Actions */}
                 <div className="flex flex-col sm:flex-row gap-3 pb-8">
                 <button
                 type="submit"
