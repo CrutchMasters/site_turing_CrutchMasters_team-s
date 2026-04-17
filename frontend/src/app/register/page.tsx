@@ -159,7 +159,7 @@ export default function RegisterPage() {
           email: supabaseUser.email ?? "",
           username: accountData?.username ?? formData.username,
           login: accountData?.login ?? formData.login,
-          role: (accountData?.role ?? "user") as "user" | "jury" | "admin" | "super_admin",
+          role: (accountData?.role ?? "user") as "user" | "jury" | "admin" | "superadmin",
         };
 
         localStorage.setItem("access_token", token);
