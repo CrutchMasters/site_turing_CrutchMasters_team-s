@@ -27,8 +27,8 @@ export const AuthContext = createContext<AuthContextType>({
     token: null,
     isLoading: true,
     login: () => {},
-    logout: () => {},
-    updateUser: () => {},
+                                                          logout: () => {},
+                                                          updateUser: () => {},
 });
 
 export const useAuth = () => {
@@ -49,6 +49,13 @@ function getTokenExpiry(token: string): number {
     } catch {
         return 0;
     }
+}
+
+function clearStorage() {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("refresh_token");
+    document.cookie = "access_token=; path=/; max-age=0";
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -86,39 +93,98 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const refreshRole = useCallback(async (u: User) => {
         try {
             const { data } = await supabaseClient.from("account")
-                .select("id, username, login, email, role, status, avatar_url")
-                .eq("id", u.id).single();
+            .select("id, username, login, email, role, status, avatar_url")
+            .eq("id", u.id).single();
             if (!data) return;
-            const fresh: User = { id: data.id, username: data.username, login: data.login, email: data.email, role: data.role, status: data.status, avatar_url: data.avatar_url };
-            if (JSON.stringify(fresh) !== JSON.stringify(u)) { setUser(fresh); localStorage.setItem("user", JSON.stringify(fresh)); }
+            const fresh: User = {
+                id: data.id,
+                username: data.username,
+                login: data.login,
+                email: data.email,
+                role: data.role,
+                status: data.status,
+                avatar_url: data.avatar_url,
+            };
+            if (JSON.stringify(fresh) !== JSON.stringify(u)) {
+                setUser(fresh);
+                localStorage.setItem("user", JSON.stringify(fresh));
+            }
         } catch { /* silent */ }
     }, []);
 
     useEffect(() => {
         let cancelled = false;
+
         const init = async () => {
             const savedToken = localStorage.getItem("access_token");
             const savedUser  = localStorage.getItem("user");
-            if (!savedToken || !savedUser) { if (!cancelled) setIsLoading(false); return; }
+
+            // Нет данных — гость
+            if (!savedToken || !savedUser) {
+                if (!cancelled) setIsLoading(false);
+                return;
+            }
+
+            // Парсим пользователя
             let parsedUser: User;
-            try { parsedUser = JSON.parse(savedUser); }
-            catch { localStorage.removeItem("access_token"); localStorage.removeItem("user"); localStorage.removeItem("refresh_token"); if (!cancelled) setIsLoading(false); return; }
-            if (!cancelled) { setToken(savedToken); setUser(parsedUser); }
-            let activeToken = savedToken;
-            if (getTokenExpiry(savedToken) < Date.now()) {
+            try {
+                parsedUser = JSON.parse(savedUser);
+            } catch {
+                clearStorage();
+                if (!cancelled) setIsLoading(false);
+                return;
+            }
+
+            // Определяем активный токен:
+            // — если живой, используем его
+            // — если протух, пробуем рефреш
+            // ВАЖНО: setUser вызывается только после того как токен подтверждён
+            let activeToken: string;
+
+            if (getTokenExpiry(savedToken) > Date.now()) {
+                // Токен живой — всё ок
+                activeToken = savedToken;
+            } else {
+                // Токен протух — пробуем тихо обновить
                 const refreshed = await doRefresh();
-                if (!refreshed) { localStorage.removeItem("access_token"); localStorage.removeItem("user"); localStorage.removeItem("refresh_token"); if (!cancelled) { setUser(null); setToken(null); setIsLoading(false); } return; }
+                if (!refreshed) {
+                    // Рефреш тоже не удался — чистим и считаем гостем
+                    clearStorage();
+                    if (!cancelled) {
+                        setUser(null);
+                        setToken(null);
+                        setIsLoading(false);
+                    }
+                    return;
+                }
                 activeToken = refreshed;
             }
-            if (!cancelled) { scheduleRefresh(activeToken); setIsLoading(false); }
+
+            // Токен подтверждён — теперь можно устанавливать пользователя
+            if (!cancelled) {
+                setToken(activeToken);
+                setUser(parsedUser);
+                scheduleRefresh(activeToken);
+                setIsLoading(false);
+            }
+
+            // Фоново синхронизируем роль из БД
             refreshRole(parsedUser);
         };
-        init().catch(() => { if (!cancelled) setIsLoading(false); });
-        return () => { cancelled = true; clearTimer(); };
+
+        init().catch(() => {
+            if (!cancelled) setIsLoading(false);
+        });
+
+            return () => {
+                cancelled = true;
+                clearTimer();
+            };
     }, [doRefresh, scheduleRefresh, refreshRole]);
 
     const login = useCallback((userData: User, accessToken: string, refreshToken?: string) => {
-        setUser(userData); setToken(accessToken);
+        setUser(userData);
+        setToken(accessToken);
         localStorage.setItem("access_token", accessToken);
         localStorage.setItem("user", JSON.stringify(userData));
         document.cookie = `access_token=${accessToken}; path=/; max-age=604800`;
@@ -128,9 +194,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const logout = useCallback(() => {
         clearTimer();
-        localStorage.removeItem("access_token"); localStorage.removeItem("user"); localStorage.removeItem("refresh_token");
-        document.cookie = "access_token=; path=/; max-age=0";
-        setUser(null); setToken(null);
+        clearStorage();
+        setUser(null);
+        setToken(null);
         window.location.href = "/";
     }, []);
 
@@ -145,7 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return (
         <AuthContext.Provider value={{ user, token, isLoading, login, logout, updateUser }}>
-            {children}
+        {children}
         </AuthContext.Provider>
     );
 }

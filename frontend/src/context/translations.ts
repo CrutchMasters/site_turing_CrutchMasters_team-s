@@ -45,13 +45,17 @@ const def = {
       registration: "Team registration window",
       maxTeams: "Maximum number of teams",
       format: "Format",
-      rounds: "Number of rounds",
-      min1: "Minimum - 1",
-      createBtn: "Create tournament",
+        rounds: "Number of rounds",
+        min1: "Minimum - 1",
+        createBtn: "Create tournament",
     },
     sidebar: {
       mainPage: "Main", profile: "Profile", search: "People search",
       registerTeam: "Register team", settings: "Settings", logout: "Log out",
+      notifications: "Notifications", noNotifications: "No notifications",
+      notifMore: "More →", notifAccept: "✓ Accept", notifDecline: "✕ Decline",
+      notifAccepting: "Accepting...", notifDeclining: "Declining...",
+      notifAccepted: "✓ Accepted", notifDeclined: "✕ Declined",
     },
     search: {
       title: "People search",
@@ -88,7 +92,7 @@ const def = {
       welcome: "Welcome", subtitle: "Your tournament hub",
       dashboard: "Dashboard", overview: "Cabinet overview",
       tournamentList: "Tournament list",
-      filterAll: "All",
+      filterAll: "All", filterOpen: "Open", filterRunning: "Running",
       colTournament: "Tournament", colStatus: "Status", colStart: "Start", colActions: "Actions",
       actionOpen: "Open", actionRegister: "Register",
       currentTournament: "Current tournament", task: "Task",
@@ -152,13 +156,17 @@ const def = {
       registration: "Окно регистрации команд",
       maxTeams: "Максимальное количество команд",
       format: "Формат",
-      rounds: "Количество раундов",
-      min1: "Минимально - 1",
-      createBtn: "Создать турнир",
+        rounds: "Количество раундов",
+        min1: "Минимально - 1",
+        createBtn: "Создать турнир",
     },
     sidebar: {
       mainPage: "Главная", profile: "Профиль", search: "Поиск людей",
       registerTeam: "Регистрация команды", settings: "Настройки", logout: "Выйти",
+      notifications: "Уведомления", noNotifications: "Нет уведомлений",
+      notifMore: "Ещё →", notifAccept: "✓ Принять", notifDecline: "✕ Отказать",
+      notifAccepting: "Принятие...", notifDeclining: "Отклонение...",
+      notifAccepted: "✓ Принято", notifDeclined: "✕ Отклонено",
     },
     search: {
       title: "Поиск людей",
@@ -195,7 +203,7 @@ const def = {
       welcome: "Добро пожаловать", subtitle: "Ваш турнирный хаб",
       dashboard: "Дашборд", overview: "Обзор кабинета",
       tournamentList: "Список турниров",
-      filterAll: "Все",
+      filterAll: "Все", filterOpen: "Открытые", filterRunning: "В процессе",
       colTournament: "Турнир", colStatus: "Статус", colStart: "Старт", colActions: "Действия",
       actionOpen: "Открыть", actionRegister: "Регистрация",
       currentTournament: "Текущий турнир", task: "Задание",
@@ -259,13 +267,17 @@ const def = {
       registration: "Вікно реєстрації команд",
       maxTeams: "Максимальна кількість команд",
       format: "Формат",
-      rounds: "Кількість раундів",
-      min1: "Мінімально - 1",
-      createBtn: "Створити турнір",
+        rounds: "Кількість раундів",
+        min1: "Мінімально - 1",
+        createBtn: "Створити турнір",
     },
     sidebar: {
       mainPage: "Головна", profile: "Профіль", search: "Пошук людей",
       registerTeam: "Реєстрація команди", settings: "Налаштування", logout: "Вийти",
+      notifications: "Сповіщення", noNotifications: "Немає сповіщень",
+      notifMore: "Ще →", notifAccept: "✓ Прийняти", notifDecline: "✕ Відхилити",
+      notifAccepting: "Прийняття...", notifDeclining: "Відхилення...",
+      notifAccepted: "✓ Прийнято", notifDeclined: "✕ Відхилено",
     },
     search: {
       title: "Пошук людей",
@@ -302,7 +314,7 @@ const def = {
       welcome: "Ласкаво просимо", subtitle: "Ваш турнірний хаб",
       dashboard: "Дашборд", overview: "Огляд кабінету",
       tournamentList: "Список турнірів",
-      filterAll: "Всі",
+      filterAll: "Всі", filterOpen: "Відкриті", filterRunning: "Тривають",
       colTournament: "Турнір", colStatus: "Статус", colStart: "Старт", colActions: "Дії",
       actionOpen: "Відкрити", actionRegister: "Реєстрація",
       currentTournament: "Поточний турнір", task: "Завдання",
@@ -326,5 +338,5 @@ const def = {
 } as const;
 
 export type Locale = keyof typeof def;
-export type Translations = typeof def[Locale];
-export const translations = def;
+export type Translations = typeof def["en"];
+export const translations = def as unknown as Record<Locale, Translations>;
