@@ -9,6 +9,7 @@ import {
   CheckCircle, AlertCircle, RefreshCw, Pencil, X, Save,
   Bell, Check, CheckCheck, UserPlus, Trophy, Medal,
 } from "lucide-react";
+import AvatarEditorModal from "@/components/AvatarEditorModal";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -89,15 +90,15 @@ function timeAgo(iso: string): string {
 }
 
 const typeIcon: Record<string, React.ReactNode> = {
-  team_invitation:    <UserPlus size={14} className="text-blue-500" />,
-  invitation_accepted:<Check    size={14} className="text-green-500" />,
-  invitation_declined:<X        size={14} className="text-red-500" />,
+  team_invitation:     <UserPlus size={14} className="text-blue-500" />,
+  invitation_accepted: <Check    size={14} className="text-green-500" />,
+  invitation_declined: <X        size={14} className="text-red-500" />,
 };
 
 const typeBorder: Record<string, string> = {
-  team_invitation:    "border-l-blue-500",
-  invitation_accepted:"border-l-green-500",
-  invitation_declined:"border-l-red-500",
+  team_invitation:     "border-l-blue-500",
+  invitation_accepted: "border-l-green-500",
+  invitation_declined: "border-l-red-500",
 };
 
 const tourStatusStyle: Record<string, string> = {
@@ -143,7 +144,6 @@ function useUserTeams(userId: string | undefined) {
 
 function CodeInput({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
-  // Build fixed array of 6 slots, each is a single digit char or ""
   const slots: string[] = Array.from({ length: 6 }, (_, i) => {
     const ch = value[i];
     return ch && /\d/.test(ch) ? ch : "";
@@ -159,11 +159,9 @@ function CodeInput({ value, onChange, disabled }: { value: string; onChange: (v:
     const handleKeyDown = (i: number, e: React.KeyboardEvent) => {
       if (e.key === "Backspace") {
         if (slots[i]) {
-          // clear current cell
           const next = slots.map((c, idx) => (idx === i ? "" : c)).join("");
           onChange(next);
         } else if (i > 0) {
-          // move back and clear previous
           inputs.current[i - 1]?.focus();
           const next = slots.map((c, idx) => (idx === i - 1 ? "" : c)).join("");
           onChange(next);
@@ -224,7 +222,6 @@ function EditProfileSection({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Password
   const [pwStep, setPwStep] = useState<PwStep>("idle");
   const [code, setCode] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -306,6 +303,7 @@ function EditProfileSection({
 
   const inputClass = "w-full px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all";
   const codeIsValid = /^\d{6}$/.test(code);
+
   return (
     <div className="space-y-5">
     {/* Edit fields */}
@@ -507,7 +505,7 @@ function EditProfileSection({
   );
 }
 
-// ── Notification card (compact for sidebar) ───────────────────────────────────
+// ── Notification card ─────────────────────────────────────────────────────────
 
 function NotificationCard({
   notif, idx, responded, responding,
@@ -601,44 +599,43 @@ export default function ProfilePage() {
   const router = useRouter();
   const { user: currentUser, token, isLoading: authLoading } = useAuth();
 
-  const [profileUser, setProfileUser] = useState<any>(null);
-  const [isLoading, setIsLoading]     = useState(true);
-  const [error, setError]             = useState<string | null>(null);
-  const [isEditing, setIsEditing]     = useState(false);
+  const [profileUser, setProfileUser]   = useState<any>(null);
+  const [isLoading, setIsLoading]       = useState(true);
+  const [error, setError]               = useState<string | null>(null);
+  const [isEditing, setIsEditing]       = useState(false);
+  const [showAvatarEditor, setShowAvatarEditor] = useState(false);
 
   const [selectedRole, setSelectedRole]     = useState<Role>("user");
   const [isChangingRole, setIsChangingRole] = useState(false);
   const [roleMsg, setRoleMsg]               = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   const isSuperAdmin = currentUser?.role === "superadmin";
+  const isOwnProfile = currentUser?.id === profileUser?.id;
   const { teams: userTeams, loading: teamsLoading } = useUserTeams(currentUser?.id);
 
-  // Notifications state
-  const [notifications, setNotifications]   = useState<Notification[]>([]);
-  const [notifLoading, setNotifLoading]     = useState(true);
-  const [responding, setResponding]         = useState<Record<string, "accept" | "decline" | null>>({});
-  const [responded, setResponded]           = useState<Record<string, "accepted" | "declined">>({});
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifLoading, setNotifLoading]   = useState(true);
+  const [responding, setResponding]       = useState<Record<string, "accept" | "decline" | null>>({});
+  const [responded, setResponded]         = useState<Record<string, "accepted" | "declined">>({});
 
-  // Tournaments state
-  const [tournaments, setTournaments]       = useState<Tournament[]>([]);
-  const [tourLoading, setTourLoading]       = useState(true);
-  // Всі блоки завантажені
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [tourLoading, setTourLoading] = useState(true);
+
   const allReady = !isLoading && !teamsLoading && !tourLoading && !notifLoading;
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     if (allReady) {
-      // Мінімальна затримка щоб React встиг відрендерити DOM
       const t = setTimeout(() => setVisible(true), 50);
       return () => clearTimeout(t);
     }
   }, [allReady]);
+
   const authHeader = useCallback((): Record<string, string> => {
     const t = (typeof window !== "undefined" && localStorage.getItem("access_token")) || token || "";
     return { "Content-Type": "application/json", Authorization: `Bearer ${t}` };
   }, [token]);
 
-  // Fetch notifications
   const fetchNotifications = useCallback(async () => {
     setNotifLoading(true);
     try {
@@ -649,7 +646,6 @@ export default function ProfilePage() {
     finally { setNotifLoading(false); }
   }, [authHeader]);
 
-  // Fetch tournaments
   const fetchTournaments = useCallback(async () => {
     setTourLoading(true);
     try {
@@ -657,9 +653,7 @@ export default function ProfilePage() {
       if (res.ok) {
         const data = await res.json();
         setTournaments(data.tournaments ?? []);
-      } else {
-        setTournaments([]);
-      }
+      } else { setTournaments([]); }
     } catch { setTournaments([]); }
     finally { setTourLoading(false); }
   }, [authHeader]);
@@ -691,7 +685,6 @@ export default function ProfilePage() {
     fetchTournaments();
   }, [authLoading, currentUser, router, fetchNotifications, fetchTournaments]);
 
-  // Notification actions
   const markAllRead = async () => {
     await fetch(`${API_URL}/api/notifications/mark-read`, {
       method: "POST", headers: authHeader(), body: JSON.stringify({ all: true }),
@@ -752,7 +745,6 @@ export default function ProfilePage() {
     }
   };
 
-
   // ── Layout ─────────────────────────────────────────────────────────────────
 
   if (authLoading) return (
@@ -774,15 +766,18 @@ export default function ProfilePage() {
       .page-ready .fade-up-3 { animation: fadeUp 400ms ease 300ms both }
       .page-ready .fuIn      { animation: fadeUp 300ms ease 50ms both }
       `}} />
+
       <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
       <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
+
       {isMobileSidebarOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
       )}
       <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
       <Sidebar />
       </div>
+
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
       <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Профіль" icon={<UserCircle size={18} className="text-blue-600" />} />
       <div className={`flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10 ${allReady ? "page-ready" : ""}`}>
@@ -798,7 +793,7 @@ export default function ProfilePage() {
       <ArrowLeft size={14} /> Назад
       </button>
 
-      {/* Глобальний оверлей поки не всі дані готові */}
+      {/* Loading overlay */}
       {!allReady && !error && (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
         <div className="flex flex-col items-center gap-3">
@@ -826,7 +821,7 @@ export default function ProfilePage() {
         </div>
 
         {isLoading ? (
-          /* ── SKELETON профілю ── */
+          /* ── Skeleton ── */
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 animate-pulse">
           <div className="w-[88px] h-[88px] rounded-full flex-shrink-0" style={{background:"var(--brd)"}} />
           <div className="flex-1 space-y-3 w-full">
@@ -858,32 +853,59 @@ export default function ProfilePage() {
         ) : (
           <>
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-          {/* Avatar */}
-          <div className="relative flex-shrink-0">
-          <div className="w-22 h-22 rounded-full bg-blue-600/10 flex items-center justify-center border-4 border-(--brd) shadow-md" style={{ width: 88, height: 88 }}>
-          {profileUser?.avatar_url
-            ? <img src={profileUser.avatar_url} alt="avatar" className="w-full h-full object-cover rounded-full" />
-            : <span className="text-3xl font-black text-blue-600">{profileUser?.username?.charAt(0).toUpperCase() ?? "?"}</span>
-          }
+
+          {/* ── Avatar ── */}
+          <div className="relative flex-shrink-0 group">
+          <div
+          className="rounded-full bg-blue-600/10 flex items-center justify-center border-4 border-(--brd) shadow-md overflow-hidden"
+          style={{ width: 88, height: 88 }}
+          >
+          {profileUser?.avatar_url ? (
+            <img
+            src={profileUser.avatar_url}
+            alt="avatar"
+            className="w-full h-full object-cover"
+            />
+          ) : (
+            <span className="text-3xl font-black text-blue-600">
+            {profileUser?.username?.charAt(0).toUpperCase() ?? "?"}
+            </span>
+          )}
           </div>
+
           {profileUser?.status === "active" && (
             <span className="absolute bottom-1 right-1 w-4 h-4 bg-green-500 border-4 border-(--card) rounded-full shadow-sm" />
+          )}
+
+          {/* Edit button — only own profile */}
+          {isOwnProfile && (
+            <button
+            onClick={() => setShowAvatarEditor(true)}
+            className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ width: 88, height: 88 }}
+            >
+            <Pencil size={15} className="text-white" />
+            </button>
           )}
           </div>
 
           <div className="flex-1 space-y-2.5 z-10 w-full text-left">
           <div className="flex flex-row items-center justify-between gap-2">
           <h1 className="text-xl font-black text-(--t1) uppercase tracking-tight">{profileUser?.username}</h1>
-          <button onClick={() => setIsEditing(true)}
-          className="flex items-center gap-1.5 border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2 hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all">
-          <Pencil size={11} /> Редагувати
-          </button>
+          {isOwnProfile && (
+            <button onClick={() => setIsEditing(true)}
+            className="flex items-center gap-1.5 border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2 hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all">
+            <Pencil size={11} /> Редагувати
+            </button>
+          )}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[9px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg">
-          Ваш профіль
-          </span>
+          {isOwnProfile && (
+            <span className="text-[9px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg">
+            Ваш профіль
+            </span>
+          )}
           <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-lg border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>
           {profileUser?.role ?? "user"}
           </span>
@@ -919,6 +941,42 @@ export default function ProfilePage() {
           </div>
           </div>
           </div>
+
+          {/* SuperAdmin: role change */}
+          {isSuperAdmin && (
+            <div className="mt-5 pt-5 border-t border-(--brd) space-y-3">
+            <h3 className="text-xs font-black uppercase tracking-widest text-(--t2) flex items-center gap-2">
+            <Shield size={12} /> Зміна ролі
+            </h3>
+            <div className="flex flex-wrap gap-2 items-center">
+            {ROLES.map(r => (
+              <button key={r} onClick={() => setSelectedRole(r)}
+              className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-lg border transition-all ${
+                selectedRole === r
+                ? roleBadgeColor[r] + " scale-105"
+                : "border-(--brd) text-(--t2) hover:border-blue-600/40"
+              }`}>
+              {r}
+              </button>
+            ))}
+            <button onClick={handleRoleChange} disabled={isChangingRole || selectedRole === profileUser?.role}
+            className="flex items-center gap-1.5 bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl px-4 py-2 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-40 shadow-lg shadow-blue-600/20">
+            {isChangingRole ? <Loader size={11} className="animate-spin" /> : <Save size={11} />}
+            Застосувати
+            </button>
+            </div>
+            {roleMsg && (
+              <div className={`flex items-center gap-2 p-2.5 rounded-xl text-xs font-bold border ${
+                roleMsg.type === "ok"
+                ? "bg-green-500/10 border-green-500/20 text-green-600"
+                : "bg-red-500/10 border-red-500/20 text-red-500"
+              }`}>
+              {roleMsg.type === "ok" ? <CheckCircle size={13} /> : <AlertCircle size={13} />}
+              {roleMsg.text}
+              </div>
+            )}
+            </div>
+          )}
           </>
         )}
         </section>
@@ -1139,6 +1197,16 @@ export default function ProfilePage() {
       )}
       </div>
       </main>
+
+      {/* ── Avatar Editor Modal ── */}
+      {showAvatarEditor && profileUser && (
+        <AvatarEditorModal
+        userId={profileUser.id}
+        supabase={supabase}
+        onSave={(url) => setProfileUser((prev: any) => ({ ...prev, avatar_url: url }))}
+        onClose={() => setShowAvatarEditor(false)}
+        />
+      )}
       </div>
   );
 }
