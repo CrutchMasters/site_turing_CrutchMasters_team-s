@@ -305,7 +305,7 @@ function EditProfileSection({
   function resetPw() { setPwStep("idle"); setCode(""); setNewPw(""); setConfirmPw(""); setPwError(null); }
 
   const inputClass = "w-full px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all";
-
+  const codeIsValid = /^\d{6}$/.test(code);
   return (
     <div className="space-y-5">
     {/* Edit fields */}
@@ -386,9 +386,9 @@ function EditProfileSection({
         </div>
       )}
       <div className="flex flex-col sm:flex-row gap-2">
-      <button onClick={verifyCode} disabled={!/^\d{6}$/.test(code)}
+      <button onClick={verifyCode} disabled={!codeIsValid}
       className={`flex-1 flex items-center justify-center gap-2 font-black text-xs uppercase tracking-widest rounded-xl px-5 py-3 active:scale-95 transition-all shadow-lg ${
-        /^\d{6}$/.test(code)
+        codeIsValid
         ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-600/20"
         : "bg-(--brd) text-(--t2) cursor-not-allowed opacity-50 shadow-none"
       }`}>
@@ -622,7 +622,17 @@ export default function ProfilePage() {
   // Tournaments state
   const [tournaments, setTournaments]       = useState<Tournament[]>([]);
   const [tourLoading, setTourLoading]       = useState(true);
+  // Всі блоки завантажені
+  const allReady = !isLoading && !teamsLoading && !tourLoading && !notifLoading;
+  const [visible, setVisible] = useState(false);
 
+  useEffect(() => {
+    if (allReady) {
+      // Мінімальна затримка щоб React встиг відрендерити DOM
+      const t = setTimeout(() => setVisible(true), 50);
+      return () => clearTimeout(t);
+    }
+  }, [allReady]);
   const authHeader = useCallback((): Record<string, string> => {
     const t = (typeof window !== "undefined" && localStorage.getItem("access_token")) || token || "";
     return { "Content-Type": "application/json", Authorization: `Bearer ${t}` };
@@ -742,18 +752,28 @@ export default function ProfilePage() {
     }
   };
 
+
   // ── Layout ─────────────────────────────────────────────────────────────────
 
-  const Layout = ({ children }: { children: React.ReactNode }) => (
+  if (authLoading) return (
+    <div className="min-h-screen bg-(--bg) flex items-center justify-center">
+    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  if (!currentUser) return null;
+
+  return (
     <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
-    <style jsx global>{`
-      @keyframes fadeUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:none} }
-      .fade-up   { animation: fadeUp 380ms cubic-bezier(.22,1,.36,1) both }
-      .fade-up-1 { animation: fadeUp 380ms cubic-bezier(.22,1,.36,1) 60ms both }
-      .fade-up-2 { animation: fadeUp 380ms cubic-bezier(.22,1,.36,1) 120ms both }
-      .fade-up-3 { animation: fadeUp 380ms cubic-bezier(.22,1,.36,1) 180ms both }
-      .fuIn      { animation: fadeUp 300ms cubic-bezier(.22,1,.36,1) both }
-      `}</style>
+    <style dangerouslySetInnerHTML={{__html: `
+      @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:none} }
+      .fade-up, .fade-up-1, .fade-up-2, .fade-up-3, .fuIn { opacity: 0; }
+      .page-ready .fade-up   { animation: fadeUp 400ms ease 0ms both }
+      .page-ready .fade-up-1 { animation: fadeUp 400ms ease 100ms both }
+      .page-ready .fade-up-2 { animation: fadeUp 400ms ease 200ms both }
+      .page-ready .fade-up-3 { animation: fadeUp 400ms ease 300ms both }
+      .page-ready .fuIn      { animation: fadeUp 300ms ease 50ms both }
+      `}} />
       <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
       <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
@@ -765,347 +785,360 @@ export default function ProfilePage() {
       </div>
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
       <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Профіль" icon={<UserCircle size={18} className="text-blue-600" />} />
-      {children}
-      </main>
-      </div>
-  );
+      <div className={`flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10 ${allReady ? "page-ready" : ""}`}>
 
-  if (authLoading) return (
-    <div className="min-h-screen bg-(--bg) flex items-center justify-center">
-    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2)">
+      <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
+      <ChevronRight size={10} />
+      <span className="text-(--t1)">Профіль</span>
+      </nav>
 
-  if (isLoading) return (
-    <Layout>
-    <div className="flex-1 flex items-center justify-center">
-    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-    </div>
-    </Layout>
-  );
+      <button onClick={() => router.back()} className="mb-5 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
+      <ArrowLeft size={14} /> Назад
+      </button>
 
-  if (!currentUser) return null;
-
-  return (
-    <Layout>
-    <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10">
-
-    {/* Breadcrumb */}
-    <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2)">
-    <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
-    <ChevronRight size={10} />
-    <span className="text-(--t1)">Профіль</span>
-    </nav>
-
-    <button onClick={() => router.back()} className="mb-5 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
-    <ArrowLeft size={14} /> Назад
-    </button>
-
-    {error ? (
-      <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) p-12 text-center">
-      <p className="text-lg font-black text-(--t1) mb-2">{error}</p>
-      <p className="text-(--t2) text-sm">Користувача не знайдено</p>
-      </div>
-    ) : profileUser ? (
-
-      /* ── Two-column layout ── */
-      <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
-
-      {/* ══ LEFT COLUMN ══════════════════════════════════════════════ */}
-      <div className="flex flex-col gap-5 w-full xl:flex-1 min-w-0">
-
-      {/* Profile card */}
-      <section className="fade-up bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-5 sm:p-7 relative overflow-hidden">
-      <div className="absolute right-0 top-0 opacity-5 pointer-events-none text-(--t1) hidden md:block">
-      <Shield size={220} />
-      </div>
-
-      {isEditing ? (
-        <EditProfileSection
-        profileUser={profileUser}
-        onSave={(updated) => { setProfileUser((prev: any) => ({ ...prev, ...updated })); setIsEditing(false); }}
-        onCancel={() => setIsEditing(false)}
-        />
-      ) : (
-        <>
-        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-        {/* Avatar */}
-        <div className="relative flex-shrink-0">
-        <div className="w-22 h-22 rounded-full bg-blue-600/10 flex items-center justify-center border-4 border-(--brd) shadow-md" style={{ width: 88, height: 88 }}>
-        {profileUser.avatar_url
-          ? <img src={profileUser.avatar_url} alt="avatar" className="w-full h-full object-cover rounded-full" />
-          : <span className="text-3xl font-black text-blue-600">{profileUser.username?.charAt(0).toUpperCase() ?? "?"}</span>
-        }
+      {/* Глобальний оверлей поки не всі дані готові */}
+      {!allReady && !error && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+        <div className="flex flex-col items-center gap-3">
+        <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 opacity-70">Завантаження...</p>
         </div>
-        {profileUser.status === "active" && (
-          <span className="absolute bottom-1 right-1 w-4 h-4 bg-green-500 border-4 border-(--card) rounded-full shadow-sm" />
+        </div>
+      )}
+
+      {error ? (
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10">
+        <p className="text-lg font-black text-(--t1) mb-2">{error}</p>
+        <p className="text-(--t2) text-sm">Користувача не знайдено</p>
+        </div>
+      ) : (
+        <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
+
+        {/* ══ LEFT COLUMN ══════════════════════════════════════════════ */}
+        <div className="flex flex-col gap-5 w-full xl:flex-1 min-w-0">
+
+        {/* Profile card */}
+        <section className="fade-up bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-5 sm:p-7 relative overflow-hidden">
+        <div className="absolute right-0 top-0 opacity-5 pointer-events-none text-(--t1) hidden md:block">
+        <Shield size={220} />
+        </div>
+
+        {isLoading ? (
+          /* ── SKELETON профілю ── */
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 animate-pulse">
+          <div className="w-[88px] h-[88px] rounded-full flex-shrink-0" style={{background:"var(--brd)"}} />
+          <div className="flex-1 space-y-3 w-full">
+          <div className="flex items-center justify-between">
+          <div className="h-6 w-36 rounded-xl" style={{background:"var(--brd)"}} />
+          <div className="h-8 w-24 rounded-xl" style={{background:"var(--brd)"}} />
+          </div>
+          <div className="flex gap-2">
+          <div className="h-5 w-20 rounded-lg" style={{background:"var(--brd)"}} />
+          <div className="h-5 w-16 rounded-lg" style={{background:"var(--brd)"}} />
+          </div>
+          <div className="space-y-2 pt-1">
+          <div className="h-4 w-48 rounded-lg" style={{background:"var(--brd)"}} />
+          <div className="h-4 w-44 rounded-lg" style={{background:"var(--brd)"}} />
+          <div className="h-4 w-52 rounded-lg" style={{background:"var(--brd)"}} />
+          <div className="h-4 w-32 rounded-lg" style={{background:"var(--brd)"}} />
+          </div>
+          <div className="pt-2 border-t border-(--brd)">
+          <div className="h-3 w-64 rounded-lg" style={{background:"var(--brd)"}} />
+          </div>
+          </div>
+          </div>
+        ) : isEditing ? (
+          <EditProfileSection
+          profileUser={profileUser}
+          onSave={(updated) => { setProfileUser((prev: any) => ({ ...prev, ...updated })); setIsEditing(false); }}
+          onCancel={() => setIsEditing(false)}
+          />
+        ) : (
+          <>
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
+          {/* Avatar */}
+          <div className="relative flex-shrink-0">
+          <div className="w-22 h-22 rounded-full bg-blue-600/10 flex items-center justify-center border-4 border-(--brd) shadow-md" style={{ width: 88, height: 88 }}>
+          {profileUser?.avatar_url
+            ? <img src={profileUser.avatar_url} alt="avatar" className="w-full h-full object-cover rounded-full" />
+            : <span className="text-3xl font-black text-blue-600">{profileUser?.username?.charAt(0).toUpperCase() ?? "?"}</span>
+          }
+          </div>
+          {profileUser?.status === "active" && (
+            <span className="absolute bottom-1 right-1 w-4 h-4 bg-green-500 border-4 border-(--card) rounded-full shadow-sm" />
+          )}
+          </div>
+
+          <div className="flex-1 space-y-2.5 z-10 w-full text-left">
+          <div className="flex flex-row items-center justify-between gap-2">
+          <h1 className="text-xl font-black text-(--t1) uppercase tracking-tight">{profileUser?.username}</h1>
+          <button onClick={() => setIsEditing(true)}
+          className="flex items-center gap-1.5 border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2 hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all">
+          <Pencil size={11} /> Редагувати
+          </button>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[9px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg">
+          Ваш профіль
+          </span>
+          <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-lg border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>
+          {profileUser?.role ?? "user"}
+          </span>
+          </div>
+
+          <div className="mt-2 space-y-2 text-sm">
+          <p className="flex items-center gap-2.5 font-medium">
+          <User size={14} className="text-blue-600 flex-shrink-0" />
+          <span className="text-(--t2) text-xs">Ім'я:</span>
+          <span className="font-bold text-sm">{profileUser?.username}</span>
+          </p>
+          <p className="flex items-center gap-2.5 font-medium">
+          <User size={14} className="text-blue-600 flex-shrink-0" />
+          <span className="text-(--t2) text-xs">Логін:</span>
+          <span className="font-bold text-sm">{profileUser?.login}</span>
+          </p>
+          <p className="flex items-center gap-2.5 font-medium">
+          <Mail size={14} className="text-blue-600 flex-shrink-0" />
+          <span className="text-(--t2) text-xs">Email:</span>
+          <span className="font-bold text-sm break-all">{profileUser?.email}</span>
+          </p>
+          <p className="flex items-center gap-2.5 font-medium">
+          <Shield size={14} className="text-blue-600 flex-shrink-0" />
+          <span className="text-(--t2) text-xs">Роль:</span>
+          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>
+          {profileUser?.role ?? "user"}
+          </span>
+          </p>
+          </div>
+
+          <div className="pt-2.5 border-t border-(--brd) text-[9px] font-bold uppercase tracking-widest text-(--t2)">
+          ID: {profileUser?.id}
+          </div>
+          </div>
+          </div>
+          </>
+        )}
+        </section>
+
+        {/* Teams */}
+        <section className="fade-up-1 bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
+        <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
+        <div className="w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0">
+        <Users size={14} />
+        </div>
+        <div>
+        <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Команди</p>
+        {!teamsLoading && userTeams.length > 0 && (
+          <p className="text-[10px] font-bold text-(--t2) mt-0.5">{userTeams.length} команд</p>
+        )}
+        </div>
+        </div>
+        <div className="p-5 sm:p-7">
+        {teamsLoading ? (
+          <div className="space-y-2">
+          {[1,2].map(i => (
+            <div key={i} className="h-[60px] rounded-2xl animate-pulse" style={{background:"var(--brd)"}} />
+          ))}
+          </div>
+        ) : userTeams.length === 0 ? (
+          <div className="text-center py-5">
+          <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2">
+          <Users className="w-5 h-5 text-(--t2) opacity-40" />
+          </div>
+          <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Не перебуває в жодній команді</p>
+          <button onClick={() => router.push("/register_team")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">
+          Створити команду →
+          </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+          {userTeams.map(team => {
+            const isCaptain = team.captain_id === profileUser.id;
+            const memberCount = team.members_ids?.length ?? 0;
+            return (
+              <button key={team.id} type="button" onClick={() => router.push("/teams/" + team.id)}
+              className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group text-left">
+              <div className="w-9 h-9 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-sm flex-shrink-0">
+              {team.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-black text-(--t1) text-sm truncate group-hover:text-blue-600 transition-colors">{team.name}</span>
+              {isCaptain && (
+                <span className="text-[8px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1">
+                <Crown size={7} /> Капітан
+                </span>
+              )}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+              {team.city_school_org && <span className="text-[10px] font-bold text-(--t2) truncate">{team.city_school_org}</span>}
+              <span className="text-[10px] font-bold text-(--t2) flex items-center gap-1 flex-shrink-0">
+              <Users size={8} /> {memberCount} уч.
+              </span>
+              </div>
+              </div>
+              <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            );
+          })}
+          </div>
+        )}
+        </div>
+        </section>
+
+        {/* Tournaments */}
+        <section className="fade-up-2 bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
+        <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
+        <div className="w-7 h-7 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0">
+        <Trophy size={14} />
+        </div>
+        <div>
+        <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Турніри</p>
+        {!tourLoading && tournaments.length > 0 && (
+          <p className="text-[10px] font-bold text-(--t2) mt-0.5">{tournaments.length} турнірів</p>
+        )}
+        </div>
+        </div>
+        <div className="p-5 sm:p-7">
+        {tourLoading ? (
+          <div className="space-y-2">
+          {[1,2].map(i => (
+            <div key={i} className="h-[60px] rounded-2xl animate-pulse" style={{background:"var(--brd)"}} />
+          ))}
+          </div>
+        ) : tournaments.length === 0 ? (
+          <div className="text-center py-5">
+          <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2">
+          <Trophy className="w-5 h-5 text-(--t2) opacity-40" />
+          </div>
+          <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Не бере участь у турнірах</p>
+          <button onClick={() => router.push("/tournaments")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-amber-500 hover:underline">
+          Переглянути турніри →
+          </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+          {tournaments.map((t, i) => {
+            const st = t.status ?? "upcoming";
+            const stStyle = tourStatusStyle[st] ?? tourStatusStyle.upcoming;
+            const stLabel = tourStatusLabel[st] ?? st;
+            return (
+              <button key={t.id} type="button" onClick={() => router.push("/tournaments/" + t.id)}
+              className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group text-left"
+              style={{ animationDelay: `${i * 40}ms` }}>
+              <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 font-black text-sm flex-shrink-0">
+              {t.place === 1 ? "🥇" : t.place === 2 ? "🥈" : t.place === 3 ? "🥉" : <Trophy size={15} />}
+              </div>
+              <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-black text-(--t1) text-sm truncate group-hover:text-amber-500 transition-colors">{t.name}</span>
+              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${stStyle}`}>
+              {stLabel}
+              </span>
+              </div>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              {t.game && <span className="text-[10px] font-bold text-(--t2) truncate">{t.game}</span>}
+              {t.team_name && (
+                <span className="text-[10px] font-bold text-(--t2) flex items-center gap-1">
+                <Users size={8} /> {t.team_name}
+                </span>
+              )}
+              {t.place && (
+                <span className="text-[10px] font-black text-amber-500 flex items-center gap-1">
+                <Medal size={8} /> {t.place} місце
+                </span>
+              )}
+              </div>
+              {(t.start_date || t.end_date) && (
+                <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">
+                {t.start_date && new Date(t.start_date).toLocaleDateString("uk-UA")}
+                {t.start_date && t.end_date && " — "}
+                {t.end_date && new Date(t.end_date).toLocaleDateString("uk-UA")}
+                </p>
+              )}
+              </div>
+              <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            );
+          })}
+          </div>
+        )}
+        </div>
+        </section>
+
+        </div>
+
+        {/* ══ RIGHT COLUMN — Notifications ═════════════════════════════ */}
+        <div className="flex flex-col gap-5 w-full xl:w-[380px] flex-shrink-0">
+        <section className="fade-up bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
+        <div className="flex items-center justify-between gap-2 px-5 sm:px-6 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
+        <div className="flex items-center gap-2.5">
+        <div className="relative w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0">
+        <Bell size={14} />
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black flex items-center justify-center">
+          {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
+        </div>
+        <div>
+        <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Сповіщення</p>
+        {!notifLoading && (
+          <p className="text-[10px] font-bold text-(--t2) mt-0.5">
+          {unreadCount > 0 ? `${unreadCount} непрочитаних` : "Все прочитано"}
+          </p>
+        )}
+        </div>
+        </div>
+        {unreadCount > 0 && (
+          <button onClick={markAllRead}
+          className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 border border-(--brd) bg-(--bg) rounded-xl px-3 py-1.5 transition-all hover:border-blue-600/40 active:scale-95">
+          <CheckCheck size={12} /> Всі
+          </button>
         )}
         </div>
 
-        <div className="flex-1 space-y-2.5 z-10 w-full text-left">
-        <div className="flex flex-row items-center justify-between gap-2">
-        <h1 className="text-xl font-black text-(--t1) uppercase tracking-tight">{profileUser.username}</h1>
-        <button onClick={() => setIsEditing(true)}
-        className="flex items-center gap-1.5 border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2 hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all">
-        <Pencil size={11} /> Редагувати
-        </button>
+        <div className="p-4 sm:p-5 max-h-[calc(100vh-220px)] overflow-y-auto">
+        {notifLoading ? (
+          <div className="space-y-2.5">
+          {[1,2,3].map(i => (
+            <div key={i} className="h-[72px] rounded-xl animate-pulse" style={{background:"var(--brd)"}} />
+          ))}
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="flex flex-col items-center py-12 text-center">
+          <Bell className="w-10 h-10 text-(--t2) mb-3 opacity-25" />
+          <p className="text-sm font-black text-(--t1) mb-1">Немає сповіщень</p>
+          <p className="text-(--t2) text-xs font-medium">Тут з'являться запрошення до команд</p>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+          {notifications.map((notif, i) => (
+            <NotificationCard
+            key={notif.id}
+            notif={notif}
+            idx={i}
+            responded={responded[notif.id]}
+            responding={responding[notif.id] ?? null}
+            onAccept={() => respondInvitation(notif, true)}
+            onDecline={() => respondInvitation(notif, false)}
+            onMarkRead={() => markRead(notif.id)}
+            onGoTeam={(teamId) => router.push("/teams/" + teamId)}
+            />
+          ))}
+          </div>
+        )}
+        </div>
+        </section>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[9px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg">
-        Ваш профіль
-        </span>
-        <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-lg border ${roleBadgeColor[profileUser.role as Role] ?? roleBadgeColor.user}`}>
-        {profileUser.role ?? "user"}
-        </span>
-        </div>
-
-        <div className="mt-2 space-y-2 text-sm">
-        <p className="flex items-center gap-2.5 font-medium">
-        <User size={14} className="text-blue-600 flex-shrink-0" />
-        <span className="text-(--t2) text-xs">Ім'я:</span>
-        <span className="font-bold text-sm">{profileUser.username}</span>
-        </p>
-        <p className="flex items-center gap-2.5 font-medium">
-        <User size={14} className="text-blue-600 flex-shrink-0" />
-        <span className="text-(--t2) text-xs">Логін:</span>
-        <span className="font-bold text-sm">{profileUser.login}</span>
-        </p>
-        <p className="flex items-center gap-2.5 font-medium">
-        <Mail size={14} className="text-blue-600 flex-shrink-0" />
-        <span className="text-(--t2) text-xs">Email:</span>
-        <span className="font-bold text-sm break-all">{profileUser.email}</span>
-        </p>
-        <p className="flex items-center gap-2.5 font-medium">
-        <Shield size={14} className="text-blue-600 flex-shrink-0" />
-        <span className="text-(--t2) text-xs">Роль:</span>
-        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${roleBadgeColor[profileUser.role as Role] ?? roleBadgeColor.user}`}>
-        {profileUser.role ?? "user"}
-        </span>
-        </p>
-        </div>
-
-        <div className="pt-2.5 border-t border-(--brd) text-[9px] font-bold uppercase tracking-widest text-(--t2)">
-        ID: {profileUser.id}
-        </div>
-        </div>
-        </div>
-        </>
-      )}
-      </section>
-
-      {/* Teams */}
-      <section className="fade-up-1 bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
-      <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/40">
-      <div className="w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0">
-      <Users size={14} />
-      </div>
-      <div>
-      <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Команди</p>
-      {!teamsLoading && userTeams.length > 0 && (
-        <p className="text-[10px] font-bold text-(--t2) mt-0.5">{userTeams.length} команд</p>
-      )}
-      </div>
-      </div>
-      <div className="p-5 sm:p-7">
-      {teamsLoading ? (
-        <div className="flex items-center gap-2 text-(--t2) py-2">
-        <Loader size={13} className="animate-spin" />
-        <span className="text-[11px] font-bold uppercase tracking-wider">Завантаження...</span>
-        </div>
-      ) : userTeams.length === 0 ? (
-        <div className="text-center py-5">
-        <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2">
-        <Users className="w-5 h-5 text-(--t2) opacity-40" />
-        </div>
-        <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Не перебуває в жодній команді</p>
-        <button onClick={() => router.push("/register_team")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">
-        Створити команду →
-        </button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-        {userTeams.map(team => {
-          const isCaptain = team.captain_id === profileUser.id;
-          const memberCount = team.members_ids?.length ?? 0;
-          return (
-            <button key={team.id} type="button" onClick={() => router.push(`/teams/${team.id}`)}
-            className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group text-left">
-            <div className="w-9 h-9 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-sm flex-shrink-0">
-            {team.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-black text-(--t1) text-sm truncate group-hover:text-blue-600 transition-colors">{team.name}</span>
-            {isCaptain && (
-              <span className="text-[8px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1">
-              <Crown size={7} /> Капітан
-              </span>
-            )}
-            </div>
-            <div className="flex items-center gap-2 mt-0.5">
-            {team.city_school_org && <span className="text-[10px] font-bold text-(--t2) truncate">{team.city_school_org}</span>}
-            <span className="text-[10px] font-bold text-(--t2) flex items-center gap-1 flex-shrink-0">
-            <Users size={8} /> {memberCount} уч.
-            </span>
-            </div>
-            </div>
-            <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </button>
-          );
-        })}
         </div>
       )}
       </div>
-      </section>
-
-      {/* Tournaments */}
-      <section className="fade-up-2 bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
-      <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/40">
-      <div className="w-7 h-7 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0">
-      <Trophy size={14} />
+      </main>
       </div>
-      <div>
-      <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Турніри</p>
-      {!tourLoading && tournaments.length > 0 && (
-        <p className="text-[10px] font-bold text-(--t2) mt-0.5">{tournaments.length} турнірів</p>
-      )}
-      </div>
-      </div>
-      <div className="p-5 sm:p-7">
-      {tourLoading ? (
-        <div className="flex items-center gap-2 text-(--t2) py-2">
-        <Loader size={13} className="animate-spin" />
-        <span className="text-[11px] font-bold uppercase tracking-wider">Завантаження...</span>
-        </div>
-      ) : tournaments.length === 0 ? (
-        <div className="text-center py-5">
-        <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2">
-        <Trophy className="w-5 h-5 text-(--t2) opacity-40" />
-        </div>
-        <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Не бере участь у турнірах</p>
-        <button onClick={() => router.push("/tournaments")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-amber-500 hover:underline">
-        Переглянути турніри →
-        </button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-        {tournaments.map((t, i) => {
-          const st = t.status ?? "upcoming";
-          const stStyle = tourStatusStyle[st] ?? tourStatusStyle.upcoming;
-          const stLabel = tourStatusLabel[st] ?? st;
-          return (
-            <button key={t.id} type="button" onClick={() => router.push(`/tournaments/${t.id}`)}
-            className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group text-left"
-            style={{ animationDelay: `${i * 40}ms` }}>
-            <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 font-black text-sm flex-shrink-0">
-            {t.place === 1 ? "🥇" : t.place === 2 ? "🥈" : t.place === 3 ? "🥉" : <Trophy size={15} />}
-            </div>
-            <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-black text-(--t1) text-sm truncate group-hover:text-amber-500 transition-colors">{t.name}</span>
-            <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${stStyle}`}>
-            {stLabel}
-            </span>
-            </div>
-            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            {t.game && <span className="text-[10px] font-bold text-(--t2) truncate">{t.game}</span>}
-            {t.team_name && (
-              <span className="text-[10px] font-bold text-(--t2) flex items-center gap-1">
-              <Users size={8} /> {t.team_name}
-              </span>
-            )}
-            {t.place && (
-              <span className="text-[10px] font-black text-amber-500 flex items-center gap-1">
-              <Medal size={8} /> {t.place} місце
-              </span>
-            )}
-            </div>
-            {(t.start_date || t.end_date) && (
-              <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">
-              {t.start_date && new Date(t.start_date).toLocaleDateString("uk-UA")}
-              {t.start_date && t.end_date && " — "}
-              {t.end_date && new Date(t.end_date).toLocaleDateString("uk-UA")}
-              </p>
-            )}
-            </div>
-            <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </button>
-          );
-        })}
-        </div>
-      )}
-      </div>
-      </section>
-
-      </div>
-
-      {/* ══ RIGHT COLUMN — Notifications ═════════════════════════════ */}
-      <div className="flex flex-col gap-5 w-full xl:w-[380px] flex-shrink-0">
-      <section className="fade-up bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
-      <div className="flex items-center justify-between gap-2 px-5 sm:px-6 py-3.5 border-b border-(--brd) bg-(--bg)/40">
-      <div className="flex items-center gap-2.5">
-      <div className="relative w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0">
-      <Bell size={14} />
-      {unreadCount > 0 && (
-        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black flex items-center justify-center">
-        {unreadCount > 9 ? "9+" : unreadCount}
-        </span>
-      )}
-      </div>
-      <div>
-      <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Сповіщення</p>
-      {!notifLoading && (
-        <p className="text-[10px] font-bold text-(--t2) mt-0.5">
-        {unreadCount > 0 ? `${unreadCount} непрочитаних` : "Все прочитано"}
-        </p>
-      )}
-      </div>
-      </div>
-      {unreadCount > 0 && (
-        <button onClick={markAllRead}
-        className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 border border-(--brd) bg-(--bg) rounded-xl px-3 py-1.5 transition-all hover:border-blue-600/40 active:scale-95">
-        <CheckCheck size={12} /> Всі
-        </button>
-      )}
-      </div>
-
-      <div className="p-4 sm:p-5 max-h-[calc(100vh-220px)] overflow-y-auto">
-      {notifLoading ? (
-        <div className="flex flex-col items-center gap-3 py-12">
-        <Loader className="w-6 h-6 text-blue-600 animate-spin" />
-        <p className="text-[10px] font-black uppercase tracking-widest text-(--t2)">Завантаження...</p>
-        </div>
-      ) : notifications.length === 0 ? (
-        <div className="flex flex-col items-center py-12 text-center">
-        <Bell className="w-10 h-10 text-(--t2) mb-3 opacity-25" />
-        <p className="text-sm font-black text-(--t1) mb-1">Немає сповіщень</p>
-        <p className="text-(--t2) text-xs font-medium">Тут з'являться запрошення до команд</p>
-        </div>
-      ) : (
-        <div className="space-y-2.5">
-        {notifications.map((notif, i) => (
-          <NotificationCard
-          key={notif.id}
-          notif={notif}
-          idx={i}
-          responded={responded[notif.id]}
-          responding={responding[notif.id] ?? null}
-          onAccept={() => respondInvitation(notif, true)}
-          onDecline={() => respondInvitation(notif, false)}
-          onMarkRead={() => markRead(notif.id)}
-          onGoTeam={(teamId) => router.push(`/teams/${teamId}`)}
-          />
-        ))}
-        </div>
-      )}
-      </div>
-      </section>
-      </div>
-
-      </div>
-    ) : null}
-    </div>
-    </Layout>
   );
 }
