@@ -16,6 +16,25 @@ typeof window !== "undefined" && window.location.hostname === "localhost"
 ? "http://localhost:8000"
 : "https://site-turing-crutchmasters-team-s.onrender.com";
 
+function UserAvatar({ avatarUrl, username, size = 8 }: { avatarUrl?: string; username?: string; size?: number }) {
+  const letter = username?.charAt(0).toUpperCase() ?? "?";
+  const sizeClass = `w-${size} h-${size}`;
+  if (avatarUrl) {
+    return (
+      <img
+      src={avatarUrl}
+      alt={username ?? "avatar"}
+      className={`${sizeClass} rounded-full object-cover flex-shrink-0`}
+      />
+    );
+  }
+  return (
+    <div className={`${sizeClass} rounded-full bg-blue-600 flex items-center justify-center text-white font-black text-sm flex-shrink-0`}>
+    {letter}
+    </div>
+  );
+}
+
 export default function HomePage() {
   const { locale, setLocale, t } = useLanguage();
   const { dark, toggle } = useTheme();
@@ -23,7 +42,6 @@ export default function HomePage() {
   const [backendMessage, setBackendMessage] = useState("waiting...");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  // ✅ mounted guard — prevents server/client mismatch for localStorage-dependent values
   const [mounted, setMounted] = useState(false);
 
   const revealRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -85,9 +103,6 @@ export default function HomePage() {
   };
 
   const sections = t.infoSections || [];
-  const avatarLetter = user?.username?.charAt(0).toUpperCase() ?? "?";
-
-  // ✅ After mount, use real dark value; before mount, assume light (matches SSR default)
   const isDark = mounted && dark;
 
   return (
@@ -118,7 +133,6 @@ export default function HomePage() {
       onClick={toggle}
       className="flex items-center justify-between px-3 py-2 rounded-xl bg-(--bg) hover:bg-(--brd) transition border border-(--brd)"
       >
-      {/* ✅ isDark instead of dark — safe after mount */}
       <span className="text-xs font-black uppercase tracking-wide text-(--t1)">
       {isDark ? "🌙 Dark" : "☀️ Light"}
       </span>
@@ -186,16 +200,14 @@ export default function HomePage() {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-      {/* ✅ mounted && user — SSR renders sign-in/up buttons, client swaps in user menu */}
       {mounted && user ? (
         <div className="relative" ref={userMenuRef}>
         <button
         onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
         className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 rounded-xl hover:bg-(--bg) transition-all border border-transparent hover:border-(--brd)"
         >
-        <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-black text-sm">
-        {avatarLetter}
-        </div>
+        {/* ✅ Avatar with photo */}
+        <UserAvatar avatarUrl={user.avatar_url} username={user.username} size={8} />
         <span className="text-sm font-bold text-(--t1) hidden sm:block max-w-[120px] truncate">
         {user.username}
         </span>
@@ -208,13 +220,13 @@ export default function HomePage() {
 
         {isUserMenuOpen && (
           <div className="absolute right-0 top-full mt-2 w-48 bg-(--card) border border-(--brd) rounded-2xl shadow-xl overflow-hidden z-50">
-          <div className="px-4 py-3 border-b border-(--brd)">
-          <p className="text-xs font-black text-(--t1) truncate">
-          {user.username}
-          </p>
-          <p className="text-[10px] font-bold text-(--t2) uppercase tracking-wider">
-          {user.role}
-          </p>
+          <div className="px-4 py-3 border-b border-(--brd) flex items-center gap-3">
+          {/* ✅ Avatar in dropdown header */}
+          <UserAvatar avatarUrl={user.avatar_url} username={user.username} size={9} />
+          <div className="min-w-0">
+          <p className="text-xs font-black text-(--t1) truncate">{user.username}</p>
+          <p className="text-[10px] font-bold text-(--t2) uppercase tracking-wider">{user.role}</p>
+          </div>
           </div>
           <Link
           href="/dashboard"
@@ -260,7 +272,6 @@ export default function HomePage() {
 
       {/* HERO SECTION */}
       <main className="relative min-h-screen flex items-center justify-center px-4 pt-20 pb-10 sm:p-6 overflow-hidden">
-      {/* ✅ isDark used here too */}
       <div
       className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${
         isDark ? "opacity-10" : "opacity-5"
@@ -301,7 +312,6 @@ export default function HomePage() {
       ref={(el) => { revealRefs.current[1] = el; }}
       className="reveal-fade opacity-0 flex flex-col items-center justify-center gap-6 sm:gap-10"
       >
-      {/* ✅ mounted && user avoids href/label mismatch */}
       <Link href={mounted && user ? "/dashboard" : "/register"} className="w-full max-w-[260px]">
       <button className="bg-blue-600 text-white px-6 py-4 sm:px-8 sm:py-6 rounded-2xl sm:rounded-[2rem] text-lg sm:text-2xl font-black shadow-[0_20px_40px_rgba(37,99,235,0.3)] hover:bg-blue-700 hover:scale-105 transition-all w-full uppercase">
       {mounted && user
