@@ -16,14 +16,14 @@ typeof window !== "undefined" && window.location.hostname === "localhost"
 
 const EyeIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268-2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268-2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
   </svg>
 );
 
 const EyeOffIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268-2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268-2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
   </svg>
 );
 
@@ -64,6 +64,7 @@ export default function RegisterPage() {
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setFieldError(null);
   };
 
   // Шаг 1: signUp через Supabase Auth (отправляет OTP на почту)
@@ -71,16 +72,58 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!canSubmit) return;
     setLoading(true);
+    setFieldError(null);
+
     try {
+      // 1. Проверяем уникальность login в таблице account
+      const { data: existingLogin } = await supabase
+        .from("account")
+        .select("id")
+        .eq("login", formData.login)
+        .maybeSingle();
+
+      if (existingLogin) {
+        setFieldError("Этот логин уже занят. Выберите другой.");
+        return;
+      }
+
+      // 2. Проверяем уникальность email в таблице account
+      const { data: existingEmail } = await supabase
+        .from("account")
+        .select("id")
+        .eq("email", formData.email)
+        .maybeSingle();
+
+      if (existingEmail) {
+        setFieldError("Пользователь с таким email уже существует.");
+        return;
+      }
+
+      // 3. Регистрируем в Supabase Auth
       const { error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
-        options: { data: { username: formData.username, login: formData.login } },
+        options: {
+          data: {
+            username: formData.username,
+            login: formData.login,
+          },
+        },
       });
-      if (error) throw error;
+
+      if (error) {
+        // Переводим ошибки Supabase на русский
+        if (error.message.includes("already registered") || error.message.includes("already been registered")) {
+          setFieldError("Пользователь с таким email уже существует.");
+        } else {
+          setFieldError(error.message);
+        }
+        return;
+      }
+
       setShowOtp(true);
     } catch (error: any) {
-      alert(error.message || "Registration failed");
+      setFieldError(error.message || "Ошибка регистрации");
     } finally {
       setLoading(false);
     }
@@ -98,6 +141,7 @@ export default function RegisterPage() {
         token: otp,
         type: "signup",
       });
+
       if (verifyError) throw verifyError;
       if (!verifyData.session) throw new Error("Сесія не отримана після верифікації");
 
@@ -159,23 +203,23 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-(--bg) flex flex-col items-center justify-center font-sans text-(--t1) relative overflow-hidden transition-colors duration-300 px-4">
-    <style jsx global>{`
-      .reveal-drop { transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
-      .otp-animate { animation: slideUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-      @keyframes slideUp {
-        from { opacity: 0; transform: translateY(20px) scale(0.95); }
-        to   { opacity: 1; transform: translateY(0) scale(1); }
-      }
+      <style jsx global>{`
+        .reveal-drop { transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
+        .otp-animate { animation: slideUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(20px) scale(0.95); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
       `}</style>
 
       {/* Watermark */}
       <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${dark ? "opacity-10" : "opacity-5"}`}>
-      <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
+        <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
 
       {!showOtp && (
         <Link href="/" className="absolute top-6 left-6 sm:top-8 sm:left-8 text-(--t2) hover:text-blue-600 text-xs font-black uppercase tracking-[0.3em] transition-all flex items-center gap-2 z-20">
-        <span>←</span> {t.nav.backHome}
+          <span>←</span> {t.nav.backHome}
         </Link>
       )}
 
@@ -272,6 +316,6 @@ export default function RegisterPage() {
         </button>
         </div>
       )}
-      </div>
+    </div>
   );
 }
