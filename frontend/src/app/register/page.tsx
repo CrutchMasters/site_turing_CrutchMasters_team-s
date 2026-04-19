@@ -9,6 +9,11 @@ import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 import { useAuth } from "@/context/AuthContext";
 
+const API_URL =
+typeof window !== "undefined" && window.location.hostname === "localhost"
+? "http://localhost:8000"
+: "https://site-turing-crutchmasters-team-s.onrender.com";
+
 const EyeIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -38,9 +43,9 @@ export default function RegisterPage() {
   const [showOtp, setShowOtp] = useState(false);
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [fieldError, setFieldError] = useState<string | null>(null);
 
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -62,6 +67,7 @@ export default function RegisterPage() {
     setFieldError(null);
   };
 
+  // Шаг 1: signUp через Supabase Auth (отправляет OTP на почту)
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
@@ -123,12 +129,13 @@ export default function RegisterPage() {
     }
   };
 
+  // Шаг 2: верифицируем OTP → бэкенд создаёт account → берём account из БД
   const handleOtpVerify = async () => {
     if (otp.length !== 6) return;
     setLoading(true);
-
+    setOtpError(null);
     try {
-      // 1. Верифицируем OTP
+      // 1. Верифицируем OTP — Supabase Auth подтверждает email и возвращает сессию
       const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
         email: formData.email,
         token: otp,
@@ -136,41 +143,57 @@ export default function RegisterPage() {
       });
 
       if (verifyError) throw verifyError;
+      if (!verifyData.session) throw new Error("Сесія не отримана після верифікації");
 
-      // 2. Триггер handle_new_user уже создал запись в account автоматически.
-      //    НЕ делаем повторный запрос на /api/register — это вызывало ошибку "уже существует".
-      //    Просто ждём секунду чтобы триггер отработал.
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const accessToken = verifyData.session.access_token;
+      const refreshToken = verifyData.session.refresh_token;
 
-      // 3. Получаем данные аккаунта из таблицы account
-      if (verifyData.session) {
-        const token = verifyData.session.access_token;
-        const supabaseUser = verifyData.session.user;
+      // 2. Говорим бэкенду создать запись в account (он найдёт auth-юзера по email
+      //    и вставит account.id = auth UUID)
+      const res = await fetch(`${API_URL}/api/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: formData.username,
+          login:    formData.login,
+          email:    formData.email,
+          password: formData.password,
+        }),
+      });
 
-        // Загружаем профиль из account (триггер уже должен был его создать)
-        const { data: accountData } = await supabase
-          .from("account")
-          .select("id, username, login, role")
-          .eq("auth_id", supabaseUser.id)
-          .maybeSingle();
-
-        const userData = {
-          id: supabaseUser.id,
-          email: supabaseUser.email ?? "",
-          username: accountData?.username ?? formData.username,
-          login: accountData?.login ?? formData.login,
-          role: (accountData?.role ?? "user") as "user" | "jury" | "admin" | "superadmin",
-        };
-
-        localStorage.setItem("access_token", token);
-        localStorage.setItem("user", JSON.stringify(userData));
-        document.cookie = `access_token=${token}; path=/; max-age=604800`;
-
-        authLogin(userData, token, verifyData.session.refresh_token);
-        router.push("/dashboard");
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.detail || "Failed to save user");
       }
+
+      // 3. Берём свежую запись из account по email — получаем настоящий account.id
+      const { data: accountData, error: accErr } = await supabase
+      .from("account")
+      .select("id, username, login, email, role, status, avatar_url")
+      .eq("email", formData.email)
+      .single();
+
+      if (accErr || !accountData) {
+        throw new Error("Не вдалося отримати дані акаунту після реєстрації");
+      }
+
+      // 4. Собираем userData с account.id (не auth UUID напрямую)
+      const userData = {
+        id:         accountData.id,
+        email:      accountData.email,
+        username:   accountData.username,
+        login:      accountData.login,
+        role:       accountData.role as "user" | "admin" | "jury" | "superadmin",
+        status:     accountData.status,
+        avatar_url: accountData.avatar_url,
+      };
+
+      // 5. Сохраняем в контекст и localStorage
+      authLogin(userData, accessToken, refreshToken);
+      router.push("/dashboard");
+
     } catch (error: any) {
-      alert(error.message || "Verification failed");
+      setOtpError(error.message || "Verification failed");
     } finally {
       setLoading(false);
     }
@@ -202,95 +225,95 @@ export default function RegisterPage() {
 
       {!showOtp ? (
         <div ref={cardRef} className="reveal-drop opacity-0 -translate-y-10 z-10 w-full max-w-md bg-(--card)/70 backdrop-blur-2xl p-8 sm:p-10 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl border border-(--brd) flex flex-col items-center">
-          <h1 className="text-3xl sm:text-4xl font-black text-(--t1) mb-8 tracking-tighter uppercase text-center">
-            {t.auth.registerTitle}
-          </h1>
+        <h1 className="text-3xl sm:text-4xl font-black text-(--t1) mb-8 tracking-tighter uppercase text-center">
+        {t.auth.registerTitle}
+        </h1>
 
-          <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
-            <input name="username" type="text" placeholder={t.auth.username} value={formData.username} onChange={handleChange} className={inputClass} required />
-            <input name="login"    type="text" placeholder={t.auth.login}    value={formData.login}    onChange={handleChange} className={inputClass} required />
-            <input name="email"    type="email" placeholder={t.auth.email}   value={formData.email}    onChange={handleChange} className={inputClass} required />
+        <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
+        <input name="username" type="text" placeholder={t.auth.username} value={formData.username} onChange={handleChange} className={inputClass} required />
+        <input name="login"    type="text" placeholder={t.auth.login}    value={formData.login}    onChange={handleChange} className={inputClass} required />
+        <input name="email"    type="email" placeholder={t.auth.email}   value={formData.email}    onChange={handleChange} className={inputClass} required />
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="relative">
-                <input name="password" type={showPassword ? "text" : "password"} placeholder={t.auth.password} value={formData.password} onChange={handleChange}
-                  className="w-full px-4 py-4 pr-10 rounded-2xl border border-(--brd) bg-(--bg)/50 focus:ring-2 focus:ring-blue-500 focus:bg-(--card) outline-none text-sm text-(--t1)" required />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-500 transition-colors">
-                  {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-                </button>
-              </div>
-              <div className="relative">
-                <input name="confirmPassword" type={showConfirmPassword ? "text" : "password"} placeholder={t.auth.confirmPassword} value={formData.confirmPassword} onChange={handleChange}
-                  className={`w-full px-4 py-4 pr-10 rounded-2xl border bg-(--bg)/50 focus:ring-2 focus:bg-(--card) outline-none text-sm text-(--t1) ${!isPasswordMatch && formData.confirmPassword ? "border-red-500" : "border-(--brd)"}`} required />
-                <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-500 transition-colors">
-                  {showConfirmPassword ? <EyeOffIcon /> : <EyeIcon />}
-                </button>
-              </div>
-            </div>
+        <div className="grid grid-cols-2 gap-3">
+        <div className="relative">
+        <input name="password" type={showPassword ? "text" : "password"} placeholder={t.auth.password} value={formData.password} onChange={handleChange}
+        className="w-full px-4 py-4 pr-10 rounded-2xl border border-(--brd) bg-(--bg)/50 focus:ring-2 focus:ring-blue-500 focus:bg-(--card) outline-none text-sm text-(--t1)" required />
+        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-500 transition-colors">
+        {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+        </button>
+        </div>
+        <div className="relative">
+        <input name="confirmPassword" type={showConfirmPassword ? "text" : "password"} placeholder={t.auth.confirmPassword} value={formData.confirmPassword} onChange={handleChange}
+        className={`w-full px-4 py-4 pr-10 rounded-2xl border bg-(--bg)/50 focus:ring-2 focus:bg-(--card) outline-none text-sm text-(--t1) ${!isPasswordMatch && formData.confirmPassword ? "border-red-500" : "border-(--brd)"}`} required />
+        <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-500 transition-colors">
+        {showConfirmPassword ? <EyeOffIcon /> : <EyeIcon />}
+        </button>
+        </div>
+        </div>
 
-            {/* Ошибка поля */}
-            {fieldError && (
-              <div className="w-full px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-500 text-xs font-bold text-center">
-                {fieldError}
-              </div>
-            )}
+        <div className="flex items-center gap-3 py-1">
+        <input type="checkbox" id="privacy" checked={agreed} onChange={() => setAgreed(!agreed)} className="w-5 h-5 cursor-pointer accent-blue-600 rounded-lg flex-shrink-0" />
+        <label htmlFor="privacy" className="text-[11px] font-bold text-(--t2) cursor-pointer uppercase tracking-wider">
+        {t.auth.privacy}{" "}
+        <Link href="/privacy_policy" target="_blank" onClick={(e) => e.stopPropagation()}
+        className="text-blue-600 hover:text-blue-500 hover:underline underline-offset-2 transition-colors">
+        Privacy Policy
+        </Link>
+        </label>
+        </div>
 
-            <div className="flex items-center gap-3 py-1">
-              <input type="checkbox" id="privacy" checked={agreed} onChange={() => setAgreed(!agreed)} className="w-5 h-5 cursor-pointer accent-blue-600 rounded-lg flex-shrink-0" />
-              <label htmlFor="privacy" className="text-[11px] font-bold text-(--t2) cursor-pointer uppercase tracking-wider">
-                {t.auth.privacy}{" "}
-                <Link
-                  href="/privacy_policy"
-                  target="_blank"
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-blue-600 hover:text-blue-500 hover:underline underline-offset-2 transition-colors"
-                >
-                  Privacy Policy
-                </Link>
-              </label>
-            </div>
+        <button type="submit" disabled={!canSubmit}
+        className={`w-full py-5 rounded-[2rem] text-xl font-black shadow-xl transition-all active:scale-95 uppercase tracking-tighter ${
+          canSubmit ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20" : "bg-(--brd) text-(--t2) cursor-not-allowed"
+        }`}>
+        {loading ? "..." : t.auth.registerBtn}
+        </button>
+        </form>
 
-            <button type="submit" disabled={!canSubmit}
-              className={`w-full py-5 rounded-[2rem] text-xl font-black shadow-xl transition-all active:scale-95 uppercase tracking-tighter ${
-                canSubmit ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20" : "bg-(--brd) text-(--t2) cursor-not-allowed"
-              }`}>
-              {loading ? "..." : t.auth.registerBtn}
-            </button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <span className="text-(--t2) text-xs font-bold uppercase tracking-widest">{t.auth.haveAccount} </span>
-            <Link href="/login" className="text-blue-600 font-black hover:underline ml-1 uppercase text-xs tracking-widest">
-              {t.auth.toSignIn}
-            </Link>
-          </div>
+        <div className="mt-6 text-center">
+        <span className="text-(--t2) text-xs font-bold uppercase tracking-widest">{t.auth.haveAccount} </span>
+        <Link href="/login" className="text-blue-600 font-black hover:underline ml-1 uppercase text-xs tracking-widest">
+        {t.auth.toSignIn}
+        </Link>
+        </div>
         </div>
       ) : (
         <div className="otp-animate z-20 w-full max-w-sm bg-(--card)/80 backdrop-blur-3xl p-10 rounded-[3rem] shadow-2xl border border-(--brd) flex flex-col items-center text-(--t1)">
-          <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600 mb-6">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
+        <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600 mb-6">
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+        </div>
+        <h2 className="text-2xl font-black text-(--t1) uppercase mb-2">Verify</h2>
+        <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-8">
+        Enter 6-digit code sent to {formData.email}
+        </p>
+
+        <input
+        type="text" maxLength={6} value={otp}
+        onChange={(e) => { setOtp(e.target.value.replace(/\D/g, "")); setOtpError(null); }}
+        placeholder="000000"
+        className="w-full text-center text-4xl font-black tracking-[0.2em] py-5 rounded-2xl bg-(--bg)/50 focus:bg-(--card) focus:ring-2 focus:ring-blue-500 outline-none transition-all text-blue-600 mb-4 placeholder:text-(--t2)/30"
+        />
+
+        {/* Ошибка OTP */}
+        {otpError && (
+          <div className="w-full mb-4 px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-[11px] font-bold text-center">
+          {otpError}
           </div>
-          <h2 className="text-2xl font-black text-(--t1) uppercase mb-2">Verify</h2>
-          <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-8">
-            Enter 6-digit code sent to {formData.email}
-          </p>
-          <input
-            type="text" maxLength={6} value={otp}
-            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-            placeholder="000000"
-            className="w-full text-center text-4xl font-black tracking-[0.2em] py-5 rounded-2xl bg-(--bg)/50 focus:bg-(--card) focus:ring-2 focus:ring-blue-500 outline-none transition-all text-blue-600 mb-8 placeholder:text-(--t2)/30"
-          />
-          <button onClick={handleOtpVerify} disabled={otp.length !== 6 || loading}
-            className={`w-full py-5 rounded-[1.8rem] font-black uppercase shadow-lg transition-all mb-4 ${
-              otp.length === 6 ? "bg-blue-600 text-white shadow-blue-500/20" : "bg-(--brd) text-(--t2)"
-            }`}>
-            {loading ? "..." : "Confirm"}
-          </button>
-          <button onClick={() => { setShowOtp(false); setOtp(""); }} className="text-[10px] font-black text-(--t2) hover:text-red-500 uppercase tracking-[0.3em] transition-all flex items-center gap-2">
-            <span>←</span> Back
-          </button>
+        )}
+
+        <button onClick={handleOtpVerify} disabled={otp.length !== 6 || loading}
+        className={`w-full py-5 rounded-[1.8rem] font-black uppercase shadow-lg transition-all mb-4 ${
+          otp.length === 6 && !loading ? "bg-blue-600 text-white shadow-blue-500/20" : "bg-(--brd) text-(--t2) cursor-not-allowed"
+        }`}>
+        {loading ? "..." : "Confirm"}
+        </button>
+
+        <button onClick={() => { setShowOtp(false); setOtp(""); setOtpError(null); }}
+        className="text-[10px] font-black text-(--t2) hover:text-red-500 uppercase tracking-[0.3em] transition-all flex items-center gap-2">
+        <span>←</span> Back
+        </button>
         </div>
       )}
     </div>
