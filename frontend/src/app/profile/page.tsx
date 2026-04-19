@@ -7,7 +7,7 @@ import {
   User, Mail, Shield, ChevronRight, UserCircle, ArrowLeft, Loader,
   Users, Crown, ExternalLink, Lock, Eye, EyeOff, KeyRound,
   CheckCircle, AlertCircle, RefreshCw, Pencil, X, Save,
-  Bell, Check, CheckCheck, UserPlus, Trophy, Medal,
+  Bell, Check, CheckCheck, UserPlus, Trophy,
 } from "lucide-react";
 import AvatarEditorModal from "@/components/AvatarEditorModal";
 import { useTheme } from "@/hooks/useTheme";
@@ -21,7 +21,6 @@ typeof window !== "undefined" && window.location.hostname === "localhost"
 ? "http://localhost:8000"
 : "https://site-turing-crutchmasters-team-s.onrender.com";
 
-const ROLES = ["user", "jury", "admin"] as const;
 type Role = "user" | "jury" | "admin" | "superadmin";
 
 const roleBadgeColor: Record<Role, string> = {
@@ -64,11 +63,9 @@ interface Tournament {
   id: string;
   name: string;
   status?: string;
-  start_date?: string;
-  end_date?: string;
-  game?: string;
-  team_name?: string;
-  place?: number | null;
+  start_at?: string;
+  registration_from?: string;
+  registration_to?: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -102,6 +99,7 @@ const typeBorder: Record<string, string> = {
 };
 
 const tourStatusStyle: Record<string, string> = {
+  registration: "text-purple-500 bg-purple-500/10 border-purple-500/20",
   active:   "text-green-500 bg-green-500/10 border-green-500/20",
   ongoing:  "text-green-500 bg-green-500/10 border-green-500/20",
   upcoming: "text-blue-500 bg-blue-500/10 border-blue-500/20",
@@ -109,6 +107,7 @@ const tourStatusStyle: Record<string, string> = {
 };
 
 const tourStatusLabel: Record<string, string> = {
+  registration: "Реєстрація",
   active: "Активний", ongoing: "Активний",
   upcoming: "Очікується", finished: "Завершено",
 };
@@ -605,10 +604,6 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing]       = useState(false);
   const [showAvatarEditor, setShowAvatarEditor] = useState(false);
 
-  const [selectedRole, setSelectedRole]     = useState<Role>("user");
-  const [isChangingRole, setIsChangingRole] = useState(false);
-  const [roleMsg, setRoleMsg]               = useState<{ type: "ok" | "err"; text: string } | null>(null);
-
   const isSuperAdmin = currentUser?.role === "superadmin";
   const isOwnProfile = currentUser?.id === profileUser?.id;
   const { teams: userTeams, loading: teamsLoading } = useUserTeams(currentUser?.id);
@@ -672,7 +667,6 @@ export default function ProfilePage() {
         .single();
         if (error) throw error;
         setProfileUser(data);
-        setSelectedRole((data.role as Role) ?? "user");
       } catch {
         setError("Користувача не знайдено");
       } finally {
@@ -718,32 +712,6 @@ export default function ProfilePage() {
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
-
-  const handleRoleChange = async () => {
-    if (!isSuperAdmin || !profileUser) return;
-    setIsChangingRole(true); setRoleMsg(null);
-    try {
-      const freshToken = (typeof window !== "undefined" && localStorage.getItem("access_token")) || token;
-      if (!freshToken) throw new Error("Токен авторизації не знайдено. Увійдіть знову.");
-      const expiry = (() => {
-        try { const p = JSON.parse(atob(freshToken.split(".")[1])); return (p.exp ?? 0) * 1000; } catch { return 0; }
-      })();
-      if (expiry < Date.now()) throw new Error("Сесія закінчилась. Увійдіть знову.");
-      const res = await fetch(`${API_URL}/api/change-role`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${freshToken}` },
-        body: JSON.stringify({ target_user_id: profileUser.id, new_role: selectedRole }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? `Помилка сервера: ${res.status}`);
-      setProfileUser((prev: any) => ({ ...prev, role: selectedRole }));
-      setRoleMsg({ type: "ok", text: `Роль змінено на ${selectedRole}` });
-    } catch (e: any) {
-      setRoleMsg({ type: "err", text: e.message });
-    } finally {
-      setIsChangingRole(false);
-    }
-  };
 
   // ── Layout ─────────────────────────────────────────────────────────────────
 
@@ -842,23 +810,20 @@ export default function ProfilePage() {
           <div className="pt-2 border-t border-(--brd)">
           <div className="h-3 w-64 rounded-lg" style={{background:"var(--brd)"}} />
           </div>
+          <div className="pt-2 border-t border-(--brd)">
+          <div className="h-3 w-64 rounded-lg" style={{background:"var(--brd)"}} />
           </div>
           </div>
-        ) : isEditing ? (
-          <EditProfileSection
-          profileUser={profileUser}
-          onSave={(updated) => { setProfileUser((prev: any) => ({ ...prev, ...updated })); setIsEditing(false); }}
-          onCancel={() => setIsEditing(false)}
-          />
+          </div>
         ) : (
-          <>
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
+          <div className="flex flex-col sm:flex-row items-center sm:items-stretch gap-6">
 
           {/* ── Avatar ── */}
-          <div className="relative flex-shrink-0 group">
+          <div className="flex flex-col items-center justify-center flex-shrink-0">
+          <div className="relative group">
           <div
           className="rounded-full bg-blue-600/10 flex items-center justify-center border-4 border-(--brd) shadow-md overflow-hidden"
-          style={{ width: 88, height: 88 }}
+          style={{ width: 120, height: 120 }}
           >
           {profileUser?.avatar_url ? (
             <img
@@ -867,29 +832,32 @@ export default function ProfilePage() {
             className="w-full h-full object-cover"
             />
           ) : (
-            <span className="text-3xl font-black text-blue-600">
+            <span className="text-4xl font-black text-blue-600">
             {profileUser?.username?.charAt(0).toUpperCase() ?? "?"}
             </span>
           )}
           </div>
 
           {profileUser?.status === "active" && (
-            <span className="absolute bottom-1 right-1 w-4 h-4 bg-green-500 border-4 border-(--card) rounded-full shadow-sm" />
+            <span className="absolute bottom-1.5 right-1.5 w-4 h-4 bg-green-500 border-4 border-(--card) rounded-full shadow-sm" />
           )}
 
-          {/* Edit button — only own profile */}
           {isOwnProfile && (
             <button
             onClick={() => setShowAvatarEditor(true)}
             className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ width: 88, height: 88 }}
+            style={{ width: 120, height: 120 }}
             >
-            <Pencil size={15} className="text-white" />
+            <Pencil size={18} className="text-white" />
             </button>
           )}
           </div>
+          </div>
 
-          <div className="flex-1 space-y-2.5 z-10 w-full text-left">
+          {/* ── Info ── */}
+          <div className="flex-1 flex flex-col justify-center space-y-2.5 z-10 w-full text-left">
+
+          {/* Title row */}
           <div className="flex flex-row items-center justify-between gap-2">
           <h1 className="text-xl font-black text-(--t1) uppercase tracking-tight">{profileUser?.username}</h1>
           {isOwnProfile && (
@@ -900,6 +868,7 @@ export default function ProfilePage() {
           )}
           </div>
 
+          {/* Badges */}
           <div className="flex items-center gap-2 flex-wrap">
           {isOwnProfile && (
             <span className="text-[9px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg">
@@ -911,73 +880,39 @@ export default function ProfilePage() {
           </span>
           </div>
 
-          <div className="mt-2 space-y-2 text-sm">
+          {/* Fields */}
+          <div className="space-y-2 text-sm">
           <p className="flex items-center gap-2.5 font-medium">
           <User size={14} className="text-blue-600 flex-shrink-0" />
-          <span className="text-(--t2) text-xs">Ім'я:</span>
+          <span className="text-(--t2) text-xs w-10 flex-shrink-0">Ім'я:</span>
           <span className="font-bold text-sm">{profileUser?.username}</span>
           </p>
           <p className="flex items-center gap-2.5 font-medium">
           <User size={14} className="text-blue-600 flex-shrink-0" />
-          <span className="text-(--t2) text-xs">Логін:</span>
+          <span className="text-(--t2) text-xs w-10 flex-shrink-0">Логін:</span>
           <span className="font-bold text-sm">{profileUser?.login}</span>
           </p>
           <p className="flex items-center gap-2.5 font-medium">
           <Mail size={14} className="text-blue-600 flex-shrink-0" />
-          <span className="text-(--t2) text-xs">Email:</span>
+          <span className="text-(--t2) text-xs w-10 flex-shrink-0">Email:</span>
           <span className="font-bold text-sm break-all">{profileUser?.email}</span>
           </p>
           <p className="flex items-center gap-2.5 font-medium">
           <Shield size={14} className="text-blue-600 flex-shrink-0" />
-          <span className="text-(--t2) text-xs">Роль:</span>
+          <span className="text-(--t2) text-xs w-10 flex-shrink-0">Роль:</span>
           <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>
           {profileUser?.role ?? "user"}
           </span>
           </p>
           </div>
 
+          {/* ID */}
           <div className="pt-2.5 border-t border-(--brd) text-[9px] font-bold uppercase tracking-widest text-(--t2)">
           ID: {profileUser?.id}
           </div>
-          </div>
-          </div>
 
-          {/* SuperAdmin: role change */}
-          {isSuperAdmin && (
-            <div className="mt-5 pt-5 border-t border-(--brd) space-y-3">
-            <h3 className="text-xs font-black uppercase tracking-widest text-(--t2) flex items-center gap-2">
-            <Shield size={12} /> Зміна ролі
-            </h3>
-            <div className="flex flex-wrap gap-2 items-center">
-            {ROLES.map(r => (
-              <button key={r} onClick={() => setSelectedRole(r)}
-              className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-lg border transition-all ${
-                selectedRole === r
-                ? roleBadgeColor[r] + " scale-105"
-                : "border-(--brd) text-(--t2) hover:border-blue-600/40"
-              }`}>
-              {r}
-              </button>
-            ))}
-            <button onClick={handleRoleChange} disabled={isChangingRole || selectedRole === profileUser?.role}
-            className="flex items-center gap-1.5 bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl px-4 py-2 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-40 shadow-lg shadow-blue-600/20">
-            {isChangingRole ? <Loader size={11} className="animate-spin" /> : <Save size={11} />}
-            Застосувати
-            </button>
-            </div>
-            {roleMsg && (
-              <div className={`flex items-center gap-2 p-2.5 rounded-xl text-xs font-bold border ${
-                roleMsg.type === "ok"
-                ? "bg-green-500/10 border-green-500/20 text-green-600"
-                : "bg-red-500/10 border-red-500/20 text-red-500"
-              }`}>
-              {roleMsg.type === "ok" ? <CheckCircle size={13} /> : <AlertCircle size={13} />}
-              {roleMsg.text}
-              </div>
-            )}
-            </div>
-          )}
-          </>
+          </div>
+          </div>
         )}
         </section>
 
@@ -1087,34 +1022,19 @@ export default function ProfilePage() {
               <button key={t.id} type="button" onClick={() => router.push("/tournaments/" + t.id)}
               className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group text-left"
               style={{ animationDelay: `${i * 40}ms` }}>
-              <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 font-black text-sm flex-shrink-0">
-              {t.place === 1 ? "🥇" : t.place === 2 ? "🥈" : t.place === 3 ? "🥉" : <Trophy size={15} />}
+              <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 flex-shrink-0">
+              <Trophy size={15} />
               </div>
               <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
               <span className="font-black text-(--t1) text-sm truncate group-hover:text-amber-500 transition-colors">{t.name}</span>
-              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${stStyle}`}>
-              {stLabel}
+              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${tourStatusStyle[t.status ?? "upcoming"] ?? tourStatusStyle.upcoming}`}>
+              {tourStatusLabel[t.status ?? "upcoming"] ?? t.status}
               </span>
               </div>
-              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              {t.game && <span className="text-[10px] font-bold text-(--t2) truncate">{t.game}</span>}
-              {t.team_name && (
-                <span className="text-[10px] font-bold text-(--t2) flex items-center gap-1">
-                <Users size={8} /> {t.team_name}
-                </span>
-              )}
-              {t.place && (
-                <span className="text-[10px] font-black text-amber-500 flex items-center gap-1">
-                <Medal size={8} /> {t.place} місце
-                </span>
-              )}
-              </div>
-              {(t.start_date || t.end_date) && (
+              {t.start_at && (
                 <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">
-                {t.start_date && new Date(t.start_date).toLocaleDateString("uk-UA")}
-                {t.start_date && t.end_date && " — "}
-                {t.end_date && new Date(t.end_date).toLocaleDateString("uk-UA")}
+                Початок: {new Date(t.start_at).toLocaleDateString("uk-UA")}
                 </p>
               )}
               </div>
@@ -1190,6 +1110,7 @@ export default function ProfilePage() {
           </div>
         )}
         </div>
+
         </section>
         </div>
 

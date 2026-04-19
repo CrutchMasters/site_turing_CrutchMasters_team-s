@@ -829,3 +829,53 @@ async def mark_notification_read(body: dict, authorization: str = Header(...)):
             .execute()
 
     return {"success": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. ТУРНИРЫ ПОЛЬЗОВАТЕЛЯ
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/users/me/tournaments")
+async def get_my_tournaments(authorization: str = Header(...)):
+    """
+    Возвращает турниры, в которых участвует текущий пользователь.
+    Логика: найти команды где user = captain_id ИЛИ user в members_ids,
+    затем вернуть турниры по tournament_id этих команд.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+    user_id = caller["id"]
+
+    # 1. Команды где пользователь — капитан
+    captain_res = supabase.table("teams") \
+        .select("id, tournament_id") \
+        .eq("captain_id", user_id) \
+        .execute()
+
+    # 2. Команды где пользователь — участник (members_ids contains user_id)
+    member_res = supabase.table("teams") \
+        .select("id, tournament_id") \
+        .contains("members_ids", json.dumps([user_id])) \
+        .execute()
+
+    # Собираем уникальные tournament_id (пропускаем None)
+    all_teams = (captain_res.data or []) + (member_res.data or [])
+    tournament_ids = list({
+        t["tournament_id"]
+        for t in all_teams
+        if t.get("tournament_id")
+    })
+
+    if not tournament_ids:
+        return {"tournaments": []}
+
+    # 3. Получаем данные турниров
+    tour_res = supabase.table("tournaments") \
+        .select("id, name, status, start_at, registration_from, registration_to") \
+        .in_("id", tournament_ids) \
+        .execute()
+
+    return {"tournaments": tour_res.data or []}
