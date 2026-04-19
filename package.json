@@ -17,5 +17,8 @@
   "bugs": {
     "url": "https://github.com/CrutchMasters/site_turing_CrutchMasters_team-s/issues"
   },
-  "homepage": "https://github.com/CrutchMasters/site_turing_CrutchMasters_team-s#readme"
+  "homepage": "https://github.com/CrutchMasters/site_turing_CrutchMasters_team-s#readme",
+  "dependencies": {
+    "tailwindcss": "^4.2.2"
+  }
 }
