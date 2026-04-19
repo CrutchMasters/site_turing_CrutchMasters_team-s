@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { useT } from "@/context/LanguageContext";
 import { useTheme } from "@/hooks/useTheme";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
@@ -24,34 +25,28 @@ interface Tournament {
     team_count: number;
 }
 
-const STATUS_CONFIG: Record<TournamentStatus, { label: string; color: string }> = {
-    upcoming:     { label: "Скоро",      color: "bg-amber-500/10 text-amber-500 border-amber-500/30" },
-    registration: { label: "Реєстрація", color: "bg-green-500/10 text-green-500 border-green-500/30" },
-    ongoing:      { label: "Тривають",   color: "bg-blue-600/10 text-blue-600 border-blue-600/30" },
-    finished:     { label: "Завершено",  color: "bg-gray-500/10 text-gray-500 border-gray-500/20" },
+const STATUS_COLORS: Record<TournamentStatus, string> = {
+    upcoming:     "bg-amber-500/10 text-amber-500 border-amber-500/30",
+    registration: "bg-green-500/10 text-green-500 border-green-500/30",
+    ongoing:      "bg-blue-600/10 text-blue-600 border-blue-600/30",
+    finished:     "bg-gray-500/10 text-gray-500 border-gray-500/20",
 };
 
-// Use DB status directly; only fall back to date logic if DB value is missing
-function resolveStatus(
-    dbStatus: string | null | undefined,
-    t: Pick<Tournament, "start_at" | "registration_from" | "registration_to">
-): TournamentStatus {
-    const valid: TournamentStatus[] = ["upcoming", "registration", "ongoing", "finished"];
-    if (dbStatus && valid.includes(dbStatus as TournamentStatus)) {
-        return dbStatus as TournamentStatus;
-    }
+function computeStatus(t: Pick<Tournament, "start_at" | "registration_from" | "registration_to">): TournamentStatus {
     const now = Date.now();
-    const start   = t.start_at           ? new Date(t.start_at).getTime()          : null;
-    const regFrom = t.registration_from  ? new Date(t.registration_from).getTime() : null;
-    const regTo   = t.registration_to    ? new Date(t.registration_to).getTime()   : null;
-    if (start && now >= start) return "ongoing";
+    const start  = t.start_at           ? new Date(t.start_at).getTime()           : null;
+    const regFrom = t.registration_from ? new Date(t.registration_from).getTime()  : null;
+    const regTo   = t.registration_to   ? new Date(t.registration_to).getTime()    : null;
+
+    if (start && now > start) return "finished";
     if (regFrom && regTo && now >= regFrom && now <= regTo) return "registration";
     return "upcoming";
 }
 
-function fmtDate(iso?: string) {
+function fmtDate(iso?: string, locale?: string) {
     if (!iso) return "—";
-    return new Date(iso).toLocaleDateString("uk-UA", { day: "numeric", month: "short", year: "numeric" });
+    const localeMap: Record<string, string> = { ua: "uk-UA", ru: "ru-RU", en: "en-US" };
+    return new Date(iso).toLocaleDateString(localeMap[locale ?? "ua"] ?? "uk-UA", { day: "numeric", month: "short", year: "numeric" });
 }
 
 export default function TournamentsPage() {
@@ -59,6 +54,7 @@ export default function TournamentsPage() {
     const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
     const { dark } = useTheme();
+    const { t, locale } = useT();
 
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
     const [loading, setLoading] = useState(true);
@@ -79,42 +75,42 @@ export default function TournamentsPage() {
             setLoading(true);
             setError(null);
             try {
-                // Fetch tournaments including the status column from DB
-                const { data: tourData, error: tErr } = await supabase
+                // Запрос 1: все турниры
+                const { data: tournamentsData, error: tErr } = await supabase
                 .from("tournaments")
-                .select("id, name, rules, start_at, registration_from, registration_to, max_teams, rounds, status")
+                .select("id, name, rules, start_at, registration_from, registration_to, max_teams, rounds")
                 .order("start_at", { ascending: true });
+
                 if (tErr) throw tErr;
 
-                // Count registered teams per tournament via teams.tournament_id
-                // (tournament_teams table does not exist in this project)
-                const ids = (tourData ?? []).map((t: any) => t.id);
+                // Запрос 2: считаем команды по tournament_id
+                // Берём только те команды где tournament_id не null
+                const { data: teamsData, error: teErr } = await supabase
+                .from("teams")
+                .select("tournament_id")
+                .not("tournament_id", "is", null);
+
+                if (teErr) throw teErr;
+
+                // Считаем количество команд на каждый турнир
                 const countMap: Record<string, number> = {};
-
-                if (ids.length > 0) {
-                    const { data: teamsData, error: teErr } = await supabase
-                    .from("teams")
-                    .select("tournament_id")
-                    .not("tournament_id", "is", null)
-                    .in("tournament_id", ids);
-                    if (teErr) throw teErr;
-
-                    (teamsData ?? []).forEach((team: any) => {
+                (teamsData ?? []).forEach((team: any) => {
+                    if (team.tournament_id) {
                         countMap[team.tournament_id] = (countMap[team.tournament_id] ?? 0) + 1;
-                    });
-                }
+                    }
+                });
 
-                const mapped: Tournament[] = (tourData ?? []).map((item: any) => ({
-                    id:                item.id,
-                    name:              item.name,
-                    rules:             item.rules,
-                    start_at:          item.start_at,
+                const mapped: Tournament[] = (tournamentsData ?? []).map((item: any) => ({
+                    id: item.id,
+                    name: item.name,
+                    rules: item.rules,
+                    start_at: item.start_at,
                     registration_from: item.registration_from,
-                    registration_to:   item.registration_to,
-                    max_teams:         item.max_teams,
-                    rounds:            item.rounds,
-                    team_count:        countMap[item.id] ?? 0,
-                    status:            resolveStatus(item.status, item),
+                    registration_to: item.registration_to,
+                    max_teams: item.max_teams,
+                    rounds: item.rounds,
+                    team_count: countMap[item.id] ?? 0,
+                    status: computeStatus(item),
                 }));
 
                 setTournaments(mapped);
@@ -144,6 +140,7 @@ export default function TournamentsPage() {
 
         return (
             <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1)">
+
             <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
             <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] blur-sm ${dark ? "invert" : ""}`} />
             </div>
@@ -164,13 +161,13 @@ export default function TournamentsPage() {
 
             <div className="flex-1 overflow-y-auto p-6">
             <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-black">Турніри</h1>
+            <h1 className="text-2xl font-black">{t.tournaments.title}</h1>
             {isAdmin && (
                 <button
                 onClick={() => router.push("/register_tourney")}
                 className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition"
                 >
-                Створити
+                {t.tournaments.create}
                 </button>
             )}
             </div>
@@ -186,14 +183,18 @@ export default function TournamentsPage() {
                     : "bg-(--card) text-(--t2) border-(--brd) hover:border-blue-600/40"
                 }`}
                 >
-                {f === "all" ? "Всі" : STATUS_CONFIG[f].label}
+                {f === "all" ? t.tournaments.filterAll
+                  : f === "upcoming" ? t.tournaments.filterUpcoming
+                  : f === "registration" ? t.tournaments.filterRegistration
+                  : f === "ongoing" ? t.tournaments.filterOngoing
+                  : t.tournaments.filterFinished}
                 </button>
             ))}
             </div>
 
             <input
             type="text"
-            placeholder="Пошук..."
+            placeholder={t.tournaments.searchPlaceholder}
             value={searchQ}
             onChange={e => setSearchQ(e.target.value)}
             className="w-full mb-4 px-4 py-2 rounded-xl border border-(--brd) bg-(--card) text-(--t1) text-sm outline-none focus:border-blue-600/60 transition"
@@ -212,10 +213,10 @@ export default function TournamentsPage() {
             ) : filtered.length === 0 ? (
                 <div className="text-center py-20 text-(--t2)">
                 <Trophy size={40} className="mx-auto mb-3 opacity-30" />
-                <p className="font-bold">Турнірів не знайдено</p>
+                <p className="font-bold">{t.tournaments.notFound}</p>
                 {tournaments.length > 0 && filter !== "all" && (
                     <button onClick={() => setFilter("all")} className="mt-2 text-blue-600 text-sm font-bold">
-                    Показати всі
+                    {t.tournaments.showAll}
                     </button>
                 )}
                 </div>
@@ -225,7 +226,12 @@ export default function TournamentsPage() {
                     const spotsLeft = tournament.max_teams
                     ? tournament.max_teams - tournament.team_count
                     : null;
-                    const statusCfg = STATUS_CONFIG[tournament.status];
+                    const statusLabel =
+                        tournament.status === "upcoming"     ? t.tournaments.statusUpcoming :
+                        tournament.status === "registration" ? t.tournaments.statusRegistration :
+                        tournament.status === "ongoing"      ? t.tournaments.statusOngoing :
+                        t.tournaments.statusFinished;
+                    const statusColor = STATUS_COLORS[tournament.status];
 
                     return (
                         <div
@@ -237,31 +243,37 @@ export default function TournamentsPage() {
                         <h2 className="font-black text-base text-(--t1) group-hover:text-blue-600 transition-colors">
                         {tournament.name}
                         </h2>
-                        <span className={`flex-shrink-0 px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${statusCfg.color}`}>
-                        {statusCfg.label}
+                        <span className={`flex-shrink-0 px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${statusColor}`}>
+                        {statusLabel}
                         </span>
                         </div>
 
                         <div className="flex gap-4 mt-3 text-xs text-(--t2) font-bold flex-wrap">
                         <span className="flex items-center gap-1">
-                        <Calendar size={13} /> {fmtDate(tournament.start_at)}
+                        <Calendar size={13} />
+                        {fmtDate(tournament.start_at, locale)}
                         </span>
                         <span className="flex items-center gap-1">
                         <Users size={13} />
-                        {tournament.team_count}{tournament.max_teams && ` / ${tournament.max_teams}`}
+                        {tournament.team_count}
+                        {tournament.max_teams && ` / ${tournament.max_teams}`}
                         </span>
                         {tournament.rounds && (
                             <span className="flex items-center gap-1">
-                            <Zap size={13} /> {tournament.rounds} раундів
+                            <Zap size={13} /> {tournament.rounds} {t.tournaments.rounds}
                             </span>
                         )}
                         </div>
 
                         {spotsLeft !== null && spotsLeft <= 0 && (
-                            <div className="mt-2 text-red-500 text-[10px] font-black uppercase tracking-wide">Місць немає</div>
+                            <div className="mt-2 text-red-500 text-[10px] font-black uppercase tracking-wide">
+                            {t.tournaments.noSpots}
+                            </div>
                         )}
                         {spotsLeft !== null && spotsLeft > 0 && spotsLeft <= 3 && (
-                            <div className="mt-2 text-amber-500 text-[10px] font-black uppercase tracking-wide">Залишилось {spotsLeft} місць</div>
+                            <div className="mt-2 text-amber-500 text-[10px] font-black uppercase tracking-wide">
+                            {t.tournaments.spotsLeft.replace("{n}", String(spotsLeft))}
+                            </div>
                         )}
                         </div>
                     );

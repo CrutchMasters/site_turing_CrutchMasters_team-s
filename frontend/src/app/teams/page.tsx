@@ -32,7 +32,7 @@ export default function TeamsPage() {
     const router = useRouter();
     const { dark } = useTheme();
     const { user, isLoading } = useAuth();
-    const { t } = useT();
+    const { t, locale } = useT();
 
     const [searchQuery, setSearchQuery] = useState("");
     const [teams, setTeams]             = useState<Team[]>([]);
@@ -152,7 +152,7 @@ export default function TeamsPage() {
                 <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 <MobileHeader
                 onOpenSidebar={() => setIsMobileSidebarOpen(true)}
-                title="Команди"
+                title={t.teams.title}
                 icon={<Users size={18} className="text-blue-600" />}
                 />
 
@@ -164,17 +164,17 @@ export default function TeamsPage() {
                 {t.nav.home}
                 </button>
                 <ChevronRight size={10} />
-                <span className="text-(--t1)">Команди</span>
+                <span className="text-(--t1)">{t.teams.title}</span>
                 </nav>
 
                 {/* Header row */}
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 sm:mb-10">
                 <div>
                 <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-(--t1) uppercase">
-                 Команди
+                 {t.teams.title}
                 </h1>
                 <p className="text-(--t2) text-xs font-bold uppercase tracking-widest mt-1">
-                {loading ? "Завантаження..." : `${filtered.length} команд у системі`}
+                {loading ? t.common.loading : `${filtered.length} ${t.teams.total}`}
                 </p>
                 </div>
 
@@ -186,7 +186,7 @@ export default function TeamsPage() {
                     className="cdIn flex items-center justify-center gap-2 bg-(--card) border border-amber-500/40 text-amber-500 font-black text-xs uppercase tracking-widest rounded-2xl px-6 py-4 hover:bg-amber-500/10 active:scale-95 transition-all w-full sm:w-auto"
                     >
                     <Star size={15} className="fill-amber-500" />
-                    Мої команди
+                    {locale === "ru" ? "Мои команды" : locale === "en" ? "My teams" : "Мої команди"}
                     </button>
                 )}
 
@@ -195,7 +195,7 @@ export default function TeamsPage() {
                 className="cdIn flex items-center justify-center gap-2 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl px-6 py-4 hover:bg-blue-700 shadow-lg shadow-blue-600/25 active:scale-95 transition-all w-full sm:w-auto group"
                 >
                 <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
-                Створити команду
+                {t.teams.create}
                 </button>
                 </div>
                 </div>
@@ -207,14 +207,14 @@ export default function TeamsPage() {
                 <input
                 ref={searchInputRef}
                 type="text"
-                placeholder="Пошук по назві, організації або капітану..."
+                placeholder={t.teams.searchPlaceholder}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full pl-12 pr-5 py-4 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) focus:ring-2 focus:ring-blue-500 focus:bg-(--card) outline-none text-sm transition-all"
                 />
                 </div>
                 <p className="mt-2 text-[10px] font-bold text-(--t2) uppercase tracking-widest">
-                Введіть назву команди, організацію або логін капітана
+                {t.teams.searchHint}
                 </p>
                 </div>
 
@@ -223,21 +223,21 @@ export default function TeamsPage() {
                     <div className="flex items-center justify-center py-24">
                     <div className="flex flex-col items-center gap-4">
                     <Loader className="w-8 h-8 text-blue-600 animate-spin" />
-                    <p className="text-[11px] font-black uppercase tracking-widest text-(--t2)">Завантаження команд...</p>
+                    <p className="text-[11px] font-black uppercase tracking-widest text-(--t2)">{t.common.loading}</p>
                     </div>
                     </div>
                 ) : filtered.length === 0 ? (
                     <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) p-12 sm:p-16 text-center">
                     <Users className="w-16 h-16 text-(--t2) mx-auto mb-4 opacity-40" />
-                    <p className="text-lg font-black text-(--t1) mb-2">Команд не знайдено</p>
+                    <p className="text-lg font-black text-(--t1) mb-2">{t.teams.notFound}</p>
                     <p className="text-(--t2) text-sm">
-                    {searchQuery ? "Спробуйте змінити запит" : "Станьте першим — створіть команду!"}
+                    {searchQuery ? t.common.na : t.teams.notFoundHint}
                     </p>
                     <button
                     onClick={() => router.push("/register_team")}
                     className="mt-6 inline-flex items-center gap-2 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl px-6 py-3 hover:bg-blue-700 transition-all active:scale-95"
                     >
-                    <Plus size={14} /> Створити команду
+                    <Plus size={14} /> {t.teams.create}
                     </button>
                     </div>
                 ) : (
@@ -248,6 +248,8 @@ export default function TeamsPage() {
                         team={team}
                         idx={idx}
                         currentUserId={user.id}
+                        locale={locale}
+                        captainLabel={t.teams.captain}
                         onOpen={() => router.push(`/teams/${team.id}`)}
                         />
                     ))}
@@ -264,15 +266,23 @@ function TeamCard({
     team,
     idx,
     currentUserId,
+    locale,
+    captainLabel,
     onOpen,
 }: {
     team: Team;
     idx: number;
     currentUserId: string;
+    locale: string;
+    captainLabel: string;
     onOpen: () => void;
 }) {
     const isMyTeam = team.captain_id === currentUserId;
     const memberCount = team.members_ids?.length ?? 0;
+    const myLabel = locale === "ru" ? "Моя" : locale === "en" ? "Mine" : "Моя";
+    const membersLabel = locale === "ru" ? "уч." : locale === "en" ? "mbr." : "уч.";
+    const localeMap: Record<string, string> = { ua: "uk-UA", ru: "ru-RU", en: "en-US" };
+    const dateLocale = localeMap[locale] ?? "uk-UA";
 
     const gradients = [
         "from-blue-500 to-blue-700",
@@ -306,7 +316,7 @@ function TeamCard({
         </h3>
         {isMyTeam && (
             <span className="text-[8px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1">
-            <Crown size={8} /> Моя
+            <Crown size={8} /> {myLabel}
             </span>
         )}
         </div>
@@ -323,7 +333,7 @@ function TeamCard({
         <div className="flex items-center gap-1.5 text-(--t2)">
         <Users size={13} />
         <span className="text-[10px] font-black uppercase tracking-wider">
-        {memberCount} уч.
+        {memberCount} {membersLabel}
         </span>
         </div>
 
@@ -338,7 +348,7 @@ function TeamCard({
 
         {team.created_at && (
             <div className="ml-auto text-[9px] font-bold text-(--t2) uppercase tracking-wider flex-shrink-0">
-            {new Date(team.created_at).toLocaleDateString("uk-UA", {
+            {new Date(team.created_at).toLocaleDateString(dateLocale, {
                 day: "2-digit",
                 month: "2-digit",
                 year: "2-digit",

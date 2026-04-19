@@ -138,10 +138,12 @@ export default function Sidebar({}: SidebarProps) {
       const date = new Date(iso);
       const now = new Date();
       const diff = Math.floor((now.getTime() - date.getTime()) / 1000);
-      if (diff < 60) return `${diff}с тому`;
-      if (diff < 3600) return `${Math.floor(diff / 60)}хв тому`;
-      if (diff < 86400) return `${Math.floor(diff / 3600)}год тому`;
-      return date.toLocaleDateString("uk-UA", { day: "numeric", month: "short" });
+      const localeMap: Record<string, string> = { ua: "uk-UA", ru: "ru-RU", en: "en-US" };
+      const loc = localeMap[locale] ?? "uk-UA";
+      if (diff < 60) return locale === "ru" ? `${diff}с назад` : locale === "en" ? `${diff}s ago` : `${diff}с тому`;
+      if (diff < 3600) return locale === "ru" ? `${Math.floor(diff/60)}мин назад` : locale === "en" ? `${Math.floor(diff/60)}m ago` : `${Math.floor(diff/60)}хв тому`;
+      if (diff < 86400) return locale === "ru" ? `${Math.floor(diff/3600)}ч назад` : locale === "en" ? `${Math.floor(diff/3600)}h ago` : `${Math.floor(diff/3600)}год тому`;
+      return date.toLocaleDateString(loc, { day: "numeric", month: "short" });
     } catch {
       return "";
     }
@@ -338,14 +340,14 @@ export default function Sidebar({}: SidebarProps) {
           <NavItem icon={<Search size={18} />}          label={t.sidebar.search}    active={pathname === "/search"}    collapsed={collapsed} onClick={() => go("/search")} />
           <NavItem
           icon={<Trophy size={18} />}
-          label="Турніри"
+          label={t.sidebar.tournaments}
           active={pathname === "/tournaments" || pathname?.startsWith("/tournaments/")}
           collapsed={collapsed}
           onClick={() => go("/tournaments")}
           />
           <NavItem
           icon={<Users size={18} />}
-          label="Команди"
+          label={t.sidebar.teams}
           active={pathname === "/teams" || pathname?.startsWith("/teams/")}
           collapsed={collapsed}
           onClick={() => go("/teams")}
