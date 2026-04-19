@@ -62,10 +62,9 @@ export default function RegisterPage() {
   }, [showOtp]);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    setFieldError(null);
-  };
+  const { name, value } = e.target;
+  setFormData((prev) => ({ ...prev, [name]: value }));
+};
 
   // Шаг 1: signUp через Supabase Auth (отправляет OTP на почту)
   const handleSubmit = async (e: FormEvent) => {
