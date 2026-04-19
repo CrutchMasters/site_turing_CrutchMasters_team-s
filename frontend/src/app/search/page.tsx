@@ -22,14 +22,13 @@ export default function SearchPage() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedUserIdx, setSelectedUserIdx] = useState<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     searchInputRef.current?.focus();
   }, []);
 
-  // Редирект через useEffect — не во время рендера
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/login");
@@ -44,7 +43,7 @@ export default function SearchPage() {
     }
     setIsSearching(true);
     setHasSearched(true);
-    setSelectedUser(null);
+    setSelectedUserIdx(null);
     try {
       const q = searchQuery.trim();
       const { data, error } = await supabase
@@ -72,7 +71,6 @@ export default function SearchPage() {
 
   const resultsLabel = searchResults.length === 1 ? t.search.results_one : t.search.results_many;
 
-  // Показываем спиннер пока грузится или редиректим
   if (isLoading || !user) {
     return (
       <div className="min-h-screen bg-(--bg) flex items-center justify-center">
@@ -166,17 +164,22 @@ export default function SearchPage() {
           <div className="text-[10px] font-black uppercase tracking-widest text-(--t2) px-2">
           {t.search.found}: {searchResults.length} {resultsLabel}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
           {searchResults.map((person, idx) => (
             <div
             key={person.id || idx}
-            onClick={() => setSelectedUser(selectedUser?.id === person.id ? null : person)}
+            onClick={() => setSelectedUserIdx(selectedUserIdx === idx ? null : idx)}
             className="fuIn bg-(--card) rounded-2xl sm:rounded-[2rem] p-5 sm:p-6 border border-(--brd) hover:border-blue-600/50 cursor-pointer transition-all hover:shadow-lg hover:shadow-blue-600/10 group"
             style={{ animationDelay: `${idx * 50}ms` }}
             >
             <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-full bg-blue-600/10 border-2 border-(--brd) flex items-center justify-center font-black text-blue-600 text-lg flex-shrink-0">
-            {person.username?.charAt(0).toUpperCase() || person.login?.charAt(0).toUpperCase() || "?"}
+            {/* ✅ Avatar with photo */}
+            <div className="w-12 h-12 rounded-full bg-blue-600/10 border-2 border-(--brd) flex-shrink-0 overflow-hidden flex items-center justify-center font-black text-blue-600 text-lg">
+            {person.avatar_url ? (
+              <img src={person.avatar_url} alt={person.username} className="w-full h-full object-cover" />
+            ) : (
+              person.username?.charAt(0).toUpperCase() || person.login?.charAt(0).toUpperCase() || "?"
+            )}
             </div>
             <div className="flex-1 min-w-0">
             <p className="font-black text-(--t1) truncate group-hover:text-blue-600 transition-colors">
@@ -191,7 +194,7 @@ export default function SearchPage() {
             <p className="text-[10px] text-(--t2) break-all">{person.email || ""}</p>
             </div>
             </div>
-            {selectedUser?.id === person.id && (
+            {selectedUserIdx === idx && (
               <div className="mt-4 pt-4 border-t border-(--brd) space-y-2">
               <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold text-(--t2) uppercase">{t.search.role}:</span>
