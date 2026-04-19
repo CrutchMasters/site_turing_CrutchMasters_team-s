@@ -103,31 +103,32 @@ ALLOWED_ROLES = {"user", "jury", "admin"}
 def get_caller(token: str) -> dict:
     """
     Декодируем токен и возвращаем строку аккаунта из БД.
-    Ищем сначала по auth_id (sub из JWT), затем fallback по email.
+    Ищем по id (sub из JWT) — колонка id в таблице account совпадает с Supabase Auth UUID.
+    Fallback по email для надёжности.
     """
     jwt_payload  = decode_jwt_payload(token)
-    auth_id      = jwt_payload.get("sub")
+    user_id      = jwt_payload.get("sub")
     caller_email = jwt_payload.get("email")
 
-    print(f"[get_caller] auth_id(sub)={auth_id!r} email={caller_email!r}", flush=True)
+    print(f"[get_caller] id(sub)={user_id!r} email={caller_email!r}", flush=True)
 
-    if not caller_email and not auth_id:
-        raise HTTPException(status_code=401, detail="Invalid token: no email or sub claim")
+    if not user_id and not caller_email:
+        raise HTTPException(status_code=401, detail="Invalid token: no sub or email claim")
 
     account = None
 
-    # Сначала ищем по auth_id (надёжнее)
-    if auth_id:
+    # Ищем по id (sub из JWT = Supabase Auth UUID = колонка id в account)
+    if user_id:
         try:
             account = fetch_one(
                 supabase.table("account")
                     .select("id, username, email, role")
-                    .eq("auth_id", auth_id)
+                    .eq("id", user_id)
             )
         except Exception as e:
-            print(f"[get_caller] DB error (auth_id lookup): {e}", flush=True)
+            print(f"[get_caller] DB error (id lookup): {e}", flush=True)
 
-    # Fallback — ищем по email (для старых записей без auth_id)
+    # Fallback — ищем по email
     if not account and caller_email:
         try:
             account = fetch_one(
@@ -135,13 +136,6 @@ def get_caller(token: str) -> dict:
                     .select("id, username, email, role")
                     .eq("email", caller_email)
             )
-            # Если нашли по email — попутно заполняем auth_id чтобы в следующий раз было быстрее
-            if account and auth_id and not account.get("auth_id"):
-                try:
-                    supabase.table("account")                         .update({"auth_id": auth_id})                         .eq("id", account["id"])                         .execute()
-                    print(f"[get_caller] auto-filled auth_id for {caller_email}", flush=True)
-                except Exception:
-                    pass
         except Exception as e:
             print(f"[get_caller] DB error (email lookup): {e}", flush=True)
 
@@ -149,7 +143,7 @@ def get_caller(token: str) -> dict:
     if not account:
         raise HTTPException(
             status_code=403,
-            detail=f"Аккаунт не найден. email={caller_email!r} auth_id={auth_id!r}"
+            detail=f"Аккаунт не найден. email={caller_email!r} id={user_id!r}"
         )
     return account
 
@@ -192,7 +186,7 @@ async def register_user(user: UserRegister):
         if existing.data:
             raise HTTPException(status_code=400, detail="Пользователь с таким email уже существует")
 
-        # Создаём пользователя в Supabase Auth (получаем auth_id)
+        # Создаём пользователя в Supabase Auth (получаем UUID)
         try:
             auth_response = supabase.auth.admin.create_user({
                 "email":            user.email,
@@ -203,19 +197,19 @@ async def register_user(user: UserRegister):
                     "login":    user.login,
                 },
             })
-            auth_id = auth_response.user.id if auth_response.user else None
+            auth_uuid = auth_response.user.id if auth_response.user else None
         except Exception as auth_err:
             print(f"[REGISTER] Auth error: {auth_err}", flush=True)
             raise HTTPException(status_code=400, detail=f"Ошибка создания Auth пользователя: {auth_err}")
 
-        # Создаём запись в таблице account с auth_id
+        # Создаём запись в таблице account, используя Supabase Auth UUID как id
         result = supabase.table("account").insert({
+            "id":       auth_uuid,
             "username": user.username,
             "login":    user.login,
             "email":    user.email,
             "status":   "active",
             "role":     "user",
-            "auth_id":  auth_id,
         }).execute()
 
         if not result.data:
@@ -337,11 +331,19 @@ class CreateTeam(BaseModel):
     name: str
     city_school_org: str | None = None
     description: str | None = None
+    telegram_url: str | None = None
+    discord_url: str | None = None
 
 class UpdateTeam(BaseModel):
     name: str | None = None
     city_school_org: str | None = None
     description: str | None = None
+    telegram_url: str | None = None
+    discord_url: str | None = None
+
+class RegisterTeamForTournament(BaseModel):
+    team_id: str
+    tournament_id: str
 
 
 @app.post("/api/teams")
@@ -359,6 +361,8 @@ async def create_team(payload: CreateTeam, authorization: str = Header(...)):
         "members_ids":      [],
         "city_school_org":  payload.city_school_org,
         "description":      payload.description,
+        "telegram_url":     payload.telegram_url,
+        "discord_url":      payload.discord_url,
     }).execute()
 
     if not result.data:
@@ -458,6 +462,106 @@ async def delete_team(team_id: str, authorization: str = Header(...)):
         raise HTTPException(status_code=403, detail="Только капитан может удалить команду")
 
     supabase.table("teams").delete().eq("id", team_id).execute()
+    return {"success": True}
+
+
+@app.post("/api/tournaments/register")
+async def register_team_for_tournament(payload: RegisterTeamForTournament, authorization: str = Header(...)):
+    """
+    Зареєструвати команду на турнір.
+    Тільки капітан команди може реєструвати її.
+    Використовує service_role ключ — обходить RLS.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    # Перевіряємо що турнір існує і реєстрація відкрита
+    tournament = fetch_one(
+        supabase.table("tournaments")
+            .select("id, name, status, max_teams")
+            .eq("id", payload.tournament_id)
+    )
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Турнір не знайдено")
+    if tournament["status"] != "registration":
+        raise HTTPException(status_code=400, detail=f"Реєстрація на турнір закрита (статус: {tournament['status']})")
+
+    # Перевіряємо що команда існує і caller є капітаном
+    team = fetch_one(
+        supabase.table("teams")
+            .select("id, name, captain_id, tournament_id")
+            .eq("id", payload.team_id)
+    )
+    if not team:
+        raise HTTPException(status_code=404, detail="Команду не знайдено")
+    if team["captain_id"] != caller["id"]:
+        raise HTTPException(status_code=403, detail="Тільки капітан команди може реєструвати її на турнір")
+    if team["tournament_id"]:
+        raise HTTPException(status_code=400, detail="Команда вже зареєстрована в іншому турнірі")
+
+    # Перевіряємо ліміт команд
+    if tournament["max_teams"]:
+        count_res = supabase.table("teams") \
+            .select("id", count="exact") \
+            .eq("tournament_id", payload.tournament_id) \
+            .execute()
+        current_count = count_res.count or 0
+        if current_count >= tournament["max_teams"]:
+            raise HTTPException(status_code=400, detail="Турнір заповнений")
+
+    # Записуємо tournament_id в команду (service_role обходить RLS)
+    result = supabase.table("teams") \
+        .update({"tournament_id": payload.tournament_id}) \
+        .eq("id", payload.team_id) \
+        .execute()
+
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Не вдалося зареєструвати команду")
+
+    print(f"[TOURNAMENT] Команда {team['name']} зареєстрована на турнір {tournament['name']}", flush=True)
+    return {"success": True, "team": result.data[0]}
+
+
+@app.delete("/api/tournaments/unregister")
+async def unregister_team_from_tournament(payload: RegisterTeamForTournament, authorization: str = Header(...)):
+    """
+    Зняти команду з турніру.
+    Тільки капітан і тільки поки статус турніру — registration.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    tournament = fetch_one(
+        supabase.table("tournaments")
+            .select("id, name, status")
+            .eq("id", payload.tournament_id)
+    )
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Турнір не знайдено")
+    if tournament["status"] != "registration":
+        raise HTTPException(status_code=400, detail="Скасувати реєстрацію можна лише поки відкрита реєстрація")
+
+    team = fetch_one(
+        supabase.table("teams")
+            .select("id, name, captain_id, tournament_id")
+            .eq("id", payload.team_id)
+    )
+    if not team:
+        raise HTTPException(status_code=404, detail="Команду не знайдено")
+    if team["captain_id"] != caller["id"]:
+        raise HTTPException(status_code=403, detail="Тільки капітан може знімати команду з турніру")
+    if team["tournament_id"] != payload.tournament_id:
+        raise HTTPException(status_code=400, detail="Команда не зареєстрована в цьому турнірі")
+
+    supabase.table("teams").update({"tournament_id": None}).eq("id", payload.team_id).execute()
+
+    print(f"[TOURNAMENT] Команда {team['name']} знята з турніру {tournament['name']}", flush=True)
     return {"success": True}
 
 

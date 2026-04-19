@@ -7,7 +7,12 @@ import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/hooks/useTheme";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
-import { Trophy, Users, ArrowLeft, Loader, Calendar, Zap, Edit } from "lucide-react";
+import { Trophy, Users, ArrowLeft, Loader, Edit } from "lucide-react";
+
+const API_URL =
+typeof window !== "undefined" && window.location.hostname === "localhost"
+? "http://localhost:8000"
+: "https://site-turing-crutchmasters-team-s.onrender.com";
 
 interface Team {
     id: string;
@@ -26,18 +31,14 @@ interface Tournament {
     start_at?: string;
     registration_from?: string;
     registration_to?: string;
-    // Команды теперь связаны через teams.tournament_id (обратная связь)
     teams: Team[];
 }
 
 function fmtDate(iso?: string) {
     if (!iso) return "—";
     return new Date(iso).toLocaleDateString("uk-UA", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
+        day: "numeric", month: "long", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
     });
 }
 
@@ -46,36 +47,35 @@ export default function TournamentPage() {
     const params = useParams();
     const { user } = useAuth();
     const { dark } = useTheme();
-
     const id = params?.id as string;
 
     const [tournament, setTournament] = useState<Tournament | null>(null);
     const [loading, setLoading] = useState(true);
     const [registering, setRegistering] = useState(false);
+    const [unregistering, setUnregistering] = useState(false);
+    const [registerError, setRegisterError] = useState<string | null>(null);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-    useEffect(() => {
-        if (!id) return;
-        fetchTournament();
-    }, [id]);
+    useEffect(() => { if (id) fetchTournament(); }, [id]);
 
     const fetchTournament = async () => {
         setLoading(true);
         try {
-            // Новая архитектура: команды хранят tournament_id у себя.
-            // Используем обратную связь teams!tournament_id для получения команд турнира.
-            const { data, error } = await supabase
+            const { data: tourData, error: tourErr } = await supabase
             .from("tournaments")
-            .select(`
-            *,
-            teams!tournament_id(id, name, city_school_org, captain_id)
-            `)
+            .select("id, name, rules, max_teams, rounds, status, start_at, registration_from, registration_to")
             .eq("id", id)
             .single();
+            if (tourErr) throw tourErr;
 
-            if (error) throw error;
+            // Fetch registered teams via teams.tournament_id
+            const { data: teamsData, error: teamsErr } = await supabase
+            .from("teams")
+            .select("id, name, city_school_org, captain_id")
+            .eq("tournament_id", id);
+            if (teamsErr) throw teamsErr;
 
-            setTournament(data as Tournament);
+            setTournament({ ...tourData, teams: teamsData ?? [] });
         } catch (e) {
             console.error(e);
         } finally {
@@ -83,52 +83,88 @@ export default function TournamentPage() {
         }
     };
 
-    // Регистрация команды в турнире:
-    // В новой архитектуре обновляем поле tournament_id у команды капитана.
     const handleRegister = async () => {
-        if (!user) return;
+        if (!user || !tournament) return;
+        setRegisterError(null);
 
-        // Ищем команду, где текущий пользователь является капитаном
-        const { data: teamData, error: teamError } = await supabase
+        // Find captain's team that is not yet registered in any tournament
+        const { data: captainTeams, error: teamErr } = await supabase
         .from("teams")
-        .select("id, captain_id, tournament_id")
-        .eq("captain_id", user.id)
-        .maybeSingle();
+        .select("id, name, tournament_id")
+        .eq("captain_id", user.id);
 
-        if (teamError || !teamData) {
-            alert("У вас немає команди або ви не є капітаном");
+        if (teamErr || !captainTeams || captainTeams.length === 0) {
+            setRegisterError("У вас немає команди або ви не є капітаном жодної команди");
             return;
         }
 
-        if (teamData.tournament_id) {
-            alert("Ваша команда вже зареєстрована в турнірі");
-            return;
-        }
-
-        const teamCount = tournament?.teams?.length ?? 0;
-        if (tournament?.max_teams && teamCount >= tournament.max_teams) {
-            alert("Турнір заповнений");
+        const eligible = captainTeams.find(t => !t.tournament_id) ?? null;
+        if (!eligible) {
+            setRegisterError("Всі ваші команди вже зареєстровані в турнірах");
             return;
         }
 
         setRegistering(true);
 
-        // Просто обновляем tournament_id у команды
-        const { error } = await supabase
-        .from("teams")
-        .update({ tournament_id: id })
-        .eq("id", teamData.id);
+        try {
+            // Use backend API — it has service_role key that bypasses RLS
+            const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+            const res = await fetch(`${API_URL}/api/tournaments/register`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    team_id: eligible.id,
+                    tournament_id: id,
+                }),
+            });
 
-        setRegistering(false);
+            const data = await res.json();
 
-        if (error) {
-            console.error(error);
-            alert("Помилка реєстрації");
-            return;
+            if (!res.ok) {
+                setRegisterError(data.detail ?? "Помилка реєстрації");
+                return;
+            }
+
+            // Refresh tournament to show new team in list
+            await fetchTournament();
+        } catch (e: any) {
+            setRegisterError("Помилка з'єднання з сервером: " + e.message);
+        } finally {
+            setRegistering(false);
         }
+    };
 
-        alert("Зареєстровано ✅");
-        fetchTournament();
+    const handleUnregister = async () => {
+        if (!user || !tournament || !myTeamInTournament) return;
+        setRegisterError(null);
+        setUnregistering(true);
+        try {
+            const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+            const res = await fetch(`${API_URL}/api/tournaments/unregister`, {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    team_id: myTeamInTournament.id,
+                    tournament_id: id,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setRegisterError(data.detail ?? "Помилка скасування реєстрації");
+                return;
+            }
+            await fetchTournament();
+        } catch (e: any) {
+            setRegisterError("Помилка з'єднання з сервером: " + e.message);
+        } finally {
+            setUnregistering(false);
+        }
     };
 
     if (loading || !tournament) {
@@ -140,25 +176,20 @@ export default function TournamentPage() {
     }
 
     const teamCount = tournament.teams?.length ?? 0;
-    const isFull = tournament.max_teams !== undefined && teamCount >= tournament.max_teams;
+    const isFull = !!tournament.max_teams && teamCount >= tournament.max_teams;
     const isAdmin = user?.role === "admin" || user?.role === "superadmin";
-
-    // Проверяем, является ли юзер капитаном какой-то команды этого турнира
+    const isRegistrationOpen = tournament.status === "registration";
     const myTeamInTournament = tournament.teams?.find(t => t.captain_id === user?.id);
 
     return (
         <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1)">
-
-        {/* Background */}
         <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
         <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] blur-sm ${dark ? "invert" : ""}`} />
         </div>
 
-        {/* Sidebar overlay (mobile) */}
         {isMobileSidebarOpen && (
             <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
         )}
-
         <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <Sidebar />
         </div>
@@ -171,8 +202,6 @@ export default function TournamentPage() {
         />
 
         <div className="p-6 max-w-3xl w-full mx-auto">
-
-        {/* Back */}
         <button
         onClick={() => router.push("/tournaments")}
         className="mb-5 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors"
@@ -180,7 +209,6 @@ export default function TournamentPage() {
         <ArrowLeft size={16} /> Назад до турнірів
         </button>
 
-        {/* Title row */}
         <div className="flex items-start justify-between gap-3 mb-4">
         <h1 className="text-2xl font-black text-(--t1)">{tournament.name}</h1>
         {isAdmin && (
@@ -193,22 +221,19 @@ export default function TournamentPage() {
         )}
         </div>
 
-        {/* Rules */}
         {tournament.rules && (
             <p className="text-sm text-(--t2) leading-relaxed mb-5 bg-(--card) border border-(--brd) rounded-2xl p-4">
             {tournament.rules}
             </p>
         )}
 
-        {/* Stats cards */}
+        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
         <div className="bg-(--card) border border-(--brd) rounded-2xl p-4">
         <div className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1">Команди</div>
         <div className="text-xl font-black text-(--t1) flex items-end gap-1">
         {teamCount}
-        {tournament.max_teams && (
-            <span className="text-sm font-bold text-(--t2)">/ {tournament.max_teams}</span>
-        )}
+        {tournament.max_teams && <span className="text-sm font-bold text-(--t2)">/ {tournament.max_teams}</span>}
         </div>
         </div>
         {tournament.rounds && (
@@ -243,34 +268,44 @@ export default function TournamentPage() {
             </div>
         )}
 
+        {/* Error */}
+        {registerError && (
+            <div className="mb-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-500 text-sm font-bold">
+            ⚠️ {registerError}
+            </div>
+        )}
+
         {/* Register button */}
-        {tournament.status === "registration" && !myTeamInTournament && (
+        {isRegistrationOpen && !myTeamInTournament && (
             <button
             onClick={handleRegister}
             disabled={registering || isFull}
             className="w-full mb-6 px-6 py-3 bg-blue-600 text-white rounded-2xl font-black text-sm uppercase tracking-wide disabled:opacity-50 hover:bg-blue-700 active:scale-[0.98] transition-all"
             >
-            {isFull
-                ? "Турнір заповнений"
-                : registering
-                ? "Реєстрація..."
-                : "Зареєструвати мою команду"}
-                </button>
+            {isFull ? "Турнір заповнений" : registering ? "Реєстрація..." : "Зареєструвати мою команду"}
+            </button>
         )}
 
-        {/* Already registered badge */}
         {myTeamInTournament && (
-            <div className="mb-6 px-4 py-3 bg-green-500/10 border border-green-500/30 rounded-2xl text-green-600 text-sm font-black">
+            <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="flex-1 px-4 py-3 bg-green-500/10 border border-green-500/30 rounded-2xl text-green-600 text-sm font-black">
             ✓ Ваша команда «{myTeamInTournament.name}» вже зареєстрована
+            </div>
+            {isRegistrationOpen && (
+                <button
+                onClick={handleUnregister}
+                disabled={unregistering}
+                className="flex-shrink-0 px-4 py-3 rounded-2xl border border-red-500/30 text-red-500 bg-red-500/10 hover:bg-red-500/20 hover:border-red-500/50 font-black text-xs uppercase tracking-wide disabled:opacity-50 active:scale-[0.98] transition-all"
+                >
+                {unregistering ? "Скасування..." : "Скасувати реєстрацію"}
+                </button>
+            )}
             </div>
         )}
 
         {/* Teams list */}
         <div>
-        <h2 className="font-black text-lg mb-3 text-(--t1)">
-        Команди-учасники
-        </h2>
-
+        <h2 className="font-black text-lg mb-3 text-(--t1)">Команди-учасники</h2>
         {teamCount === 0 ? (
             <div className="text-center py-10 text-(--t2)">
             <Users size={32} className="mx-auto mb-2 opacity-30" />
@@ -288,9 +323,7 @@ export default function TournamentPage() {
                 {idx + 1}
                 </div>
                 <div className="flex-1 min-w-0">
-                <p className="font-black text-sm text-(--t1) group-hover:text-blue-600 transition-colors truncate">
-                {team.name}
-                </p>
+                <p className="font-black text-sm text-(--t1) group-hover:text-blue-600 transition-colors truncate">{team.name}</p>
                 {team.city_school_org && (
                     <p className="text-[11px] text-(--t2) font-bold truncate">{team.city_school_org}</p>
                 )}
