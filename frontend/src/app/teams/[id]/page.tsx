@@ -209,7 +209,7 @@ export default function TeamProfilePage() {
                 icon={<Users size={18} className="text-blue-600" />}
                 />
 
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 relative z-10">
 
                 {/* Breadcrumb */}
                 <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">

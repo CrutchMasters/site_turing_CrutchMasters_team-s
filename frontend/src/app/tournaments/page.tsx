@@ -110,7 +110,7 @@ export default function TournamentsPage() {
                     max_teams: item.max_teams,
                     rounds: item.rounds,
                     team_count: countMap[item.id] ?? 0,
-                    status: computeStatus(item),
+                    status: item.status ?? computeStatus(item),
                 }));
 
                 setTournaments(mapped);
