@@ -116,7 +116,7 @@ export default function SearchPage() {
       {t.search.title}
       </h1>
 
-      <div className="max-w-4xl space-y-6">
+      <div className="space-y-6">
       <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-xl border border-(--brd) p-6 sm:p-8">
       <div className="flex flex-col sm:flex-row gap-3">
       <div className="relative flex-1">
