@@ -159,7 +159,7 @@ export default function DashboardPage() {
       <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-(--t1) uppercase">{t.mainPage.overview}</h1>
       </header>
 
-      <div className="max-w-6xl space-y-6 sm:space-y-8">
+      <div className="space-y-6 sm:space-y-8">
 
       {/* Admin Banner */}
       {isAdmin && (

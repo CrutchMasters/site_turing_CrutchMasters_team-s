@@ -393,7 +393,7 @@ export default function RegisterTourney() {
         {t.tourney?.createAdmin ?? 'Створення турніру'}
         </h1>
 
-        <form className="max-w-4xl space-y-6" onSubmit={handleSubmit}>
+        <form className="space-y-6" onSubmit={handleSubmit}>
 
         {/* ── Section 1: General ── */}
         <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
