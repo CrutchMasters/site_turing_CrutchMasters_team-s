@@ -231,7 +231,11 @@ export default function TeamsPage() {
                 icon={<Users size={18} className="text-blue-600" />}
                 />
 
+<<<<<<< HEAD
                 <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-6 lg:p-6 relative z-10">
+=======
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
+>>>>>>> 8ad80386ff4ac601d15b456a2e8fd3329fddb13d
                 {/* Breadcrumb */}
                 <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
                 <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">
@@ -247,7 +251,11 @@ export default function TeamsPage() {
                 </h1>
 
                 {/* Two-column layout */}
+<<<<<<< HEAD
                 <div className="w-full flex flex-col xl:flex-row gap-6 items-start">
+=======
+                <div className="max-w-6xl flex flex-col xl:flex-row gap-6 items-start">
+>>>>>>> 8ad80386ff4ac601d15b456a2e8fd3329fddb13d
 
                 {/* ── LEFT: Search panel ── */}
                 <div className="flex-1 min-w-0 flex flex-col gap-4">
@@ -314,7 +322,11 @@ export default function TeamsPage() {
                 </div>
 
                 {/* ── RIGHT: My Teams panel ── */}
+<<<<<<< HEAD
                 <div className="w-full xl:w-[460px] flex-shrink-0 flex flex-col gap-4">
+=======
+                <div className="w-full xl:w-[420px] flex-shrink-0 flex flex-col gap-4">
+>>>>>>> 8ad80386ff4ac601d15b456a2e8fd3329fddb13d
                 {/* Panel header */}
                 <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
@@ -443,6 +455,62 @@ function SearchTeamCard({
             </div>
         )}
         </div>
+<<<<<<< HEAD
+=======
+        </div>
+        </div>
+    );
+}
+
+// ── My Team Row (compact, inside the right panel) ───────────────────────────
+function MyTeamRow({
+    team, idx, onOpen, onEdit, onDelete,
+}: {
+    team: Team; idx: number;
+    onOpen: () => void; onEdit: () => void; onDelete: () => void;
+}) {
+    const gradient = gradients[idx % gradients.length];
+    const memberCount = team.members_ids?.length ?? 0;
+
+    return (
+        <div className="fuIn flex items-center gap-3 bg-(--bg) rounded-2xl border border-(--brd) p-3 group hover:border-blue-600/30 transition-all" style={{ animationDelay: `${idx * 70}ms` }}>
+        <div
+        className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-black text-base flex-shrink-0 cursor-pointer shadow-md`}
+        onClick={onOpen}
+        >
+        {team.name.charAt(0).toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0 cursor-pointer" onClick={onOpen}>
+        <div className="flex items-center gap-1.5">
+        <p className="font-black text-(--t1) text-sm truncate group-hover:text-blue-600 transition-colors">{team.name}</p>
+        <span className="text-[7px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded flex-shrink-0 flex items-center gap-0.5">
+        <Crown size={7} /> Капітан
+        </span>
+        </div>
+        <div className="flex items-center gap-2 mt-0.5">
+        <span className="flex items-center gap-1 text-[9px] font-bold text-(--t2)">
+        <Users size={10} /> {memberCount}
+        </span>
+        {team.telegram_url && <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-500 border border-sky-500/20">TG</span>}
+        {team.discord_url  && <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">DC</span>}
+        </div>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+        <button
+        onClick={onEdit}
+        className="w-8 h-8 flex items-center justify-center rounded-xl border border-(--brd) bg-(--bg) text-(--t2) hover:bg-(--card) hover:text-(--t1) transition-all active:scale-95"
+        title="Редагувати"
+        >
+        <Pencil size={13} />
+        </button>
+        <button
+        onClick={onDelete}
+        className="w-8 h-8 flex items-center justify-center rounded-xl bg-red-500/5 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all active:scale-95"
+        title="Видалити"
+        >
+        <Trash2 size={13} />
+        </button>
+>>>>>>> 8ad80386ff4ac601d15b456a2e8fd3329fddb13d
         </div>
         </div>
     );
