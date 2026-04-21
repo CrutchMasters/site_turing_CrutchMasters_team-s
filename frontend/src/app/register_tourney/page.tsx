@@ -98,6 +98,10 @@ export default function RegisterTourney() {
   const [regEndTime, setRegEndTime]       = useState(draft?.regEndTime ?? '');
   const [teamCount, setTeamCount]         = useState<number>(draft?.teamCount ?? 0);
   const [roundCount, setRoundCount]       = useState<number | null>(draft?.roundCount ?? null);
+  const [selectedRoundTab, setSelectedRoundTab] = useState<number>(1);
+  const [roundSettings, setRoundSettings] = useState<Record<number, { name: string; duration: string; description: string }>>(
+    draft?.roundSettings ?? {}
+  );
   const [isSubmitting, setIsSubmitting]   = useState(false);
   const [submitError, setSubmitError]     = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState<boolean>(() => {
@@ -145,9 +149,9 @@ export default function RegisterTourney() {
     if (typeof window === 'undefined') return;
     localStorage.setItem(DRAFT_KEY, JSON.stringify({
       savedAt: Date.now(),
-                                                   data: { tourneyName, description, startDate, startTime, endDate, endTime, regStartDate, regStartTime, regEndDate, regEndTime, teamCount, roundCount },
+                                                   data: { tourneyName, description, startDate, startTime, endDate, endTime, regStartDate, regStartTime, regEndDate, regEndTime, teamCount, roundCount, roundSettings },
     }));
-  }, [tourneyName, description, startDate, startTime, endDate, endTime, regStartDate, regStartTime, regEndDate, regEndTime, teamCount, roundCount]);
+  }, [tourneyName, description, startDate, startTime, endDate, endTime, regStartDate, regStartTime, regEndDate, regEndTime, teamCount, roundCount, roundSettings]);
 
   const clearDraft = () => { if (typeof window !== 'undefined') localStorage.removeItem(DRAFT_KEY); };
 
@@ -486,7 +490,7 @@ export default function RegisterTourney() {
       </div>
       </section>
 
-      {/* ══ SECTION 3: Команди + Раунди + Кнопки ═══════════════════════ */}
+      {/* ══ SECTION 3: Формат турніру ════════════════════════════════════ */}
       <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden" style={{ animationDelay: '160ms' }}>
       <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-(--bg)/50">
       <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
@@ -498,7 +502,9 @@ export default function RegisterTourney() {
       </div>
 
       <div className="p-6 sm:p-8">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+
+      {/* ── Команди + Раунди ── */}
+      <div className={`grid gap-8 transition-all duration-500 ${roundCount ? 'grid-cols-1 sm:grid-cols-[1fr_auto_1fr]' : 'grid-cols-1 sm:grid-cols-2'}`}>
 
       {/* Максимум команд */}
       <div>
@@ -510,8 +516,6 @@ export default function RegisterTourney() {
       {t.common?.optional ?? 'Опціонально'}
       </span>
       </div>
-
-      {/* Counter */}
       <div className="flex items-center gap-3 mb-4">
       <button type="button"
       onClick={() => setTeamCount(Math.max(0, teamCount - 1))}
@@ -530,8 +534,6 @@ export default function RegisterTourney() {
       <Plus size={14} />
       </button>
       </div>
-
-      {/* Quick picks */}
       <div className="flex gap-2 flex-wrap">
       {[0, 8, 16, 32, 64].map(n => (
         <button key={n} type="button" onClick={() => setTeamCount(n)}
@@ -546,9 +548,9 @@ export default function RegisterTourney() {
       </div>
       </div>
 
-      {/* Раунди */}
-      <div>
-      <div className="flex items-center justify-between mb-4">
+      {/* Раунди — середній стовпець (завжди) */}
+      <div className={roundCount ? 'flex flex-col items-center' : ''}>
+      <div className={`flex items-center justify-between mb-4 ${roundCount ? 'w-full' : ''}`}>
       <label className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
       {t.tourney?.rounds ?? 'Кількість раундів'}
       </label>
@@ -557,26 +559,139 @@ export default function RegisterTourney() {
       </span>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-3">
+      <div className={`flex gap-2 mb-3 ${roundCount ? 'flex-col' : 'flex-wrap'}`}>
       {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-        <button key={n} type="button" onClick={() => setRoundCount(n)}
-        className={`w-11 h-11 rounded-2xl font-black text-sm border transition-all active:scale-95 ${
-          roundCount === n
-          ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/25'
-          : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600'
+        <button key={n} type="button"
+        onClick={() => {
+          setRoundCount(n);
+          setSelectedRoundTab(prev => prev > n ? 1 : prev);
+        }}
+        className={`font-black text-sm border transition-all duration-200 active:scale-95 ${
+          roundCount
+          ? `w-full px-4 py-2 rounded-2xl flex items-center justify-between ${
+            roundCount === n
+            ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/25'
+      : n <= (roundCount ?? 0)
+      ? 'bg-(--bg) border-blue-600/30 text-blue-500 hover:border-blue-600/60'
+      : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600'
+          }`
+          : `w-11 h-11 rounded-2xl ${
+            roundCount === n
+            ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/25'
+            : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600'
+          }`
         }`}>
-        {n}
+        {roundCount ? (
+          <>
+          <span>Раунд {n}</span>
+          {n <= (roundCount ?? 0) && (
+            <span className={`text-[9px] font-black uppercase tracking-widest ml-2 ${roundCount === n ? 'text-white/70' : 'text-blue-500'}`}>
+            {n === roundCount ? '← поточний' : '✓'}
+            </span>
+          )}
+          </>
+        ) : n}
         </button>
       ))}
       </div>
 
       {roundCount && (
-        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
+        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 w-full">
         Обрано: {roundCount} {roundCount === 1 ? 'раунд' : roundCount < 5 ? 'раунди' : 'раундів'}
         {roundCount > 1 && <span className="text-(--t2) font-bold ml-2">(Bo{roundCount})</span>}
         </p>
       )}
       </div>
+
+      {/* Налаштування раундів — правий стовпець (тільки якщо обрані раунди) */}
+      {roundCount && (
+        <div className="bg-(--bg) border border-(--brd) rounded-2xl p-5 flex flex-col gap-4 animate-[fadeUp_300ms_ease_both]">
+        {/* Табулятор раундів */}
+        <div className="flex gap-1.5 flex-wrap">
+        {Array.from({ length: roundCount }, (_, i) => i + 1).map(n => (
+          <button key={n} type="button"
+          onClick={() => setSelectedRoundTab(n)}
+          className={`w-8 h-8 rounded-xl font-black text-xs border transition-all active:scale-90 ${
+            selectedRoundTab === n
+            ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/30'
+            : 'bg-(--card) border-(--brd) text-(--t2) hover:border-blue-600/40 hover:text-blue-500'
+          }`}>
+          {n}
+          </button>
+        ))}
+        </div>
+
+        <div className="h-px bg-(--brd)" />
+
+        {/* Поля для вибраного раунду */}
+        <div className="flex flex-col gap-3">
+        <div>
+        <label className="block text-[9px] font-black uppercase tracking-widest text-(--t2) mb-1.5">
+        Назва раунду {selectedRoundTab}
+        </label>
+        <input
+        type="text"
+        value={roundSettings[selectedRoundTab]?.name ?? ''}
+        onChange={e => setRoundSettings(prev => ({
+          ...prev,
+          [selectedRoundTab]: { ...prev[selectedRoundTab], name: e.target.value }
+        }))}
+        placeholder={`Раунд ${selectedRoundTab}...`}
+        className={inp}
+        />
+        </div>
+
+        <div>
+        <label className="block text-[9px] font-black uppercase tracking-widest text-(--t2) mb-1.5">
+        Тривалість (хв)
+        </label>
+        <input
+        type="number"
+        min="0"
+        value={roundSettings[selectedRoundTab]?.duration ?? ''}
+        onChange={e => setRoundSettings(prev => ({
+          ...prev,
+          [selectedRoundTab]: { ...prev[selectedRoundTab], duration: e.target.value }
+        }))}
+        placeholder="60"
+        className={inp}
+        />
+        </div>
+
+        <div>
+        <label className="block text-[9px] font-black uppercase tracking-widest text-(--t2) mb-1.5">
+        Примітки до раунду
+        </label>
+        <textarea
+        rows={3}
+        value={roundSettings[selectedRoundTab]?.description ?? ''}
+        onChange={e => setRoundSettings(prev => ({
+          ...prev,
+          [selectedRoundTab]: { ...prev[selectedRoundTab], description: e.target.value }
+        }))}
+        placeholder="Необов'язково..."
+        className={`${inp} resize-none`}
+        />
+        </div>
+        </div>
+
+        {/* Навігація між раундами */}
+        <div className="flex gap-2 mt-auto">
+        <button type="button"
+        disabled={selectedRoundTab <= 1}
+        onClick={() => setSelectedRoundTab(p => Math.max(1, p - 1))}
+        className="flex-1 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border border-(--brd) text-(--t2) hover:border-blue-600/40 hover:text-blue-500 transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
+        ← Попередній
+        </button>
+        <button type="button"
+        disabled={selectedRoundTab >= roundCount}
+        onClick={() => setSelectedRoundTab(p => Math.min(roundCount, p + 1))}
+        className="flex-1 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border border-(--brd) text-(--t2) hover:border-blue-600/40 hover:text-blue-500 transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
+        Наступний →
+        </button>
+        </div>
+        </div>
+      )}
       </div>
 
       {/* ── Draft restored banner ── */}
@@ -588,7 +703,7 @@ export default function RegisterTourney() {
           setTourneyName(''); setDescription('');
           setStartDate(''); setStartTime(''); setEndDate(''); setEndTime('');
           setRegStartDate(''); setRegStartTime(''); setRegEndDate(''); setRegEndTime('');
-          setTeamCount(0); setRoundCount(null); setDraftRestored(false);
+          setTeamCount(0); setRoundCount(null); setRoundSettings({}); setSelectedRoundTab(1); setDraftRestored(false);
         }}
         className="text-[10px] font-black uppercase tracking-widest text-blue-500 border border-blue-500/40 px-3 py-1.5 rounded-xl hover:bg-blue-500/20 transition-all whitespace-nowrap">
         Очистити
