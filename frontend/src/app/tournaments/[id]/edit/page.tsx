@@ -66,7 +66,7 @@ export default function TournamentEditPage() {
     const [regToDate, setRegToDate] = useState("");
     const [regToTime, setRegToTime] = useState("");
     const [maxTeams, setMaxTeams]   = useState(0);
-    const [rounds, setRounds]       = useState<number | null>(null);
+    const [rounds, setRounds] = useState<number>(1);
     const [status, setStatus]       = useState<string>("upcoming");
 
     const isAdmin = user?.role === "admin" || user?.role === "superadmin";
@@ -99,7 +99,7 @@ export default function TournamentEditPage() {
                 setRegToDate(toDateStr(data.registration_to));
                 setRegToTime(toTimeStr(data.registration_to));
                 setMaxTeams(data.max_teams ?? 0);
-                setRounds(data.rounds ?? null);
+                setRounds(data.rounds ?? 1);
                 setStatus(data.status ?? "upcoming");
             } catch (e: any) {
                 setError(e?.message ?? "Помилка завантаження");
@@ -127,7 +127,6 @@ export default function TournamentEditPage() {
 
             setSaving(true);
             try {
-                // Завжди зберігаємо status — це головне поле
                 const payload: Record<string, any> = {
                     name: name.trim(),
                     rules: rules.trim() || null,
@@ -135,11 +134,10 @@ export default function TournamentEditPage() {
                     registration_from: toIso(regFromDate, regFromTime),
                     registration_to: toIso(regToDate, regToTime),
                     max_teams: maxTeams > 0 ? maxTeams : null,
-                    rounds,
-                    status, // <-- завжди включаємо
+                    rounds: rounds ?? 1,  // ← НЕ передаём null, колонка NOT NULL
+                    status,
                 };
 
-                // Якщо ongoing і в межах 24год — тільки статус
                 if (canEditLimited && !canEditFull) {
                     Object.keys(payload).forEach(k => {
                         if (k !== "status") delete payload[k];
@@ -148,14 +146,22 @@ export default function TournamentEditPage() {
 
                 console.log("[edit] saving payload:", payload);
 
-                const { error: upErr } = await supabase
+                // Проверка сессии
+                const { data: { session } } = await supabase.auth.getSession();
+                console.log("[edit] session uid:", session?.user?.id ?? "NULL — нет токена!");
+
+                const { data: updData, error: upErr } = await supabase
                 .from("tournaments")
                 .update(payload)
-                .eq("id", id);
+                .eq("id", id)
+                .select(); // ← select() покажет сколько строк реально обновилось
 
-                console.log("[edit] update error:", upErr);
+                console.log("[edit] update result:", { updData, upErr });
 
                 if (upErr) throw upErr;
+                if (!updData || updData.length === 0) {
+                    throw new Error("RLS заблокував UPDATE — 0 рядків оновлено");
+                }
 
                 setSuccess("Зміни збережено ✓");
                 await fetchTourney();
