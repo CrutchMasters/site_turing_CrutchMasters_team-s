@@ -164,6 +164,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!cancelled) {
                 setToken(activeToken);
                 setUser(parsedUser);
+                await supabaseClient.auth.setSession({
+                    access_token: activeToken,
+                    refresh_token: localStorage.getItem("refresh_token") ?? activeToken,
+                });
                 scheduleRefresh(activeToken);
                 setIsLoading(false);
             }
@@ -182,7 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             };
     }, [doRefresh, scheduleRefresh, refreshRole]);
 
-    const login = useCallback((userData: User, accessToken: string, refreshToken?: string) => {
+    const login = useCallback(async (userData: User, accessToken: string, refreshToken?: string) => {
         setUser(userData);
         setToken(accessToken);
         localStorage.setItem("access_token", accessToken);
@@ -190,6 +194,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         document.cookie = `access_token=${accessToken}; path=/; max-age=604800`;
         if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
         scheduleRefresh(accessToken);
+        await supabaseClient.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken ?? accessToken,
+        });
     }, [scheduleRefresh]);
 
     const logout = useCallback(() => {
