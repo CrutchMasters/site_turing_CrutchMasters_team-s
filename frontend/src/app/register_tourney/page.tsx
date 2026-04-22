@@ -1,12 +1,13 @@
 'use client';
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Bold, Italic, Underline, List, Quote, Type,
-  Zap, Trophy, Clock, Users, Layers, ChevronRight, ArrowLeft, Plus, Minus,
+  Zap, Trophy, Clock, Users, Layers, ChevronRight, ArrowLeft, X,
 } from 'lucide-react';
 
 import Sidebar from "@/components/Sidebar";
+import RoundSettingsPanel from "@/components/RoundSettingsPanel";
 import MobileHeader from "@/components/MobileHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { useT } from "@/context/LanguageContext";
@@ -16,10 +17,8 @@ import { createClient } from '@supabase/supabase-js';
 type AccessState = 'loading' | 'checking' | 'denied' | 'allowed';
 const COUNTDOWN_SEC = 5;
 
-// ── Shared input class ──────────────────────────────────────────────────────
 const inp = "w-full px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none transition-all";
 
-// ── Date+Time pair ──────────────────────────────────────────────────────────
 function DateTimePair({
   label,
   dateVal, onDate,
@@ -31,6 +30,7 @@ function DateTimePair({
   timeVal: string; onTime: (v: string) => void;
   required?: boolean;
 }) {
+  const timeRef = React.useRef<HTMLInputElement>(null);
   return (
     <div className="flex flex-col gap-2">
     <div className="flex items-center justify-between">
@@ -41,8 +41,21 @@ function DateTimePair({
       </span>
     )}
     </div>
+    {/* Date — native calendar icon only, no duplicate */}
     <input type="date" value={dateVal} onChange={e => onDate(e.target.value)} className={inp} />
-    <input type="time" value={timeVal} onChange={e => onTime(e.target.value)} className={inp} />
+    {/* Time — clickable Clock opens native time picker */}
+    <div className="relative">
+    <input ref={timeRef} type="time" value={timeVal} onChange={e => onTime(e.target.value)} className={inp + " pr-10"} />
+    <button
+    type="button"
+    tabIndex={-1}
+    onClick={() => timeRef.current?.showPicker?.()}
+    className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-(--t2) hover:text-blue-500 transition-colors cursor-pointer"
+    aria-label="Вибрати час"
+    >
+    <Clock className="w-4 h-4" />
+    </button>
+    </div>
     </div>
   );
 }
@@ -70,54 +83,25 @@ export default function RegisterTourney() {
   const [accessState, setAccessState] = useState<AccessState>('loading');
   const [countdown, setCountdown] = useState(COUNTDOWN_SEC);
 
-  const DRAFT_KEY = 'register_tourney_draft';
-  const DRAFT_TTL = 5 * 60 * 1000;
-
-  const loadDraft = () => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const raw = localStorage.getItem(DRAFT_KEY);
-      if (!raw) return null;
-      const { data, savedAt } = JSON.parse(raw);
-      if (Date.now() - savedAt > DRAFT_TTL) { localStorage.removeItem(DRAFT_KEY); return null; }
-      return data;
-    } catch { return null; }
-  };
-
-  const draft = useMemo(() => loadDraft(), []);
-
-  const [tourneyName, setTourneyName]     = useState(draft?.tourneyName ?? '');
-  const [description, setDescription]     = useState(draft?.description ?? '');
-  const [startDate, setStartDate]         = useState(draft?.startDate ?? '');
-  const [startTime, setStartTime]         = useState(draft?.startTime ?? '');
-  const [endDate, setEndDate]             = useState(draft?.endDate ?? '');
-  const [endTime, setEndTime]             = useState(draft?.endTime ?? '');
-  const [regStartDate, setRegStartDate]   = useState(draft?.regStartDate ?? '');
-  const [regStartTime, setRegStartTime]   = useState(draft?.regStartTime ?? '');
-  const [regEndDate, setRegEndDate]       = useState(draft?.regEndDate ?? '');
-  const [regEndTime, setRegEndTime]       = useState(draft?.regEndTime ?? '');
-  const [teamCount, setTeamCount]         = useState<number>(draft?.teamCount ?? 0);
-  const [roundCount, setRoundCount]       = useState<number | null>(draft?.roundCount ?? null);
+  const [tourneyName, setTourneyName]     = useState('');
+  const [description, setDescription]     = useState('');
+  const [startDate, setStartDate]         = useState('');
+  const [startTime, setStartTime]         = useState('');
+  const [endDate, setEndDate]             = useState('');
+  const [endTime, setEndTime]             = useState('');
+  const [regStartDate, setRegStartDate]   = useState('');
+  const [regStartTime, setRegStartTime]   = useState('');
+  const [regEndDate, setRegEndDate]       = useState('');
+  const [regEndTime, setRegEndTime]       = useState('');
+  const [teamCount, setTeamCount]         = useState<number>(0);
+  const [roundCount, setRoundCount]       = useState<number>(1);
   const [selectedRoundTab, setSelectedRoundTab] = useState<number>(1);
-  const [roundSettings, setRoundSettings] = useState<Record<number, { name: string; duration: string; description: string }>>(
-    draft?.roundSettings ?? {}
-  );
   const [isSubmitting, setIsSubmitting]   = useState(false);
   const [submitError, setSubmitError]     = useState<string | null>(null);
-  const [draftRestored, setDraftRestored] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    try {
-      const raw = localStorage.getItem('register_tourney_draft');
-      if (!raw) return false;
-      const { savedAt } = JSON.parse(raw);
-      return Date.now() - savedAt < 5 * 60 * 1000;
-    } catch { return false; }
-  });
 
-  const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // ── Toolbar formatting ──
   const applyFormat = (syntax: string, wrap = false) => {
     const el = textareaRef.current;
     if (!el) return;
@@ -143,19 +127,6 @@ export default function RegisterTourney() {
     setDescription(newText);
     requestAnimationFrame(() => { el.focus(); el.setSelectionRange(newCursorStart, newCursorEnd); });
   };
-
-  // ── Draft ──
-  const saveDraft = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({
-      savedAt: Date.now(),
-                                                   data: { tourneyName, description, startDate, startTime, endDate, endTime, regStartDate, regStartTime, regEndDate, regEndTime, teamCount, roundCount, roundSettings },
-    }));
-  }, [tourneyName, description, startDate, startTime, endDate, endTime, regStartDate, regStartTime, regEndDate, regEndTime, teamCount, roundCount, roundSettings]);
-
-  const clearDraft = () => { if (typeof window !== 'undefined') localStorage.removeItem(DRAFT_KEY); };
-
-  useEffect(() => { saveDraft(); }, [saveDraft]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -189,8 +160,6 @@ export default function RegisterTourney() {
     setSubmitError(null);
     if (!tourneyName.trim()) { setSubmitError("Назва турніру є обов'язковою"); return; }
     if (!startDate)          { setSubmitError('Дата старту турніру є обов\'язковою'); return; }
-    if (!roundCount)         { setSubmitError('Оберіть кількість раундів'); return; }
-
     setIsSubmitting(true);
     try {
       const { data, error } = await supabase.rpc('create_tournament', {
@@ -203,8 +172,6 @@ export default function RegisterTourney() {
                                                  p_rounds:            roundCount,
       });
       if (error) throw error;
-      clearDraft();
-      setDraftRestored(false);
       router.push('/dashboard');
     } catch (err: any) {
       console.error('Помилка створення турніру:', err);
@@ -330,8 +297,10 @@ export default function RegisterTourney() {
     <style jsx global>{`
       @keyframes fadeUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
       @keyframes cardDrop { from{opacity:0;transform:translateY(-26px) scale(.97)} to{opacity:1;transform:none} }
-      .fuIn { animation: fadeUp   340ms cubic-bezier(.22,1,.36,1) both }
-      .cdIn { animation: cardDrop 500ms cubic-bezier(.22,1,.36,1) both }
+      @keyframes slideInRight { from{opacity:0;transform:translateX(40px)} to{opacity:1;transform:translateX(0)} }
+      .fuIn  { animation: fadeUp      340ms cubic-bezier(.22,1,.36,1) both }
+      .cdIn  { animation: cardDrop    500ms cubic-bezier(.22,1,.36,1) both }
+      .sirIn { animation: slideInRight 400ms cubic-bezier(.22,1,.36,1) both }
       `}</style>
 
       {/* Watermark */}
@@ -346,14 +315,14 @@ export default function RegisterTourney() {
       <Sidebar />
       </div>
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
       <MobileHeader
       onOpenSidebar={() => setIsMobileSidebarOpen(true)}
       title={t.tourney?.create ?? 'Створення турніру'}
       icon={<Trophy size={18} className="text-blue-600" />}
       />
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
+      <div className="flex-1 p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
 
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
@@ -372,370 +341,239 @@ export default function RegisterTourney() {
       {t.tourney?.createAdmin ?? 'Створення турніру'}
       </h1>
 
-      <form className="max-w-5xl space-y-5" onSubmit={handleSubmit}>
+      <form className="space-y-5" onSubmit={handleSubmit}>
 
-      {/* ══ SECTION 1: Назва + Опис (розтягнутий) ══════════════════════ */}
-      <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
-      <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-(--bg)/50">
-      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
-      <Trophy size={16} />
-      </div>
-      <span className="text-xs font-black uppercase tracking-widest text-(--t2)">
-      1. {t.tourney?.general ?? 'Загальна інформація'}
-      </span>
-      </div>
+      {/* ══════════════════════════════════════════════════════════════
+        *  MAIN TWO-COLUMN LAYOUT
+        *  За замовчуванням: лівий блок по центру (max-w-[640px] + auto margins)
+  *  При відкритті раунду: лівий зсувається вліво, правий панель з'являється
+  * ══════════════════════════════════════════════════════════════ */}
+  <div className="flex gap-6 items-start w-full">
 
-      <div className="p-6 sm:p-8 space-y-5">
-      {/* Name */}
-      <div>
-      <div className="flex items-center justify-between mb-2">
-      <label className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
-      {t.tourney?.name ?? 'Назва турніру'}
-      </label>
-      <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1">
-      <Zap className="w-2.5 h-2.5 fill-red-500" /> Обов'язково
-      </span>
-      </div>
-      <input
-      type="text"
-      value={tourneyName}
-      onChange={e => setTourneyName(e.target.value)}
-      placeholder={t.tourney?.namePlaceholder ?? 'Назва турніру...'}
-      className={inp}
-      />
-      </div>
+  {/* ── LEFT COLUMN ──────────────────────────────────────────── */}
+  <div className="flex flex-col gap-5 flex-1 min-w-0">
 
-      {/* Description with toolbar */}
-      <div>
-      <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-2">
-      {t.tourney?.desc ?? 'Опис / Правила'}
-      </label>
-      <div className="border border-(--brd) rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-600 transition-all">
-      <div className="border-b border-(--brd) px-4 py-2.5 flex items-center gap-1 bg-(--bg)/60 flex-wrap">
-      {([
-        { Icon: Bold,      label: 'Жирний',    action: () => applyFormat('**', true)   },
-        { Icon: Italic,    label: 'Курсив',    action: () => applyFormat('*',  true)   },
-        { Icon: Underline, label: 'Підкресл.', action: () => applyFormat('__', true)   },
-        { Icon: List,      label: 'Список',    action: () => applyFormat('- ', false)  },
-        { Icon: Quote,     label: 'Цитата',    action: () => applyFormat('> ', false)  },
-        { Icon: Type,      label: 'Заголовок', action: () => applyFormat('## ', false) },
-      ] as const).map(({ Icon, label, action }) => (
-        <button key={label} type="button" onClick={action} title={label}
-        className="p-2 rounded-xl hover:bg-(--card) text-(--t2) hover:text-blue-600 transition-all active:scale-90">
-        <Icon className="w-3.5 h-3.5" />
-        </button>
-      ))}
-      </div>
-      <textarea
-      ref={textareaRef}
-      rows={5}
-      value={description}
-      onChange={e => setDescription(e.target.value)}
-      placeholder={t.tourney?.descPlaceholder ?? 'Введіть опис турніру...'}
-      className="w-full px-5 py-4 outline-none resize-y text-sm bg-transparent text-(--t1) placeholder:text-(--t2)/50"
-      />
-      </div>
-      </div>
-      </div>
-      </section>
+  {/* BLOCK 1: Загальна інформація */}
+  <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
+  <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-(--bg)/50">
+  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
+  <Trophy size={16} />
+  </div>
+  <span className="text-xs font-black uppercase tracking-widest text-(--t2)">
+  1. {t.tourney?.general ?? 'Загальна інформація'}
+  </span>
+  </div>
+  <div className="p-6 sm:p-8 space-y-5">
+  {/* Назва */}
+  <div>
+  <div className="flex items-center justify-between mb-2">
+  <label className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
+  {t.tourney?.name ?? 'Назва турніру'}
+  </label>
+  <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1">
+  <Zap className="w-2.5 h-2.5 fill-red-500" /> Обов'язково
+  </span>
+  </div>
+  <input
+  type="text"
+  value={tourneyName}
+  onChange={e => setTourneyName(e.target.value)}
+  placeholder={t.tourney?.namePlaceholder ?? 'Назва турніру...'}
+  className={inp}
+  />
+  </div>
+  {/* Опис */}
+  <div>
+  <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-2">
+  {t.tourney?.desc ?? 'Опис / Правила'}
+  </label>
+  <div className="border border-(--brd) rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-600 transition-all">
+  <div className="border-b border-(--brd) px-4 py-2.5 flex items-center gap-1 bg-(--bg)/60 flex-wrap">
+  {([
+    { Icon: Bold,      label: 'Жирний',    action: () => applyFormat('**', true)   },
+    { Icon: Italic,    label: 'Курсив',    action: () => applyFormat('*',  true)   },
+    { Icon: Underline, label: 'Підкресл.', action: () => applyFormat('__', true)   },
+    { Icon: List,      label: 'Список',    action: () => applyFormat('- ', false)  },
+    { Icon: Quote,     label: 'Цитата',    action: () => applyFormat('> ', false)  },
+    { Icon: Type,      label: 'Заголовок', action: () => applyFormat('## ', false) },
+  ] as const).map(({ Icon, label, action }) => (
+    <button key={label} type="button" onClick={action} title={label}
+    className="p-2 rounded-xl hover:bg-(--card) text-(--t2) hover:text-blue-600 transition-all active:scale-90">
+    <Icon className="w-3.5 h-3.5" />
+    </button>
+  ))}
+  </div>
+  <textarea
+  ref={textareaRef}
+  rows={5}
+  value={description}
+  onChange={e => setDescription(e.target.value)}
+  placeholder={t.tourney?.descPlaceholder ?? 'Введіть опис турніру...'}
+  className="w-full px-5 py-4 outline-none resize-y text-sm bg-transparent text-(--t1) placeholder:text-(--t2)/50"
+  />
+  </div>
+  </div>
+  </div>
+  </section>
 
-      {/* ══ SECTION 2: Реєстрація (ліво) + Дати старту (право) ════════ */}
-      <section className="cdIn grid grid-cols-1 md:grid-cols-2 gap-5" style={{ animationDelay: '80ms' }}>
+  {/* BLOCK 2: Реєстрація + Дати (два підблоки поруч) */}
+  <section className="cdIn grid grid-cols-1 md:grid-cols-2 gap-5" style={{ animationDelay: '80ms' }}>
 
-      {/* Лівий блок — Реєстрація */}
-      <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd) bg-(--bg)/50">
-      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white flex-shrink-0">
-      <Users size={16} />
-      </div>
-      <span className="text-xs font-black uppercase tracking-widest text-(--t2)">Реєстрація команд</span>
-      </div>
-      <div className="p-6 space-y-4 flex-1">
-      <DateTimePair
-      label="Початок реєстрації"
-      dateVal={regStartDate} onDate={setRegStartDate}
-      timeVal={regStartTime} onTime={setRegStartTime}
-      />
-      <div className="border-t border-(--brd)" />
-      <DateTimePair
-      label="Кінець реєстрації"
-      dateVal={regEndDate} onDate={setRegEndDate}
-      timeVal={regEndTime} onTime={setRegEndTime}
-      />
-      </div>
-      </div>
+  {/* Реєстрація */}
+  <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
+  <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd) bg-(--bg)/50">
+  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white flex-shrink-0">
+  <Users size={16} />
+  </div>
+  <span className="text-xs font-black uppercase tracking-widest text-(--t2)">Реєстрація команд</span>
+  </div>
+  <div className="p-6 space-y-4 flex-1">
+  <DateTimePair label="Початок реєстрації" dateVal={regStartDate} onDate={setRegStartDate} timeVal={regStartTime} onTime={setRegStartTime} />
+  <div className="border-t border-(--brd)" />
+  <DateTimePair label="Кінець реєстрації" dateVal={regEndDate} onDate={setRegEndDate} timeVal={regEndTime} onTime={setRegEndTime} />
+  </div>
+  </div>
 
-      {/* Правий блок — Дати турніру */}
-      <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd) bg-(--bg)/50">
-      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
-      <Clock size={16} />
-      </div>
-      <span className="text-xs font-black uppercase tracking-widest text-(--t2)">Дати старту</span>
-      </div>
-      <div className="p-6 space-y-4 flex-1">
-      <DateTimePair
-      label="Початок турніру"
-      dateVal={startDate} onDate={setStartDate}
-      timeVal={startTime} onTime={setStartTime}
-      required
-      />
-      <div className="border-t border-(--brd)" />
-      <DateTimePair
-      label="Кінець турніру"
-      dateVal={endDate} onDate={setEndDate}
-      timeVal={endTime} onTime={setEndTime}
-      />
-      </div>
-      </div>
-      </section>
+  {/* Дати турніру */}
+  <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
+  <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd) bg-(--bg)/50">
+  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
+  <Clock size={16} />
+  </div>
+  <span className="text-xs font-black uppercase tracking-widest text-(--t2)">Дати старту</span>
+  </div>
+  <div className="p-6 space-y-4 flex-1">
+  <DateTimePair label="Початок турніру" dateVal={startDate} onDate={setStartDate} timeVal={startTime} onTime={setStartTime} required />
+  <div className="border-t border-(--brd)" />
+  <DateTimePair label="Кінець турніру" dateVal={endDate} onDate={setEndDate} timeVal={endTime} onTime={setEndTime} />
+  </div>
+  </div>
+  </section>
 
-      {/* ══ SECTION 3: Формат турніру ════════════════════════════════════ */}
-      <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden" style={{ animationDelay: '160ms' }}>
-      <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-(--bg)/50">
-      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
-      <Layers size={16} />
-      </div>
-      <span className="text-xs font-black uppercase tracking-widest text-(--t2)">
-      3. Формат турніру
-      </span>
-      </div>
+  {/* BLOCK 3: Формат + Команди (два підблоки поруч) */}
+  <section className="cdIn grid grid-cols-2 gap-5 items-stretch" style={{ animationDelay: '140ms' }}>
 
-      <div className="p-6 sm:p-8">
-
-      {/* ── Команди + Раунди ── */}
-      <div className={`grid gap-8 transition-all duration-500 ${roundCount ? 'grid-cols-1 sm:grid-cols-[1fr_auto_1fr]' : 'grid-cols-1 sm:grid-cols-2'}`}>
-
-      {/* Максимум команд */}
-      <div>
-      <div className="flex items-center justify-between mb-4">
-      <label className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
-      {t.tourney?.maxTeams ?? 'Максимум команд'}
-      </label>
-      <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full">
-      {t.common?.optional ?? 'Опціонально'}
-      </span>
-      </div>
-      <div className="flex items-center gap-3 mb-4">
-      <button type="button"
-      onClick={() => setTeamCount(Math.max(0, teamCount - 1))}
-      className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90">
-      <Minus size={14} />
-      </button>
-      <input
-      type="number"
-      value={teamCount}
-      onChange={e => setTeamCount(Math.max(0, +e.target.value))}
-      className="w-20 text-center text-xl font-black outline-none h-10 bg-transparent text-(--t1)"
-      />
-      <button type="button"
-      onClick={() => setTeamCount(Math.min(256, teamCount + 1))}
-      className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90">
-      <Plus size={14} />
-      </button>
-      </div>
-      <div className="flex gap-2 flex-wrap">
-      {[0, 8, 16, 32, 64].map(n => (
-        <button key={n} type="button" onClick={() => setTeamCount(n)}
-        className={`text-[10px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest transition-all active:scale-95 ${
-          teamCount === n
-          ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/30'
-          : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600'
-        }`}>
-        {n === 0 ? 'Без ліміту' : n}
-        </button>
-      ))}
-      </div>
-      </div>
-
-      {/* Раунди — середній стовпець (завжди) */}
-      <div className={roundCount ? 'flex flex-col items-center' : ''}>
-      <div className={`flex items-center justify-between mb-4 ${roundCount ? 'w-full' : ''}`}>
-      <label className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
-      {t.tourney?.rounds ?? 'Кількість раундів'}
-      </label>
-      <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1">
-      <Zap className="w-2.5 h-2.5 fill-red-500" /> Обов'язково
-      </span>
-      </div>
-
-      <div className={`flex gap-2 mb-3 ${roundCount ? 'flex-col' : 'flex-wrap'}`}>
-      {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-        <button key={n} type="button"
-        onClick={() => {
-          setRoundCount(n);
-          setSelectedRoundTab(prev => prev > n ? 1 : prev);
-        }}
-        className={`font-black text-sm border transition-all duration-200 active:scale-95 ${
-          roundCount
-          ? `w-full px-4 py-2 rounded-2xl flex items-center justify-between ${
-            roundCount === n
-            ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/25'
-      : n <= (roundCount ?? 0)
-      ? 'bg-(--bg) border-blue-600/30 text-blue-500 hover:border-blue-600/60'
+  {/* Формат турніру (Раунди) — тільки швидкий вибір */}
+  <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
+  <div className="flex items-center gap-3 px-5 py-4 border-b border-(--brd) bg-(--bg)/50">
+  <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
+  <Layers size={14} />
+  </div>
+  <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">3. Формат</span>
+  <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1 whitespace-nowrap">
+  <Zap className="w-2 h-2 fill-red-500" /> Обов'язково
+  </span>
+  </div>
+  <div className="p-5 flex flex-col gap-3 flex-1">
+  <div className="flex items-center justify-between">
+  <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Кількість раундів</p>
+  <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">
+  Вибрано: <span className="text-blue-500">{roundCount}</span> {roundCount === 1 ? 'раунд' : roundCount < 5 ? 'раунди' : 'раундів'}
+  </p>
+  </div>
+  <div className="grid grid-cols-4 gap-1.5">
+  {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+    <button key={n} type="button"
+    onClick={() => { setRoundCount(n); if (selectedRoundTab > n) setSelectedRoundTab(1); }}
+    className={`h-10 rounded-xl font-black text-sm border transition-all duration-150 active:scale-90 relative ${
+      n === roundCount
+      ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/30'
+      : n <= roundCount
+      ? 'bg-blue-500/10 border-blue-500/40 text-blue-500'
       : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600'
-          }`
-          : `w-11 h-11 rounded-2xl ${
-            roundCount === n
-            ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/25'
-            : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600'
-          }`
-        }`}>
-        {roundCount ? (
-          <>
-          <span>Раунд {n}</span>
-          {n <= (roundCount ?? 0) && (
-            <span className={`text-[9px] font-black uppercase tracking-widest ml-2 ${roundCount === n ? 'text-white/70' : 'text-blue-500'}`}>
-            {n === roundCount ? '← поточний' : '✓'}
-            </span>
-          )}
-          </>
-        ) : n}
-        </button>
-      ))}
-      </div>
+    }`}>
+    {n}
+    {n <= roundCount && n !== roundCount && (
+      <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-blue-500 border border-(--card)" />
+    )}
+    </button>
+  ))}
+  </div>
+  </div>
+  </div>
 
-      {roundCount && (
-        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 w-full">
-        Обрано: {roundCount} {roundCount === 1 ? 'раунд' : roundCount < 5 ? 'раунди' : 'раундів'}
-        {roundCount > 1 && <span className="text-(--t2) font-bold ml-2">(Bo{roundCount})</span>}
-        </p>
-      )}
-      </div>
+  {/* Макс. кількість команд */}
+  <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
+  <div className="flex items-center gap-3 px-5 py-4 border-b border-(--brd) bg-(--bg)/50">
+  <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
+  <Users size={14} />
+  </div>
+  <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">Команди</span>
+  <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full whitespace-nowrap">
+  {t.common?.optional ?? 'Опціонально'}
+  </span>
+  </div>
+  <div className="p-5 flex flex-col gap-3 flex-1">
+  <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Кількість команд</p>
+  <div className="flex items-center justify-center gap-4 flex-1">
+  <button type="button"
+  onClick={() => setTeamCount(Math.max(0, teamCount - 1))}
+  className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg">−</button>
+  <span className="text-3xl font-black text-(--t1) w-12 text-center tabular-nums">
+  {teamCount === 0 ? '∞' : teamCount}
+  </span>
+  <button type="button"
+  onClick={() => setTeamCount(Math.min(256, teamCount + 1))}
+  className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg">+</button>
+  </div>
+  <div className="flex gap-1.5 flex-wrap justify-center">
+  {[0, 8, 16, 32, 64].map(n => (
+    <button key={n} type="button" onClick={() => setTeamCount(n)}
+    className={`text-[10px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest transition-all active:scale-95 ${
+      teamCount === n
+      ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/30'
+      : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600'
+    }`}>
+    {n === 0 ? 'Без ліміту' : n}
+    </button>
+  ))}
+  </div>
+  </div>
+  </div>
 
-      {/* Налаштування раундів — правий стовпець (тільки якщо обрані раунди) */}
-      {roundCount && (
-        <div className="bg-(--bg) border border-(--brd) rounded-2xl p-5 flex flex-col gap-4 animate-[fadeUp_300ms_ease_both]">
-        {/* Табулятор раундів */}
-        <div className="flex gap-1.5 flex-wrap">
-        {Array.from({ length: roundCount }, (_, i) => i + 1).map(n => (
-          <button key={n} type="button"
-          onClick={() => setSelectedRoundTab(n)}
-          className={`w-8 h-8 rounded-xl font-black text-xs border transition-all active:scale-90 ${
-            selectedRoundTab === n
-            ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/30'
-            : 'bg-(--card) border-(--brd) text-(--t2) hover:border-blue-600/40 hover:text-blue-500'
-          }`}>
-          {n}
-          </button>
-        ))}
-        </div>
+  </section>
 
-        <div className="h-px bg-(--brd)" />
+  {/* Action buttons — under round settings block */}
+  <div className="cdIn flex flex-col sm:flex-row gap-3" style={{ animationDelay: '200ms' }}>
+  <button type="submit" disabled={isSubmitting}
+  className="flex-1 px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+  {isSubmitting && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+  {isSubmitting ? 'Зберігається...' : (t.tourney?.createBtn ?? 'Створити турнір')}
+  </button>
+  <button type="button" onClick={() => router.back()} disabled={isSubmitting}
+  className="flex-1 px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60">
+  {t.common?.cancel ?? 'Скасувати'}
+  </button>
+  </div>
 
-        {/* Поля для вибраного раунду */}
-        <div className="flex flex-col gap-3">
-        <div>
-        <label className="block text-[9px] font-black uppercase tracking-widest text-(--t2) mb-1.5">
-        Назва раунду {selectedRoundTab}
-        </label>
-        <input
-        type="text"
-        value={roundSettings[selectedRoundTab]?.name ?? ''}
-        onChange={e => setRoundSettings(prev => ({
-          ...prev,
-          [selectedRoundTab]: { ...prev[selectedRoundTab], name: e.target.value }
-        }))}
-        placeholder={`Раунд ${selectedRoundTab}...`}
-        className={inp}
-        />
-        </div>
+  </div>
+  {/* end LEFT COLUMN */}
 
-        <div>
-        <label className="block text-[9px] font-black uppercase tracking-widest text-(--t2) mb-1.5">
-        Тривалість (хв)
-        </label>
-        <input
-        type="number"
-        min="0"
-        value={roundSettings[selectedRoundTab]?.duration ?? ''}
-        onChange={e => setRoundSettings(prev => ({
-          ...prev,
-          [selectedRoundTab]: { ...prev[selectedRoundTab], duration: e.target.value }
-        }))}
-        placeholder="60"
-        className={inp}
-        />
-        </div>
+  {/* ── RIGHT COLUMN: Параметри раунду (завжди відкрита) ── */}
+  <div className="sticky top-6 flex-1 min-w-0">
+  <RoundSettingsPanel
+  roundCount={roundCount}
+  selectedRound={selectedRoundTab}
+  onSelectRound={setSelectedRoundTab}
+  />
+  </div>
+  {/* end RIGHT COLUMN */}
 
-        <div>
-        <label className="block text-[9px] font-black uppercase tracking-widest text-(--t2) mb-1.5">
-        Примітки до раунду
-        </label>
-        <textarea
-        rows={3}
-        value={roundSettings[selectedRoundTab]?.description ?? ''}
-        onChange={e => setRoundSettings(prev => ({
-          ...prev,
-          [selectedRoundTab]: { ...prev[selectedRoundTab], description: e.target.value }
-        }))}
-        placeholder="Необов'язково..."
-        className={`${inp} resize-none`}
-        />
-        </div>
-        </div>
+  </div>
+  {/* end MAIN TWO-COLUMN LAYOUT */}
 
-        {/* Навігація між раундами */}
-        <div className="flex gap-2 mt-auto">
-        <button type="button"
-        disabled={selectedRoundTab <= 1}
-        onClick={() => setSelectedRoundTab(p => Math.max(1, p - 1))}
-        className="flex-1 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border border-(--brd) text-(--t2) hover:border-blue-600/40 hover:text-blue-500 transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
-        ← Попередній
-        </button>
-        <button type="button"
-        disabled={selectedRoundTab >= roundCount}
-        onClick={() => setSelectedRoundTab(p => Math.min(roundCount, p + 1))}
-        className="flex-1 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border border-(--brd) text-(--t2) hover:border-blue-600/40 hover:text-blue-500 transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
-        Наступний →
-        </button>
-        </div>
-        </div>
-      )}
-      </div>
+  {/* Error */}
+  {submitError && (
+    <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm font-bold text-red-500">
+    ⚠️ {submitError}
+    </div>
+  )}
 
-      {/* ── Draft restored banner ── */}
-      {draftRestored && (
-        <div className="mt-6 rounded-2xl border border-blue-500/30 bg-blue-500/10 px-5 py-4 flex items-center justify-between gap-3">
-        <p className="text-sm font-bold text-blue-500">💾 Відновлено незбережений чернетку</p>
-        <button type="button" onClick={() => {
-          clearDraft();
-          setTourneyName(''); setDescription('');
-          setStartDate(''); setStartTime(''); setEndDate(''); setEndTime('');
-          setRegStartDate(''); setRegStartTime(''); setRegEndDate(''); setRegEndTime('');
-          setTeamCount(0); setRoundCount(null); setRoundSettings({}); setSelectedRoundTab(1); setDraftRestored(false);
-        }}
-        className="text-[10px] font-black uppercase tracking-widest text-blue-500 border border-blue-500/40 px-3 py-1.5 rounded-xl hover:bg-blue-500/20 transition-all whitespace-nowrap">
-        Очистити
-        </button>
-        </div>
-      )}
 
-      {/* ── Error ── */}
-      {submitError && (
-        <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm font-bold text-red-500">
-        ⚠️ {submitError}
-        </div>
-      )}
 
-      {/* ── Action buttons ── */}
-      <div className="mt-6 flex flex-col sm:flex-row gap-3">
-      <button type="submit" disabled={isSubmitting}
-      className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-      {isSubmitting && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
-      {isSubmitting ? 'Зберігається...' : (t.tourney?.createBtn ?? 'Створити турнір')}
-      </button>
-      <button type="button" onClick={() => router.back()} disabled={isSubmitting}
-      className="px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60">
-      {t.common?.cancel ?? 'Скасувати'}
-      </button>
-      </div>
-      </div>
-      </section>
-
-      </form>
-      </div>
-      </main>
-      </div>
+  </form>
+  </div>
+  </main>
+  </div>
   );
 }
