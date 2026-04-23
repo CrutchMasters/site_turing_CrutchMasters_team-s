@@ -2,7 +2,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import {
     Bold, Italic, Underline, List, Quote, Type,
-    X, Plus, Clock, Upload, Link2, Trash2
+    X, Plus, Clock, Upload, Link2, Trash2, CalendarDays
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -41,26 +41,40 @@ function DateTimeField({
     label, dateVal, onDate, timeVal, onTime,
 }: { label: string; dateVal: string; onDate: (v: string) => void; timeVal: string; onTime: (v: string) => void }) {
     const timeRef = useRef<HTMLInputElement>(null);
+    const dateRef = useRef<HTMLInputElement>(null);
     return (
         <div className="flex flex-col gap-1.5">
         <span className={label10}>{label}</span>
         {/* Date + Time in one row */}
         <div className="flex gap-2">
-        {/* Date — native calendar icon only */}
+        {/* Date — hide native icon, show custom CalendarDays */}
+        <div className="relative flex-1 min-w-0">
         <input
+        ref={dateRef}
         type="date"
         value={dateVal}
         onChange={e => onDate(e.target.value)}
-        className={inp + " flex-1 min-w-0"}
+        className={inp + " w-full pr-9"}
         />
-        {/* Time — clickable Clock opens the native time picker */}
+        <style>{`input[type="date"]::-webkit-calendar-picker-indicator, input[type="time"]::-webkit-calendar-picker-indicator { display: none !important; }`}</style>
+        <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => dateRef.current?.showPicker?.()}
+        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-(--t2) hover:text-blue-500 transition-colors cursor-pointer"
+        aria-label="Вибрати дату"
+        >
+        <CalendarDays className="w-4 h-4" />
+        </button>
+        </div>
+        {/* Time — hide native icon, show custom Clock */}
         <div className="relative flex-1 min-w-0">
         <input
         ref={timeRef}
         type="time"
         value={timeVal}
         onChange={e => onTime(e.target.value)}
-        className={inp + " pr-10 w-full"}
+        className={inp + " w-full pr-9"}
         />
         <button
         type="button"

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Bold, Italic, Underline, List, Quote, Type,
-  Zap, Trophy, Clock, Users, Layers, ChevronRight, ArrowLeft, X,
+  Zap, Trophy, Clock, Users, Layers, ChevronRight, ArrowLeft, X, CalendarDays,
 } from 'lucide-react';
 
 import Sidebar from "@/components/Sidebar";
@@ -31,21 +31,47 @@ function DateTimePair({
   required?: boolean;
 }) {
   const timeRef = React.useRef<HTMLInputElement>(null);
+  const dateRef = React.useRef<HTMLInputElement>(null);
   return (
     <div className="flex flex-col gap-2">
     <div className="flex items-center justify-between">
     <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">{label}</span>
     {required && (
       <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1">
-      <Zap className="w-2.5 h-2.5 fill-red-500" /> Обов'язково
+      <Zap className="w-2.5 h-2.5 fill-red-500" /> Обов&apos;язково
       </span>
     )}
     </div>
-    {/* Date — native calendar icon only, no duplicate */}
-    <input type="date" value={dateVal} onChange={e => onDate(e.target.value)} className={inp} />
-    {/* Time — clickable Clock opens native time picker */}
+    {/* Date — hide native calendar icon, show custom clickable CalendarDays */}
     <div className="relative">
-    <input ref={timeRef} type="time" value={timeVal} onChange={e => onTime(e.target.value)} className={inp + " pr-10"} />
+    <input
+    ref={dateRef}
+    type="date"
+    value={dateVal}
+    onChange={e => onDate(e.target.value)}
+    className={inp + " pr-9"}
+    style={{ colorScheme: 'dark' }}
+    />
+    <button
+    type="button"
+    tabIndex={-1}
+    onClick={() => dateRef.current?.showPicker?.()}
+    className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-(--t2) hover:text-blue-500 transition-colors cursor-pointer"
+    aria-label="Вибрати дату"
+    >
+    <CalendarDays className="w-4 h-4" />
+    </button>
+    </div>
+    {/* Time — hide native Chrome clock icon, show custom clickable Clock */}
+    <div className="relative">
+    <input
+    ref={timeRef}
+    type="time"
+    value={timeVal}
+    onChange={e => onTime(e.target.value)}
+    className={inp + " pr-9"}
+    style={{ colorScheme: 'dark' }}
+    />
     <button
     type="button"
     tabIndex={-1}
@@ -341,17 +367,23 @@ export default function RegisterTourney() {
       {t.tourney?.createAdmin ?? 'Створення турніру'}
       </h1>
 
-      <form className="space-y-5" onSubmit={handleSubmit}>
+      <style>{`
+        input[type="date"]::-webkit-calendar-picker-indicator,
+        input[type="time"]::-webkit-calendar-picker-indicator {
+          display: none !important;
+        }
+        `}</style>
+        <form className="space-y-5" onSubmit={handleSubmit}>
 
-      {/* ══════════════════════════════════════════════════════════════
-        *  MAIN TWO-COLUMN LAYOUT
-        *  За замовчуванням: лівий блок по центру (max-w-[640px] + auto margins)
+        {/* ══════════════════════════════════════════════════════════════
+          *  MAIN TWO-COLUMN LAYOUT
+          *  За замовчуванням: лівий блок по центру (max-w-[640px] + auto margins)
   *  При відкритті раунду: лівий зсувається вліво, правий панель з'являється
   * ══════════════════════════════════════════════════════════════ */}
-  <div className="flex gap-6 items-start w-full">
+  <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
 
   {/* ── LEFT COLUMN ──────────────────────────────────────────── */}
-  <div className="flex flex-col gap-5 flex-1 min-w-0">
+  <div className="flex flex-col gap-5 w-full xl:flex-1 xl:min-w-0">
 
   {/* BLOCK 1: Загальна інформація */}
   <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
@@ -451,7 +483,7 @@ export default function RegisterTourney() {
   </section>
 
   {/* BLOCK 3: Формат + Команди (два підблоки поруч) */}
-  <section className="cdIn grid grid-cols-2 gap-5 items-stretch" style={{ animationDelay: '140ms' }}>
+  <section className="cdIn grid grid-cols-1 sm:grid-cols-2 gap-5 items-stretch" style={{ animationDelay: '140ms' }}>
 
   {/* Формат турніру (Раунди) — тільки швидкий вибір */}
   <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
@@ -475,7 +507,7 @@ export default function RegisterTourney() {
   {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
     <button key={n} type="button"
     onClick={() => { setRoundCount(n); if (selectedRoundTab > n) setSelectedRoundTab(1); }}
-    className={`h-10 rounded-xl font-black text-sm border transition-all duration-150 active:scale-90 relative ${
+    className={`h-10 rounded-xl font-black text-sm border transition-all duration-150 active:scale-90 ${
       n === roundCount
       ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/30'
       : n <= roundCount
@@ -483,9 +515,6 @@ export default function RegisterTourney() {
       : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600'
     }`}>
     {n}
-    {n <= roundCount && n !== roundCount && (
-      <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-blue-500 border border-(--card)" />
-    )}
     </button>
   ))}
   </div>
@@ -505,16 +534,24 @@ export default function RegisterTourney() {
   </div>
   <div className="p-5 flex flex-col gap-3 flex-1">
   <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Кількість команд</p>
-  <div className="flex items-center justify-center gap-4 flex-1">
+  <div className="flex items-center justify-center gap-3 flex-1">
   <button type="button"
   onClick={() => setTeamCount(Math.max(0, teamCount - 1))}
-  className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg">−</button>
-  <span className="text-3xl font-black text-(--t1) w-12 text-center tabular-nums">
-  {teamCount === 0 ? '∞' : teamCount}
-  </span>
+  className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">−</button>
+  <input
+  type="number"
+  min={0}
+  value={teamCount === 0 ? '' : teamCount}
+  onChange={e => {
+    const v = parseInt(e.target.value, 10);
+    setTeamCount(isNaN(v) || v < 0 ? 0 : v);
+  }}
+  placeholder="∞"
+  className="w-16 text-center text-2xl font-black bg-transparent outline-none text-(--t1) placeholder:text-(--t2)/60 border-b-2 border-(--brd) focus:border-blue-500 transition-colors tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+  />
   <button type="button"
-  onClick={() => setTeamCount(Math.min(256, teamCount + 1))}
-  className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg">+</button>
+  onClick={() => setTeamCount(teamCount + 1)}
+  className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">+</button>
   </div>
   <div className="flex gap-1.5 flex-wrap justify-center">
   {[0, 8, 16, 32, 64].map(n => (
@@ -550,7 +587,7 @@ export default function RegisterTourney() {
   {/* end LEFT COLUMN */}
 
   {/* ── RIGHT COLUMN: Параметри раунду (завжди відкрита) ── */}
-  <div className="sticky top-6 flex-1 min-w-0">
+  <div className="w-full xl:sticky xl:top-6 xl:flex-1 xl:min-w-0">
   <RoundSettingsPanel
   roundCount={roundCount}
   selectedRound={selectedRoundTab}
