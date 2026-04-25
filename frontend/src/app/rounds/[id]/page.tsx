@@ -260,7 +260,7 @@ export default function RoundPage() {
 
         {/* Mobile header */}
         <div className="md:hidden fixed top-0 left-0 right-0 z-30">
-        <MobileHeader onMenuClick={() => setIsMobileSidebarOpen(true)} />
+        <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} />
         </div>
 
         <main className="flex-1 overflow-y-auto px-4 md:px-8 py-6 md:py-8 pt-16 md:pt-8">
