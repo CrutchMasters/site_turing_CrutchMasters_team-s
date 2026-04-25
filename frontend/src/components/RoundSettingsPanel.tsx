@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────
-interface RoundData {
+export interface RoundData {
     name: string;
     description: string;
     startDate: string;
