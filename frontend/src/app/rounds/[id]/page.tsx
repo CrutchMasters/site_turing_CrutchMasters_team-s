@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
@@ -9,64 +9,30 @@ import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import {
     Clock, Calendar, ChevronLeft, Download, Upload,
-    Link2, FileText, AlertCircle, CheckCircle2, Cpu, Loader2
+    Link2, FileText, AlertCircle, CheckCircle2, Cpu, Loader2,
+    X, ZoomIn, ZoomOut, RotateCw, ExternalLink, File, Film,
+    Image as ImageIcon, Archive, FileCode, Paperclip, Flag,
 } from "lucide-react";
 
-const API_URL =
-typeof window !== "undefined" && window.location.hostname === "localhost"
-? "http://localhost:8000"
-: "https://site-turing-crutchmasters-team-s.onrender.com";
-
-interface RoundAttachment {
-    id: string;
-    name: string;
-    url: string;
-    type: "link" | "file";
+function getFileType(name: string): "image" | "video" | "pdf" | "archive" | "code" | "other" {
+    const ext = (name.split(".").pop() ?? "").toLowerCase();
+    if (["jpg","jpeg","png","gif","webp","svg","bmp","ico"].includes(ext)) return "image";
+    if (["mp4","webm","mov","avi","mkv"].includes(ext))                     return "video";
+    if (ext === "pdf")                                                       return "pdf";
+    if (["zip","rar","7z","tar","gz","bz2"].includes(ext))                  return "archive";
+    if (["js","ts","jsx","tsx","py","go","rs","java","c","cpp","cs",
+        "html","css","json","yaml","yml","md","sh"].includes(ext))          return "code";
+    return "other";
 }
 
-interface Round {
-    id: string;
-    tournament_id: string;
-    name: string;
-    description?: string;
-    criteria?: string;
-    technologies?: string[];
-    start_at?: string;
-    end_at?: string;
-    template_url?: string;
-    attachments?: RoundAttachment[];
-    status?: string;
-}
-
-interface Submission {
-    id: string;
-    round_id: string;
-    team_id: string;
-    submitted_at: string;
-    status: string;
-}
-
-function useCountdown(endAt?: string) {
-    const [time, setTime] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0, pct: 0 });
-
-    useEffect(() => {
-        if (!endAt) return;
-        const tick = () => {
-            const now = Date.now();
-            const end = new Date(endAt).getTime();
-            const diff = Math.max(0, end - now);
-            const days = Math.floor(diff / 86400000);
-            const hours = Math.floor((diff % 86400000) / 3600000);
-            const minutes = Math.floor((diff % 3600000) / 60000);
-            const seconds = Math.floor((diff % 60000) / 1000);
-            setTime({ days, hours, minutes, seconds, pct: diff > 0 ? 1 - diff / (end - Date.now() + diff) : 1 });
-        };
-        tick();
-        const id = setInterval(tick, 1000);
-        return () => clearInterval(id);
-    }, [endAt]);
-
-    return time;
+function FileTypeIcon({ type, size = 15 }: { type: ReturnType<typeof getFileType>; size?: number }) {
+    const cls = "flex-shrink-0";
+    if (type === "image")   return <ImageIcon  size={size} className={cls} />;
+    if (type === "video")   return <Film       size={size} className={cls} />;
+    if (type === "pdf")     return <FileText   size={size} className={cls} />;
+    if (type === "archive") return <Archive    size={size} className={cls} />;
+    if (type === "code")    return <FileCode   size={size} className={cls} />;
+    return <File size={size} className={cls} />;
 }
 
 function fmtDate(iso?: string) {
@@ -77,23 +43,214 @@ function fmtDate(iso?: string) {
     });
 }
 
-function TimeBlock({ value, label }: { value: number; label: string }) {
+interface FilePreviewModalProps {
+    file: { id: string; name: string; url: string; type: "link" | "file" } | null;
+    signedUrl: string | null;
+    onClose: () => void;
+    dark: boolean;
+}
+
+function FilePreviewModal({ file, signedUrl, onClose, dark }: FilePreviewModalProps) {
+    const [zoom, setZoom]         = useState(1);
+    const [rotation, setRotation] = useState(0);
+    const [imgError, setImgError] = useState(false);
+
+    useEffect(() => { setZoom(1); setRotation(0); setImgError(false); }, [file]);
+    useEffect(() => {
+        const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+        window.addEventListener("keydown", h);
+        return () => window.removeEventListener("keydown", h);
+    }, [onClose]);
+
+    if (!file || !signedUrl) return null;
+
+    const fileType = getFileType(file.name);
+    const ext = (file.name.split(".").pop() ?? "").toUpperCase();
+
     return (
-        <div className="flex flex-col items-center gap-0.5">
-        <span
-        style={{
-            fontFamily: "'Barlow Condensed', var(--font-barlow), sans-serif",
-            fontWeight: 700,
-            fontSize: "1.6rem",
-            lineHeight: 1,
-            color: "var(--t1)",
-        }}
-        >
-        {String(value).padStart(2, "0")}
+        <div
+        style={{ position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,0.85)",
+            backdropFilter:"blur(12px)",display:"flex",flexDirection:"column",
+            alignItems:"center",justifyContent:"center",padding:16 }}
+            onClick={onClose}
+            >
+            <style>{`
+                @keyframes slideUpModal {
+                    from { opacity:0; transform:translateY(24px) scale(0.97) }
+                    to   { opacity:1; transform:none }
+                }
+                .modal-inner { animation: slideUpModal 0.22s cubic-bezier(.22,1,.36,1) both; }
+                .modal-icon-btn:hover { opacity: 0.65 !important; }
+                `}</style>
+                <div className="modal-inner"
+                style={{ position:"relative",width:"100%",maxWidth:920,
+                    maxHeight:"calc(100vh - 80px)",borderRadius:18,overflow:"hidden",
+            display:"flex",flexDirection:"column",
+            background:dark?"#111114":"#fff",
+            border:`1px solid ${dark?"rgba(255,255,255,0.1)":"rgba(0,0,0,0.1)"}`,
+            boxShadow:"0 32px 80px rgba(0,0,0,0.6)" }}
+            onClick={e => e.stopPropagation()}
+            >
+            <div style={{ display:"flex",alignItems:"center",gap:10,padding:"12px 16px",
+                borderBottom:`1px solid ${dark?"rgba(255,255,255,0.08)":"rgba(0,0,0,0.08)"}`,
+            background:dark?"rgba(255,255,255,0.03)":"rgba(0,0,0,0.02)",flexShrink:0 }}>
+            <span style={{ padding:"2px 8px",borderRadius:6,fontSize:"0.65rem",fontWeight:700,
+                letterSpacing:"0.06em",
+                background:dark?"rgba(37,99,235,0.2)":"rgba(37,99,235,0.12)",
+            color:dark?"#93c5fd":"#1d4ed8",flexShrink:0 }}>{ext}</span>
+            <span style={{ flex:1,fontSize:"0.85rem",fontWeight:600,color:dark?"#e2e8f0":"#1e293b",
+                overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{file.name}</span>
+                {fileType === "image" && !imgError && (
+                    <div style={{ display:"flex",gap:6,alignItems:"center" }}>
+                    {[
+                        { icon:<ZoomOut size={15}/>, fn:() => setZoom(z => Math.max(0.25,z-0.25)) },
+                                                       { icon:<ZoomIn  size={15}/>, fn:() => setZoom(z => Math.min(4,z+0.25)) },
+                                                       { icon:<RotateCw size={15}/>, fn:() => setRotation(r => (r+90)%360) },
+                    ].map((b,i) => (
+                        <button key={i} className="modal-icon-btn" onClick={b.fn}
+                        style={{ display:"flex",alignItems:"center",justifyContent:"center",
+                            width:34,height:34,borderRadius:8,
+                            border:`1px solid ${dark?"rgba(255,255,255,0.1)":"rgba(0,0,0,0.1)"}`,
+                                    background:dark?"rgba(255,255,255,0.06)":"rgba(0,0,0,0.04)",
+                                    color:dark?"#94a3b8":"#64748b",cursor:"pointer" }}>
+                                    {b.icon}
+                                    </button>
+                    ))}
+                    <span style={{ fontSize:"0.72rem",fontWeight:700,color:dark?"#94a3b8":"#64748b",minWidth:38,textAlign:"center" }}>
+                    {Math.round(zoom*100)}%
+                    </span>
+                    </div>
+                )}
+                <a href={signedUrl} target="_blank" rel="noopener noreferrer" className="modal-icon-btn"
+                style={{ display:"flex",alignItems:"center",justifyContent:"center",width:34,height:34,
+                    borderRadius:8,border:`1px solid ${dark?"rgba(255,255,255,0.1)":"rgba(0,0,0,0.1)"}`,
+            background:dark?"rgba(255,255,255,0.06)":"rgba(0,0,0,0.04)",
+            color:dark?"#94a3b8":"#64748b",textDecoration:"none" }}>
+            <ExternalLink size={15}/>
+            </a>
+            <a href={signedUrl} download={file.name} className="modal-icon-btn"
+            style={{ display:"flex",alignItems:"center",justifyContent:"center",width:34,height:34,
+                borderRadius:8,border:`1px solid ${dark?"rgba(255,255,255,0.1)":"rgba(0,0,0,0.1)"}`,
+            background:dark?"rgba(255,255,255,0.06)":"rgba(0,0,0,0.04)",
+            color:dark?"#94a3b8":"#64748b",textDecoration:"none" }}>
+            <Download size={15}/>
+            </a>
+            <button className="modal-icon-btn" onClick={onClose}
+            style={{ display:"flex",alignItems:"center",justifyContent:"center",width:34,height:34,
+                borderRadius:8,border:"1px solid rgba(239,68,68,0.25)",
+            background:dark?"rgba(239,68,68,0.1)":"rgba(239,68,68,0.06)",
+            color:"#ef4444",cursor:"pointer" }}>
+            <X size={16}/>
+            </button>
+            </div>
+            <div style={{ flex:1,overflow:"auto",display:"flex",alignItems:"center",
+                justifyContent:"center",minHeight:0,
+            background:dark?"#0c0c0f":"#f5f5f7",position:"relative" }}>
+            {fileType === "image" && !imgError ? (
+                <div style={{ overflow:"auto",width:"100%",height:"100%",display:"flex",
+                    alignItems:"center",justifyContent:"center",padding:24 }}>
+                    <img src={signedUrl} alt={file.name} onError={() => setImgError(true)}
+                    style={{ transform:`scale(${zoom}) rotate(${rotation}deg)`,
+                                                  transformOrigin:"center",transition:"transform 0.2s ease",
+                                                  maxWidth:"100%",maxHeight:"62vh",objectFit:"contain",
+                                                  borderRadius:6,display:"block" }} />
+                                                  </div>
+            ) : fileType === "video" ? (
+                <video src={signedUrl} controls style={{ maxWidth:"100%",maxHeight:"65vh",borderRadius:6 }} />
+            ) : fileType === "pdf" ? (
+                <iframe src={signedUrl} style={{ width:"100%",height:"65vh",border:"none",display:"block" }} title={file.name} />
+            ) : (
+                <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:16,padding:48 }}>
+                <div style={{ width:72,height:72,borderRadius:20,
+                    background:dark?"rgba(37,99,235,0.15)":"rgba(37,99,235,0.1)",
+                 border:"1px solid rgba(37,99,235,0.25)",
+                 display:"flex",alignItems:"center",justifyContent:"center",
+                 color:dark?"#93c5fd":"#2563eb" }}>
+                 <FileTypeIcon type={fileType} size={32}/>
+                 </div>
+                 <p style={{ fontSize:"0.9rem",fontWeight:600,color:dark?"#e2e8f0":"#1e293b",textAlign:"center" }}>
+                 Попередній перегляд недоступний
+                 </p>
+                 <a href={signedUrl} download={file.name}
+                 style={{ display:"flex",alignItems:"center",gap:8,padding:"10px 20px",
+                     borderRadius:10,background:"linear-gradient(135deg,#2563eb,#1d4ed8)",
+                 color:"#fff",fontWeight:700,fontSize:"0.85rem",textDecoration:"none" }}>
+                 <Download size={15}/> Завантажити файл
+                 </a>
+                 </div>
+            )}
+            </div>
+            </div>
+            </div>
+    );
+}
+
+const API_URL =
+typeof window !== "undefined" && window.location.hostname === "localhost"
+? "http://localhost:8000"
+: "https://site-turing-crutchmasters-team-s.onrender.com";
+
+interface RoundAttachment { id: string; name: string; url: string; type: "link" | "file"; }
+interface Round {
+    id: string; tournament_id: string; name: string;
+    description?: string; criteria?: string; technologies?: string[];
+    start_at?: string; end_at?: string; template_url?: string;
+    attachments?: RoundAttachment[]; links?: RoundAttachment[];
+    status?: string;
+}
+interface Submission { id: string; round_id: string; team_id: string; submitted_at: string; status: string; }
+
+function useCountdown(endAt?: string) {
+    const [time, setTime] = useState({ days:0, hours:0, minutes:0, seconds:0 });
+    useEffect(() => {
+        if (!endAt) return;
+        const tick = () => {
+            const diff = Math.max(0, new Date(endAt).getTime() - Date.now());
+            setTime({
+                days:    Math.floor(diff / 86400000),
+                    hours:   Math.floor((diff % 86400000) / 3600000),
+                    minutes: Math.floor((diff % 3600000) / 60000),
+                    seconds: Math.floor((diff % 60000) / 1000),
+            });
+        };
+        tick();
+        const id = setInterval(tick, 1000);
+        return () => clearInterval(id);
+    }, [endAt]);
+    return time;
+}
+
+function SectionLabel({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+    return (
+        <div className="flex items-center gap-2 mb-4">
+        <div className="w-6 h-6 rounded-lg bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 flex-shrink-0">
+        {icon}
+        </div>
+        <span className="text-[11px] font-black uppercase tracking-widest text-(--t2)">{children}</span>
+        </div>
+    );
+}
+
+function TimeBlock({ value, label, urgent }: { value: number; label: string; urgent?: boolean }) {
+    return (
+        <div className="flex flex-col items-center gap-1.5 flex-1">
+        <div className={`w-full py-4 rounded-2xl border flex items-center justify-center ${
+            urgent ? "bg-red-500/10 border-red-500/25" : "bg-(--bg) border-(--brd)"
+        }`}>
+        <span className={`text-3xl font-black tabular-nums ${urgent ? "text-red-500" : "text-(--t1)"}`}
+        style={{ fontVariantNumeric:"tabular-nums" }}>
+        {String(value).padStart(2,"0")}
         </span>
-        <span style={{ fontSize: "0.65rem", color: "var(--t2)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-        {label}
-        </span>
+        </div>
+        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">{label}</span>
+        </div>
+    );
+}
+
+function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+    return (
+        <div className={`bg-(--card) border border-(--brd) rounded-2xl p-6 ${className}`}>
+        {children}
         </div>
     );
 }
@@ -101,17 +258,19 @@ function TimeBlock({ value, label }: { value: number; label: string }) {
 export default function RoundPage() {
     const params = useParams();
     const router = useRouter();
-    const { user } = useAuth();
-    const { dark } = useTheme();
+    const { user }  = useAuth();
+    const { dark }  = useTheme();
     const id = params?.id as string;
 
-    const [round, setRound] = useState<Round | null>(null);
-    const [submission, setSubmission] = useState<Submission | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [submitting, setSubmitting] = useState(false);
+    const [round,       setRound]       = useState<Round | null>(null);
+    const [submission,  setSubmission]  = useState<Submission | null>(null);
+    const [loading,     setLoading]     = useState(true);
+    const [submitting,  setSubmitting]  = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-    const [userTeamId, setUserTeamId] = useState<string | null>(null);
+    const [userTeamId,  setUserTeamId]  = useState<string | null>(null);
+    const [previewFile, setPreviewFile] = useState<RoundAttachment | null>(null);
+    const [previewUrl,  setPreviewUrl]  = useState<string | null>(null);
 
     const countdown = useCountdown(round?.end_at);
 
@@ -121,44 +280,29 @@ export default function RoundPage() {
     const fetchRound = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
-            .from("rounds")
-            .select("*")
-            .eq("id", id)
-            .single();
+            const { data, error } = await supabase.from("rounds").select("*").eq("id", id).single();
             if (error) throw error;
             setRound(data);
-
-            // fetch submission if team known
             if (userTeamId) fetchSubmission(data.id, userTeamId);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
-        }
+        } catch (e) { console.error(e); }
+        finally { setLoading(false); }
     };
 
     const fetchUserTeam = async () => {
         if (!user) return;
-        const { data } = await supabase
-        .from("teams")
-        .select("id")
-        .eq("captain_id", user.id)
-        .single();
-        if (data) {
-            setUserTeamId(data.id);
-            if (round) fetchSubmission(round.id, data.id);
-        }
+        const { data } = await supabase.from("teams").select("id").eq("captain_id", user.id).single();
+        if (data) { setUserTeamId(data.id); if (round) fetchSubmission(round.id, data.id); }
     };
 
     const fetchSubmission = async (roundId: string, teamId: string) => {
-        const { data } = await supabase
-        .from("submissions")
-        .select("*")
-        .eq("round_id", roundId)
-        .eq("team_id", teamId)
-        .maybeSingle();
+        const { data } = await supabase.from("submissions").select("*")
+        .eq("round_id", roundId).eq("team_id", teamId).maybeSingle();
         setSubmission(data ?? null);
+    };
+
+    const handleOpenFile = (file: RoundAttachment) => {
+        setPreviewFile(file);
+        setPreviewUrl(file.url);
     };
 
     const handleDownloadTemplate = async () => {
@@ -169,27 +313,21 @@ export default function RoundPage() {
         });
         if (res.ok) {
             const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `${round.name}_template.docx`;
-            a.click();
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement("a");
+            a.href = url; a.download = `${round.name}_template.docx`; a.click();
             URL.revokeObjectURL(url);
         }
     };
 
     const handleSubmit = async () => {
         if (!user || !round || !userTeamId) return;
-        setSubmitting(true);
-        setSubmitError(null);
+        setSubmitting(true); setSubmitError(null);
         try {
             const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
             const res = await fetch(`${API_URL}/api/rounds/${round.id}/submit`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
+                headers: { "Content-Type":"application/json", Authorization:`Bearer ${token}` },
                 body: JSON.stringify({ team_id: userTeamId }),
             });
             if (!res.ok) {
@@ -197,431 +335,313 @@ export default function RoundPage() {
                 throw new Error(err.detail || "Помилка при здачі завдання");
             }
             await fetchSubmission(round.id, userTeamId);
-        } catch (e: any) {
-            setSubmitError(e.message);
-        } finally {
-            setSubmitting(false);
-        }
+        } catch (e: any) { setSubmitError(e.message); }
+        finally { setSubmitting(false); }
     };
 
-    const attachments: RoundAttachment[] = round?.attachments ?? [];
-    const links = attachments.filter(a => a.type === "link");
-    const files = attachments.filter(a => a.type === "file");
-    const technologies: string[] = round?.technologies ?? [];
+    const allAttachments: RoundAttachment[] = React.useMemo(() => {
+        const merged = [...(round?.attachments ?? []), ...(round?.links ?? [])];
+        const seen = new Set<string>();
+        return merged.filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
+    }, [round]);
 
-    // Timeline progress
+    const links        = allAttachments.filter(a => a.type === "link");
+    const files        = allAttachments.filter(a => a.type === "file");
+    const technologies = round?.technologies ?? [];
+
     const startTs = round?.start_at ? new Date(round.start_at).getTime() : 0;
-    const endTs = round?.end_at ? new Date(round.end_at).getTime() : 0;
-    const nowTs = Date.now();
+    const endTs   = round?.end_at   ? new Date(round.end_at).getTime()   : 0;
     const progressPct = (startTs && endTs && endTs > startTs)
-    ? Math.min(100, Math.max(0, ((nowTs - startTs) / (endTs - startTs)) * 100))
+    ? Math.min(100, Math.max(0, ((Date.now() - startTs) / (endTs - startTs)) * 100))
     : 0;
+    const isUrgent = progressPct > 80;
 
-    const cardStyle = {
-        background: "var(--card)",
-        border: "1px solid var(--brd)",
-        borderRadius: "14px",
-        padding: "20px",
+    const statusConfig = {
+        active:   { label: "Активний",   bg: "bg-green-500/10", border: "border-green-500/20", text: "text-green-500",  dot: "bg-green-500",  pulse: true  },
+        finished: { label: "Завершено",  bg: "bg-(--bg)",       border: "border-(--brd)",       text: "text-(--t2)",    dot: "bg-gray-400",   pulse: false },
+        pending:  { label: "Очікується", bg: "bg-amber-500/10", border: "border-amber-500/20", text: "text-amber-500", dot: "bg-amber-400",  pulse: false },
     };
+    const st = statusConfig[(round?.status as keyof typeof statusConfig) ?? "pending"] ?? statusConfig.pending;
 
-    if (loading) {
-        return (
-            <div className="flex min-h-screen" style={{ background: "var(--bg)" }}>
-            <Sidebar />
-            <main className="flex-1 flex items-center justify-center">
-            <Loader2 size={32} className="animate-spin" style={{ color: "var(--t2)" }} />
-            </main>
-            </div>
-        );
-    }
+    if (loading) return (
+        <div className="flex min-h-screen bg-(--bg)">
+        <Sidebar />
+        <main className="flex-1 flex items-center justify-center">
+        <Loader2 size={32} className="animate-spin text-(--t2)" />
+        </main>
+        </div>
+    );
 
-    if (!round) {
-        return (
-            <div className="flex min-h-screen" style={{ background: "var(--bg)" }}>
-            <Sidebar />
-            <main className="flex-1 flex flex-col items-center justify-center gap-3">
-            <AlertCircle size={36} style={{ color: "var(--t2)" }} />
-            <p style={{ color: "var(--t2)" }}>Раунд не знайдено</p>
-            <button
-            onClick={() => router.back()}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-opacity hover:opacity-70"
-            style={{ background: "var(--card)", color: "var(--t1)", border: "1px solid var(--brd)" }}
-            >
-            <ChevronLeft size={16} /> Назад
-            </button>
-            </main>
-            </div>
-        );
-    }
+    if (!round) return (
+        <div className="flex min-h-screen bg-(--bg)">
+        <Sidebar />
+        <main className="flex-1 flex flex-col items-center justify-center gap-4">
+        <div className="w-16 h-16 rounded-2xl bg-(--card) border border-(--brd) flex items-center justify-center">
+        <AlertCircle size={28} className="text-(--t2)" />
+        </div>
+        <p className="text-(--t2) font-bold">Раунд не знайдено</p>
+        <button onClick={() => router.back()}
+        className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm bg-(--card) border border-(--brd) text-(--t1) hover:border-blue-600/40 hover:text-blue-600 transition-all font-bold">
+        <ChevronLeft size={16}/> Назад
+        </button>
+        </main>
+        </div>
+    );
 
     return (
-        <div className="flex min-h-screen" style={{ background: "var(--bg)" }}>
-        <Sidebar />
-
-        {/* Mobile header */}
-        <div className="md:hidden fixed top-0 left-0 right-0 z-30">
-        <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} />
+        <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1)">
+        {/* Background logo — same as tournaments page */}
+        <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
+        <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] blur-sm ${dark ? "invert" : ""}`} />
         </div>
 
-        <main className="flex-1 overflow-y-auto px-4 md:px-8 py-6 md:py-8 pt-16 md:pt-8">
-        {/* Back button */}
-        <button
-        onClick={() => router.back()}
-        className="flex items-center gap-1.5 mb-5 text-sm transition-opacity hover:opacity-70"
-        style={{ color: "var(--t2)" }}
-        >
-        <ChevronLeft size={16} />
+        <Sidebar />
+
+        <FilePreviewModal
+        file={previewFile} signedUrl={previewUrl}
+        onClose={() => { setPreviewFile(null); setPreviewUrl(null); }}
+        dark={dark}
+        />
+
+        {isMobileSidebarOpen && (
+            <div className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            onClick={() => setIsMobileSidebarOpen(false)} />
+        )}
+
+        <main className="flex-1 flex flex-col overflow-y-auto relative z-10">
+        <MobileHeader
+        onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+        title={round.name}
+        icon={<Flag size={18} className="text-blue-600" />}
+        />
+
+        <div className="p-6 max-w-5xl w-full mx-auto">
+        {/* Back */}
+        <button onClick={() => router.back()}
+        className="mb-6 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors group">
+        <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform"/>
         Назад до турніру
         </button>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5" style={{ maxWidth: 1100 }}>
+        {/* Status badges */}
+        <div className="flex items-center gap-3 flex-wrap mb-4">
+        <span className="text-[11px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl bg-blue-600/10 text-blue-600 border border-blue-600/20">
+        Раунд
+        </span>
+        {round.status && (
+            <span className={`flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl border ${st.bg} ${st.border} ${st.text}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${st.dot} ${st.pulse ? "animate-pulse" : ""}`} />
+            {st.label}
+            </span>
+        )}
+        </div>
 
-        {/* ═══════════ LEFT COLUMN ═══════════ */}
-        <div className="flex flex-col gap-4">
-
-        {/* ── Task card (name + description) ── */}
-        <div style={{ ...cardStyle, minHeight: 180, display: "flex", flexDirection: "column", gap: 12 }}>
-        <div>
-        <p style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--t2)", marginBottom: 6 }}>
-        Завдання
-        </p>
-        <h1 style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--t1)", lineHeight: 1.25 }}>
+        {/* Title */}
+        <h1 className="text-2xl font-black text-(--t1) leading-tight mb-8">
         {round.name}
         </h1>
-        </div>
 
+        {/* Two-column grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* ── LEFT ── */}
+        <div className="flex flex-col gap-4">
+
+        {/* Description */}
+        <Card>
+        <SectionLabel icon={<FileText size={13}/>}>Опис завдання</SectionLabel>
         {round.description ? (
-            <div
-            style={{
-                flex: 1,
-                overflowY: "auto",
-                maxHeight: 200,
-                color: "var(--t2)",
-                              fontSize: "0.875rem",
-                              lineHeight: 1.65,
-                              paddingRight: 4,
-            }}
-            >
+            <p className="text-sm text-(--t2) leading-relaxed whitespace-pre-wrap">
             {round.description}
-            </div>
+            </p>
         ) : (
-            <p style={{ color: "var(--t2)", fontSize: "0.85rem", fontStyle: "italic" }}>Опис відсутній</p>
+            <p className="text-sm text-(--t2) italic">Опис відсутній</p>
         )}
-        </div>
+        </Card>
 
-        {/* ── Criteria card ── */}
-        <div style={cardStyle}>
-        <p style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--t2)", marginBottom: 10 }}>
-        Критерії оцінювання
-        </p>
+        {/* Criteria */}
+        <Card>
+        <SectionLabel icon={<CheckCircle2 size={13}/>}>Критерії оцінювання</SectionLabel>
         {round.criteria ? (
-            <div
-            style={{
-                overflowY: "auto",
-                maxHeight: 160,
-                color: "var(--t1)",
-                           fontSize: "0.875rem",
-                           lineHeight: 1.7,
-                           paddingRight: 4,
-                           whiteSpace: "pre-wrap",
-            }}
-            >
-            {round.criteria}
+            <div className="flex flex-col gap-3">
+            {round.criteria.split("\n").filter(Boolean).map((line, i) => (
+                <div key={i} className="flex items-start gap-3 text-sm text-(--t1)">
+                <span className="w-6 h-6 rounded-lg bg-blue-600/10 text-blue-600 border border-blue-600/20 flex items-center justify-center text-[11px] font-black flex-shrink-0 mt-0.5">
+                {i + 1}
+                </span>
+                <span className="leading-relaxed pt-0.5">{line}</span>
+                </div>
+            ))}
             </div>
         ) : (
-            <p style={{ color: "var(--t2)", fontSize: "0.85rem", fontStyle: "italic" }}>Критерії не вказані</p>
+            <p className="text-sm text-(--t2) italic">Критерії не вказані</p>
         )}
-        </div>
+        </Card>
 
-        {/* ── Bottom action row ── */}
-        <div className="flex items-center gap-3 flex-wrap">
-        {/* Status badge */}
-        <div
-        style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            padding: "9px 16px",
-            borderRadius: 10,
-            background: submission
-            ? (dark ? "rgba(34,197,94,0.15)" : "rgba(34,197,94,0.1)")
-            : (dark ? "rgba(148,163,184,0.1)" : "rgba(148,163,184,0.08)"),
-            border: `1px solid ${submission ? "rgba(34,197,94,0.3)" : "var(--brd)"}`,
-            fontSize: "0.8rem",
-            fontWeight: 600,
-            color: submission ? "#22c55e" : "var(--t2)",
-            whiteSpace: "nowrap",
-        }}
-        >
-        {submission ? (
-            <><CheckCircle2 size={15} /> Здано</>
-        ) : (
-            <><AlertCircle size={15} /> Не здано</>
-        )}
+        {/* Status + template row */}
+        <div className="flex items-stretch gap-3">
+        <div className={`flex-1 flex items-center gap-3 px-5 py-4 rounded-2xl border font-bold text-sm ${
+            submission
+            ? "bg-green-500/10 border-green-500/25 text-green-500"
+            : "bg-(--card) border-(--brd) text-(--t2)"
+        }`}>
+        {submission
+            ? <><CheckCircle2 size={18}/> Статус: Здано</>
+            : <><AlertCircle  size={18}/> Статус: Не здано</>
+        }
         </div>
-
-        {/* Download template */}
         <button
         onClick={handleDownloadTemplate}
         disabled={!round.template_url}
-        style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            padding: "9px 16px",
-            borderRadius: 10,
-            background: "var(--card)",
-            border: "1px solid var(--brd)",
-            color: "var(--t1)",
-            fontSize: "0.8rem",
-            fontWeight: 600,
-            cursor: round.template_url ? "pointer" : "not-allowed",
-            opacity: round.template_url ? 1 : 0.45,
-            whiteSpace: "nowrap",
-            transition: "opacity 0.15s",
-        }}
-        className="hover:opacity-70"
+        className="flex items-center gap-2 px-5 py-4 rounded-2xl bg-(--card) border border-(--brd) text-(--t1) text-sm font-bold hover:border-blue-600/40 hover:text-blue-600 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
         >
-        <Download size={15} />
-        Скачати шаблон
+        <Download size={16}/> Шаблон
         </button>
         </div>
         </div>
 
-        {/* ═══════════ RIGHT COLUMN ═══════════ */}
+        {/* ── RIGHT ── */}
         <div className="flex flex-col gap-4">
 
-        {/* ── Timer card ── */}
-        <div style={cardStyle}>
-        <div className="flex items-center justify-between mb-3">
-        <p style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--t2)" }}>
-        До завершення
-        </p>
-        <Clock size={15} style={{ color: "var(--t2)" }} />
+        {/* Countdown */}
+        <Card>
+        <SectionLabel icon={<Clock size={13}/>}>До завершення</SectionLabel>
+        <div className="flex items-end gap-2 mb-5">
+        <TimeBlock value={countdown.days}    label="днів"  urgent={isUrgent} />
+        <span className="text-2xl font-black text-(--t2) mb-6 flex-shrink-0">:</span>
+        <TimeBlock value={countdown.hours}   label="год"   urgent={isUrgent} />
+        <span className="text-2xl font-black text-(--t2) mb-6 flex-shrink-0">:</span>
+        <TimeBlock value={countdown.minutes} label="хв"    urgent={isUrgent} />
+        <span className="text-2xl font-black text-(--t2) mb-6 flex-shrink-0">:</span>
+        <TimeBlock value={countdown.seconds} label="сек"   urgent={isUrgent} />
         </div>
-
-        {/* Countdown digits */}
-        <div className="flex items-center gap-4 mb-4">
-        <TimeBlock value={countdown.days} label="днів" />
-        <span style={{ color: "var(--t2)", fontWeight: 700, fontSize: "1.4rem", marginTop: -6 }}>:</span>
-        <TimeBlock value={countdown.hours} label="год" />
-        <span style={{ color: "var(--t2)", fontWeight: 700, fontSize: "1.4rem", marginTop: -6 }}>:</span>
-        <TimeBlock value={countdown.minutes} label="хв" />
-        <span style={{ color: "var(--t2)", fontWeight: 700, fontSize: "1.4rem", marginTop: -6 }}>:</span>
-        <TimeBlock value={countdown.seconds} label="сек" />
-        </div>
-
-        {/* Progress bar */}
-        <div style={{ position: "relative", height: 6, borderRadius: 99, background: dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)", overflow: "hidden", marginBottom: 10 }}>
+        <div className="relative h-2 rounded-full bg-(--brd) overflow-hidden mb-4">
         <div
+        className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000"
         style={{
-            position: "absolute",
-            left: 0, top: 0, bottom: 0,
             width: `${progressPct}%`,
-            borderRadius: 99,
-            background: progressPct > 80
+            background: isUrgent
             ? "linear-gradient(90deg,#f97316,#ef4444)"
-            : "linear-gradient(90deg,#3b82f6,#6366f1)",
-            transition: "width 1s linear",
+            : "linear-gradient(90deg,#2563eb,#1d4ed8)",
         }}
         />
-        {/* Dot */}
         <div
+        className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-(--card) transition-all duration-1000"
         style={{
-            position: "absolute",
-            top: "50%",
-            left: `calc(${progressPct}% - 6px)`,
-            transform: "translateY(-50%)",
-            width: 12, height: 12,
-            borderRadius: "50%",
-            background: progressPct > 80 ? "#ef4444" : "#6366f1",
-            border: "2px solid var(--card)",
-            boxShadow: "0 0 0 2px rgba(99,102,241,0.3)",
-            transition: "left 1s linear",
+            left: `calc(${progressPct}% - 8px)`,
+            background: isUrgent ? "#ef4444" : "#2563eb",
+            boxShadow: `0 0 0 3px ${isUrgent ? "rgba(239,68,68,0.25)" : "rgba(37,99,235,0.25)"}`,
         }}
         />
         </div>
-
-        {/* Start / End dates */}
         <div className="flex items-center justify-between">
-        <span style={{ fontSize: "0.72rem", color: "var(--t2)" }}>
-        <Calendar size={11} style={{ display: "inline", marginRight: 4, verticalAlign: "middle" }} />
-        {fmtDate(round.start_at)}
+        <span className="text-xs text-(--t2) font-bold flex items-center gap-1.5">
+        <Calendar size={12}/> {fmtDate(round.start_at)}
         </span>
-        <span style={{ fontSize: "0.72rem", color: "var(--t2)" }}>
-        {fmtDate(round.end_at)}
-        <Calendar size={11} style={{ display: "inline", marginLeft: 4, verticalAlign: "middle" }} />
+        <span className="text-xs text-(--t2) font-bold flex items-center gap-1.5">
+        {fmtDate(round.end_at)} <Calendar size={12}/>
         </span>
         </div>
-        </div>
+        </Card>
 
-        {/* ── Technologies card ── */}
-        <div style={cardStyle}>
-        <div className="flex items-center gap-2 mb-3">
-        <Cpu size={15} style={{ color: "var(--t2)" }} />
-        <p style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--t2)" }}>
-        Технології
-        </p>
-        </div>
-        {technologies.length > 0 ? (
+        {/* Technologies */}
+        {technologies.length > 0 && (
+            <Card>
+            <SectionLabel icon={<Cpu size={13}/>}>Технології</SectionLabel>
             <div className="flex flex-wrap gap-2">
             {technologies.map((tech, i) => (
-                <span
-                key={i}
-                style={{
-                    padding: "4px 12px",
-                    borderRadius: 99,
-                    fontSize: "0.78rem",
-                    fontWeight: 600,
-                    background: dark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.08)",
-                                            color: dark ? "#a5b4fc" : "#4f46e5",
-                                            border: "1px solid rgba(99,102,241,0.2)",
-                }}
-                >
+                <span key={i}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold border bg-blue-600/10 text-blue-600 border-blue-600/20">
                 {tech}
                 </span>
             ))}
             </div>
-        ) : (
-            <p style={{ color: "var(--t2)", fontSize: "0.85rem", fontStyle: "italic" }}>Технології не вказані</p>
-        )}
-        </div>
-
-        {/* ── Attachments card ── */}
-        <div style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 12 }}>
-        <div className="flex items-center gap-2">
-        <Link2 size={15} style={{ color: "var(--t2)" }} />
-        <p style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--t2)" }}>
-        Посилання та файли
-        </p>
-        </div>
-
-        {/* Links */}
-        {links.length > 0 && (
-            <div className="flex flex-col gap-1.5">
-            {links.map(link => (
-                <a
-                key={link.id}
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    fontSize: "0.82rem",
-                    color: dark ? "#818cf8" : "#4f46e5",
-                    textDecoration: "none",
-                    padding: "5px 0",
-                    borderBottom: "1px solid var(--brd)",
-                                transition: "opacity 0.15s",
-                }}
-                className="hover:opacity-70"
-                >
-                <Link2 size={13} style={{ flexShrink: 0 }} />
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {link.name || link.url}
-                </span>
-                </a>
-            ))}
-            </div>
+            </Card>
         )}
 
-        {/* Files list — scrollable */}
-        {files.length > 0 ? (
-            <div
-            style={{
-                overflowY: "auto",
-                maxHeight: 160,
-                display: "flex",
-                flexDirection: "column",
-                gap: 4,
-                paddingRight: 4,
-            }}
-            >
-            {files.map(file => (
-                <a
-                key={file.id}
-                href={file.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                download
-                style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 9,
-                    padding: "7px 10px",
-                    borderRadius: 8,
-                    background: dark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                                border: "1px solid var(--brd)",
-                                fontSize: "0.82rem",
-                                color: "var(--t1)",
-                                textDecoration: "none",
-                                transition: "opacity 0.15s",
-                }}
-                className="hover:opacity-70"
-                >
-                <FileText size={14} style={{ flexShrink: 0, color: "var(--t2)" }} />
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
-                {file.name}
-                </span>
-                <Download size={13} style={{ flexShrink: 0, color: "var(--t2)" }} />
-                </a>
-            ))}
-            </div>
-        ) : links.length === 0 ? (
-            <p style={{ color: "var(--t2)", fontSize: "0.85rem", fontStyle: "italic" }}>Вкладень немає</p>
-        ) : null}
-        </div>
+        {/* Attachments */}
+        {allAttachments.length > 0 && (
+            <Card>
+            <SectionLabel icon={<Paperclip size={13}/>}>Посилання / Файли</SectionLabel>
+            {links.length > 0 && (
+                <div className="flex flex-col gap-2 mb-3">
+                {links.length > 0 && files.length > 0 && (
+                    <p className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1">Посилання</p>
+                )}
+                {links.map(link => {
+                    let host = link.url;
+                    try { host = new URL(link.url).hostname.replace("www.",""); } catch {}
+                    return (
+                        <a key={link.id} href={link.url} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-3 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group">
+                        <div className="w-8 h-8 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center flex-shrink-0">
+                        <Link2 size={14} className="text-blue-600"/>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-blue-600 group-hover:underline truncate">{host}</p>
+                        <p className="text-[11px] text-(--t2) truncate">{link.url}</p>
+                        </div>
+                        <ExternalLink size={14} className="text-(--t2) flex-shrink-0"/>
+                        </a>
+                    );
+                })}
+                </div>
+            )}
+            {files.length > 0 && (
+                <div className="flex flex-col gap-2">
+                {links.length > 0 && files.length > 0 && (
+                    <p className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1">Файли</p>
+                )}
+                {files.map(file => {
+                    const ftype = getFileType(file.name);
+                    return (
+                        <button key={file.id} onClick={() => handleOpenFile(file)}
+                        className="flex items-center gap-3 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all text-left w-full group">
+                        <div className="w-8 h-8 rounded-xl bg-(--brd) flex items-center justify-center flex-shrink-0 text-(--t2)">
+                        <FileTypeIcon type={ftype} size={15}/>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-(--t1) truncate group-hover:text-blue-600 transition-colors">{file.name}</p>
+                        <p className="text-[11px] text-(--t2)">{ftype.toUpperCase()}</p>
+                        </div>
+                        <Download size={14} className="text-(--t2) flex-shrink-0"/>
+                        </button>
+                    );
+                })}
+                </div>
+            )}
+            </Card>
+        )}
 
-        {/* ── Submit button ── */}
+        {/* Submit error */}
         {submitError && (
-            <div
-            style={{
-                padding: "10px 14px",
-                borderRadius: 10,
-                background: dark ? "rgba(239,68,68,0.12)" : "rgba(239,68,68,0.08)",
-                         border: "1px solid rgba(239,68,68,0.25)",
-                         color: "#ef4444",
-                         fontSize: "0.8rem",
-            }}
-            >
+            <div className="px-5 py-4 rounded-2xl bg-red-500/10 border border-red-500/25 text-red-500 text-sm font-bold flex items-center gap-2">
+            <AlertCircle size={16} className="flex-shrink-0"/>
             {submitError}
             </div>
         )}
 
+        {/* Submit button */}
         <button
         onClick={handleSubmit}
         disabled={submitting || !!submission}
-        style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 9,
-            padding: "13px 20px",
-            borderRadius: 12,
-            fontWeight: 700,
-            fontSize: "0.9rem",
-            cursor: (submitting || !!submission) ? "not-allowed" : "pointer",
-            opacity: (submitting || !!submission) ? 0.6 : 1,
-            background: submission
-            ? (dark ? "rgba(34,197,94,0.15)" : "rgba(34,197,94,0.1)")
-            : "linear-gradient(135deg,#6366f1,#4f46e5)",
-            color: submission ? "#22c55e" : "#fff",
-            border: submission ? "1px solid rgba(34,197,94,0.3)" : "none",
-            boxShadow: submission ? "none" : "0 4px 14px rgba(99,102,241,0.35)",
-            transition: "opacity 0.15s, box-shadow 0.15s",
-        }}
+        className={`flex items-center justify-center gap-3 px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-[0.98] ${
+            submission
+            ? "bg-green-500/10 border border-green-500/25 text-green-500 cursor-default"
+            : submitting
+            ? "bg-blue-600/60 text-white cursor-wait"
+            : "bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20"
+        } disabled:opacity-70`}
         >
         {submitting ? (
-            <><Loader2 size={17} className="animate-spin" /> Надсилається...</>
+            <><Loader2 size={18} className="animate-spin"/> Надсилається...</>
         ) : submission ? (
-            <><CheckCircle2 size={17} /> Завдання здано</>
+            <><CheckCircle2 size={18}/> Завдання здано</>
         ) : (
-            <><Upload size={17} /> Здати завдання</>
+            <><Upload size={18}/> Здати завдання</>
         )}
         </button>
-
+        </div>
         </div>
         </div>
         </main>
