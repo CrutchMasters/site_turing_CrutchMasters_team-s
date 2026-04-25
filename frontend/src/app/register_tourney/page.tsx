@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 
 import Sidebar from "@/components/Sidebar";
-import RoundSettingsPanel, { type RoundData } from "@/components/RoundSettingsPanel";
+import RoundSettingsPanel from "@/components/RoundSettingsPanel";
 import MobileHeader from "@/components/MobileHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { useT } from "@/context/LanguageContext";
