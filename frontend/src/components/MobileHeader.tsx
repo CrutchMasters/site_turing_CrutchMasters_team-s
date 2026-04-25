@@ -19,6 +19,7 @@ export default function MobileHeader({
   const router = useRouter();
   const { user } = useAuth();
   const avatarLetter = user?.username?.charAt(0).toUpperCase() ?? "?";
+  const avatarUrl = user?.avatar_url;
 
   return (
     <header className="lg:hidden p-4 flex items-center justify-between bg-(--card) border-b border-(--brd) sticky top-0 z-30">
@@ -42,8 +43,10 @@ export default function MobileHeader({
         onClick={() => router.push("/profile")}
         className="active:scale-95 transition-transform"
       >
-        <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs bg-blue-600 border-2 border-(--brd)">
-          {avatarLetter}
+        <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-xs bg-blue-600 border-2 border-(--brd)">
+          {avatarUrl
+            ? <img src={avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+            : avatarLetter}
         </div>
       </button>
     </header>
