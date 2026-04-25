@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
+import { useT } from "@/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
@@ -15,9 +16,9 @@ import {
 } from "lucide-react";
 
 const API_URL =
-typeof window !== "undefined" && window.location.hostname === "localhost"
-? "http://localhost:8000"
-: "https://site-turing-crutchmasters-team-s.onrender.com";
+  typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? "http://localhost:8000"
+    : "https://site-turing-crutchmasters-team-s.onrender.com";
 
 interface SearchedUser {
   id: string;
@@ -46,29 +47,28 @@ function PortalDropdown({
     const update = () => {
       if (anchorRef.current) setRect(anchorRef.current.getBoundingClientRect());
     };
-      update();
-      // update on every scroll/resize so it stays glued while page scrolls
-      window.addEventListener("scroll", update, true);
-      window.addEventListener("resize", update);
-      return () => {
-        window.removeEventListener("scroll", update, true);
-        window.removeEventListener("resize", update);
-      };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
   }, [open, anchorRef]);
 
   if (!open || !rect) return null;
 
   return createPortal(
     <div
-    style={{
-      position: "fixed",
-      top: rect.bottom + 6,
-      left: rect.left,
-      width: rect.width,
-      zIndex: 99999,
-    }}
+      style={{
+        position: "fixed",
+        top: rect.bottom + 6,
+        left: rect.left,
+        width: rect.width,
+        zIndex: 99999,
+      }}
     >
-    {children}
+      {children}
     </div>,
     document.body
   );
@@ -83,6 +83,7 @@ function UserSearchDropdown({
   onClear,
   excludeIds = [],
   maxVisible = 3,
+  emptyText = "Nothing found",
 }: {
   label: string;
   placeholder: string;
@@ -91,6 +92,7 @@ function UserSearchDropdown({
   onClear: () => void;
   excludeIds?: string[];
   maxVisible?: number;
+  emptyText?: string;
 }) {
   const [query, setQuery]     = useState("");
   const [results, setResults] = useState<SearchedUser[]>([]);
@@ -99,13 +101,12 @@ function UserSearchDropdown({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const timerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!wrapperRef.current?.contains(e.target as Node)) setOpen(false);
     };
-      document.addEventListener("mousedown", handler);
-      return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   const doSearch = useCallback(async (q: string) => {
@@ -113,11 +114,11 @@ function UserSearchDropdown({
     setLoading(true);
     try {
       const { data } = await supabase
-      .from("account")
-      .select("id, username, login, email, role, avatar_url")
-      .or(`username.ilike.%${q}%,login.ilike.%${q}%`)
-      .eq("status", "active")
-      .limit(12);
+        .from("account")
+        .select("id, username, login, email, role, avatar_url")
+        .or(`username.ilike.%${q}%,login.ilike.%${q}%`)
+        .eq("status", "active")
+        .limit(12);
       setResults((data ?? []).filter((u: SearchedUser) => !excludeIds.includes(u.id)));
     } catch { setResults([]); }
     finally { setLoading(false); }
@@ -139,105 +140,103 @@ function UserSearchDropdown({
   };
 
   const letter = (u: SearchedUser) =>
-  (u.username || u.login || "?").charAt(0).toUpperCase();
+    (u.username || u.login || "?").charAt(0).toUpperCase();
 
   const ITEM_H = 56;
   const showDropdown = open && (results.length > 0 || (!!query.trim() && !loading));
 
-  // ── Selected state ──
   if (selected) {
     return (
       <div className="flex flex-col gap-1.5">
-      <label className="text-[10px] font-black text-(--t2) uppercase tracking-[0.15em] ml-1">{label}</label>
-      <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-(--bg) border border-blue-600/40">
-      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-black text-sm flex-shrink-0">
-      {letter(selected)}
-      </div>
-      <div className="flex-1 min-w-0">
-      <p className="font-black text-(--t1) text-sm truncate">{selected.username}</p>
-      <p className="text-[10px] text-(--t2) font-bold">@{selected.login}</p>
-      </div>
-      <button
-      type="button"
-      onClick={onClear}
-      className="text-(--t2) hover:text-red-500 transition-colors flex-shrink-0 p-1 rounded-lg hover:bg-red-500/10"
-      >
-      <X size={15} />
-      </button>
-      </div>
+        <label className="text-[10px] font-black text-(--t2) uppercase tracking-[0.15em] ml-1">{label}</label>
+        <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-(--bg) border border-blue-600/40">
+          <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-black text-sm flex-shrink-0">
+            {letter(selected)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-black text-(--t1) text-sm truncate">{selected.username}</p>
+            <p className="text-[10px] text-(--t2) font-bold">@{selected.login}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-(--t2) hover:text-red-500 transition-colors flex-shrink-0 p-1 rounded-lg hover:bg-red-500/10"
+          >
+            <X size={15} />
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-1.5">
-    <label className="text-[10px] font-black text-(--t2) uppercase tracking-[0.15em] ml-1">{label}</label>
+      <label className="text-[10px] font-black text-(--t2) uppercase tracking-[0.15em] ml-1">{label}</label>
 
-    <div className="relative" ref={wrapperRef}>
-    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-(--t2) pointer-events-none w-4 h-4 z-10" />
-    <input
-    type="text"
-    placeholder={placeholder}
-    value={query}
-    onChange={handleChange}
-    onFocus={() => { if (query) setOpen(true); }}
-    autoComplete="off"
-    className="w-full pl-10 pr-10 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none text-sm transition-all"
-    />
-    {loading && (
-      <Loader className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-600 w-4 h-4 animate-spin z-10" />
-    )}
+      <div className="relative" ref={wrapperRef}>
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-(--t2) pointer-events-none w-4 h-4 z-10" />
+        <input
+          type="text"
+          placeholder={placeholder}
+          value={query}
+          onChange={handleChange}
+          onFocus={() => { if (query) setOpen(true); }}
+          autoComplete="off"
+          className="w-full pl-10 pr-10 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none text-sm transition-all"
+        />
+        {loading && (
+          <Loader className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-600 w-4 h-4 animate-spin z-10" />
+        )}
 
-    {/* Portal dropdown — rendered at body, above all panels */}
-    <PortalDropdown anchorRef={wrapperRef} open={showDropdown}>
-    <div
-    style={{
-      borderRadius: "1.25rem",
-      backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          background: "var(--card)",
-          border: "1px solid var(--brd)",
-          boxShadow: "0 24px 60px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.04)",
-          overflow: "hidden",
-    }}
-    >
-    {results.length === 0 ? (
-      <div className="px-4 py-4 text-[11px] font-bold text-(--t2) text-center uppercase tracking-wider">
-      Нічого не знайдено
+        <PortalDropdown anchorRef={wrapperRef} open={showDropdown}>
+          <div
+            style={{
+              borderRadius: "1.25rem",
+              backdropFilter: "blur(16px)",
+              WebkitBackdropFilter: "blur(16px)",
+              background: "var(--card)",
+              border: "1px solid var(--brd)",
+              boxShadow: "0 24px 60px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.04)",
+              overflow: "hidden",
+            }}
+          >
+            {results.length === 0 ? (
+              <div className="px-4 py-4 text-[11px] font-bold text-(--t2) text-center uppercase tracking-wider">
+                {emptyText}
+              </div>
+            ) : (
+              <div
+                style={{ maxHeight: `${maxVisible * ITEM_H}px`, overflowY: "auto" }}
+                className="dropdown-scroll"
+              >
+                {results.map((u, i) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onMouseDown={e => { e.preventDefault(); pick(u); }}
+                    className="w-full flex items-center gap-3 px-4 hover:bg-(--bg) transition-colors text-left"
+                    style={{
+                      height: `${ITEM_H}px`,
+                      borderTop: i > 0 ? "1px solid var(--brd)" : "none",
+                    }}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-blue-600/15 border border-blue-600/25 flex items-center justify-center text-blue-600 font-black text-sm flex-shrink-0">
+                      {letter(u)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-black text-(--t1) truncate leading-tight">{u.username}</p>
+                      <p className="text-[10px] text-(--t2) font-bold">@{u.login}</p>
+                    </div>
+                    <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md bg-(--bg) border border-(--brd) text-(--t2) flex-shrink-0 ml-2">
+                      {u.role}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </PortalDropdown>
       </div>
-    ) : (
-      <div
-      style={{ maxHeight: `${maxVisible * ITEM_H}px`, overflowY: "auto" }}
-      className="dropdown-scroll"
-      >
-      {results.map((u, i) => (
-        <button
-        key={u.id}
-        type="button"
-        onMouseDown={e => { e.preventDefault(); pick(u); }}
-        className="w-full flex items-center gap-3 px-4 hover:bg-(--bg) transition-colors text-left"
-        style={{
-          height: `${ITEM_H}px`,
-          borderTop: i > 0 ? "1px solid var(--brd)" : "none",
-        }}
-        >
-        <div className="w-8 h-8 rounded-full bg-blue-600/15 border border-blue-600/25 flex items-center justify-center text-blue-600 font-black text-sm flex-shrink-0">
-        {letter(u)}
-        </div>
-        <div className="flex-1 min-w-0">
-        <p className="text-sm font-black text-(--t1) truncate leading-tight">{u.username}</p>
-        <p className="text-[10px] text-(--t2) font-bold">@{u.login}</p>
-        </div>
-        <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md bg-(--bg) border border-(--brd) text-(--t2) flex-shrink-0 ml-2">
-        {u.role}
-        </span>
-        </button>
-      ))}
-      </div>
-    )}
-    </div>
-    </PortalDropdown>
-    </div>
     </div>
   );
 }
@@ -247,13 +246,13 @@ function MemberChip({ user: u, onRemove }: { user: SearchedUser; onRemove: () =>
   const letter = (u.username || u.login || "?").charAt(0).toUpperCase();
   return (
     <div className="flex items-center gap-2 bg-(--bg) border border-(--brd) rounded-xl px-3 py-2 hover:border-red-400/40 transition-all">
-    <div className="w-6 h-6 rounded-full bg-blue-600/15 border border-blue-600/25 flex items-center justify-center text-blue-600 font-black text-[10px] flex-shrink-0">
-    {letter}
-    </div>
-    <span className="text-xs font-bold text-(--t1) max-w-[100px] truncate">{u.username}</span>
-    <button type="button" onClick={onRemove} className="text-(--t2) hover:text-red-500 transition-colors ml-0.5">
-    <X size={12} />
-    </button>
+      <div className="w-6 h-6 rounded-full bg-blue-600/15 border border-blue-600/25 flex items-center justify-center text-blue-600 font-black text-[10px] flex-shrink-0">
+        {letter}
+      </div>
+      <span className="text-xs font-bold text-(--t1) max-w-[100px] truncate">{u.username}</span>
+      <button type="button" onClick={onRemove} className="text-(--t2) hover:text-red-500 transition-colors ml-0.5">
+        <X size={12} />
+      </button>
     </div>
   );
 }
@@ -262,18 +261,18 @@ function MemberChip({ user: u, onRemove }: { user: SearchedUser; onRemove: () =>
 function SectionHeader({ num, title, right }: { num: string; title: string; right?: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-(--bg)/40">
-    <span className="w-7 h-7 rounded-lg bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-xs font-black text-blue-600 flex-shrink-0">
-    {num}
-    </span>
-    <h2 className="font-black text-sm uppercase tracking-widest text-(--t1)">{title}</h2>
-    {right && <div className="ml-auto">{right}</div>}
+      <span className="w-7 h-7 rounded-lg bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-xs font-black text-blue-600 flex-shrink-0">
+        {num}
+      </span>
+      <h2 className="font-black text-sm uppercase tracking-widest text-(--t1)">{title}</h2>
+      {right && <div className="ml-auto">{right}</div>}
     </div>
   );
 }
 
 // ── Draft persistence (sessionStorage, TTL 5 min) ────────────────────────────
 const DRAFT_KEY = "register_team_draft";
-const DRAFT_TTL = 5 * 60 * 1000; // 5 minutes in ms
+const DRAFT_TTL = 5 * 60 * 1000;
 
 interface DraftData {
   teamName: string;
@@ -318,10 +317,11 @@ function clearDraft() {
 export default function RegisterTeamPage() {
   const { dark } = useTheme();
   const { user, isLoading } = useAuth();
+  const { t } = useT();
+  const rt = t.registerTeam;
   const router = useRouter();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // ── Restore from draft on first render ──
   const draft = typeof window !== "undefined" ? loadDraft() : null;
 
   const [teamName, setTeamName]         = useState(draft?.teamName     ?? "");
@@ -336,7 +336,6 @@ export default function RegisterTeamPage() {
   const [submitting, setSubmitting]     = useState(false);
   const [submitted, setSubmitted]       = useState(false);
 
-  // ── Auto-save draft on every change ──
   useEffect(() => {
     saveDraft({ teamName, organization, contactEmail, showDiscord, showTelegram, discordLink, telegramLink, captain, members });
   }, [teamName, organization, contactEmail, showDiscord, showTelegram, discordLink, telegramLink, captain, members]);
@@ -345,20 +344,18 @@ export default function RegisterTeamPage() {
   const [telegramError, setTelegramError] = useState("");
   const [submitError, setSubmitError]     = useState("");
 
-  // ── Link validators ──
   const validateDiscord = (val: string) => {
     if (!val) return "";
     const ok = /^https:\/\/(discord\.gg|discord\.com\/invite)\/[a-zA-Z0-9\-_]+$/.test(val.trim());
-    return ok ? "" : "Введіть коректне посилання: https://discord.gg/... або https://discord.com/invite/...";
+    return ok ? "" : rt.discordError;
   };
   const validateTelegram = (val: string) => {
     if (!val) return "";
     const ok = /^https:\/\/t\.me\/[a-zA-Z0-9_\-\+]+/.test(val.trim());
-    return ok ? "" : "Введіть коректне посилання: https://t.me/...";
+    return ok ? "" : rt.telegramError;
   };
 
   useEffect(() => {
-    // Set captain to current user only if draft had no captain saved
     if (user && !captain) {
       setCaptain({ id: user.id, username: user.username, login: user.login, email: user.email, role: user.role, avatar_url: user.avatar_url });
     }
@@ -368,97 +365,100 @@ export default function RegisterTeamPage() {
     if (!isLoading && !user) router.push("/login");
   }, [isLoading, user, router]);
 
-    const addMember = (u: SearchedUser) => {
-      if (members.length >= 10 || members.find(m => m.id === u.id)) return;
-      setMembers(prev => [...prev, u]);
-    };
-    const removeMember = (id: string) => setMembers(prev => prev.filter(m => m.id !== id));
-    const excludedFromMembers = [...(captain ? [captain.id] : []), ...members.map(m => m.id)];
+  const addMember = (u: SearchedUser) => {
+    if (members.length >= 10 || members.find(m => m.id === u.id)) return;
+    setMembers(prev => [...prev, u]);
+  };
+  const removeMember = (id: string) => setMembers(prev => prev.filter(m => m.id !== id));
+  const excludedFromMembers = [...(captain ? [captain.id] : []), ...members.map(m => m.id)];
 
-    const handleSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!teamName.trim() || !captain) return;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!teamName.trim() || !captain) return;
 
-      const dErr = validateDiscord(discordLink);
-      const tErr = validateTelegram(telegramLink);
-      setDiscordError(dErr);
-      setTelegramError(tErr);
-      if (dErr || tErr) return;
+    const dErr = validateDiscord(discordLink);
+    const tErr = validateTelegram(telegramLink);
+    setDiscordError(dErr);
+    setTelegramError(tErr);
+    if (dErr || tErr) return;
 
-      setSubmitting(true);
-      setSubmitError("");
+    setSubmitting(true);
+    setSubmitError("");
 
-      try {
-        const token =
-          (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+    try {
+      const token =
+        (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
 
-        // 1. Створити команду через бекенд (не напряму в Supabase)
-        const teamRes = await fetch(`${API_URL}/api/teams`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization:  `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            name:            teamName.trim(),
-            city_school_org: organization.trim() || null,
-            telegram_url:    telegramLink.trim() || null,
-            discord_url:     discordLink.trim()  || null,
-          }),
-        });
+      const teamRes = await fetch(`${API_URL}/api/teams`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization:  `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name:            teamName.trim(),
+          city_school_org: organization.trim() || null,
+          telegram_url:    telegramLink.trim() || null,
+          discord_url:     discordLink.trim()  || null,
+        }),
+      });
 
-        if (!teamRes.ok) {
-          const errData = await teamRes.json().catch(() => ({}));
-          throw new Error(errData.detail || `Помилка ${teamRes.status}`);
-        }
-
-        const teamData = await teamRes.json();
-        const teamId = teamData.team?.id;
-
-        if (!teamId) throw new Error("Не вдалося отримати ID команди");
-
-        // 2. Надіслати запрошення всім обраним учасникам через бекенд
-        if (members.length > 0) {
-          const inviteResults = await Promise.allSettled(
-            members.map(m =>
-              fetch(`${API_URL}/api/invitations/send`, {
-                method:  "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization:  `Bearer ${token}`,
-                },
-                body: JSON.stringify({ team_id: teamId, invitee_id: m.id }),
-              })
-            )
-          );
-
-          const failed = inviteResults.filter(r => r.status === "rejected").length;
-          if (failed > 0) {
-            console.warn(`${failed} invitations failed to send`);
-          }
-        }
-
-        clearDraft();
-        setSubmitted(true);
-        setTimeout(() => router.push("/teams"), 2000);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Невідома помилка";
-        setSubmitError(`Помилка збереження: ${msg}`);
-      } finally {
-        setSubmitting(false);
+      if (!teamRes.ok) {
+        const errData = await teamRes.json().catch(() => ({}));
+        throw new Error(errData.detail || `Error ${teamRes.status}`);
       }
-    };
 
-    if (isLoading || !user) {
-      return (
-        <div className="min-h-screen bg-(--bg) flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-        </div>
-      );
+      const teamData = await teamRes.json();
+      const teamId = teamData.team?.id;
+
+      if (!teamId) throw new Error("Failed to get team ID");
+
+      if (members.length > 0) {
+        const inviteResults = await Promise.allSettled(
+          members.map(m =>
+            fetch(`${API_URL}/api/invitations/send`, {
+              method:  "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization:  `Bearer ${token}`,
+              },
+              body: JSON.stringify({ team_id: teamId, invitee_id: m.id }),
+            })
+          )
+        );
+
+        const failed = inviteResults.filter(r => r.status === "rejected").length;
+        if (failed > 0) {
+          console.warn(`${failed} invitations failed to send`);
+        }
+      }
+
+      clearDraft();
+      setSubmitted(true);
+      setTimeout(() => router.push("/teams"), 2000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      setSubmitError(`${rt.errorPrefix}${msg}`);
+    } finally {
+      setSubmitting(false);
     }
+  };
 
+  if (isLoading || !user) {
     return (
-      <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
+      <div className="min-h-screen bg-(--bg) flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Invites sent string with count interpolation
+  const invitesSentStr = members.length === 1
+    ? rt.successInvitesSent.replace("{n}", String(members.length))
+    : rt.successInvitesSentPlural.replace("{n}", String(members.length));
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
       <style jsx global>{`
         @keyframes fadeUp   { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
         @keyframes cardDrop { from{opacity:0;transform:translateY(-16px) scale(.98)} to{opacity:1;transform:none} }
@@ -476,233 +476,280 @@ export default function RegisterTeamPage() {
         .dropdown-scroll { scrollbar-width: thin; scrollbar-color: var(--brd) transparent; }
         .dropdown-scroll::-webkit-scrollbar { width: 4px; }
         .dropdown-scroll::-webkit-scrollbar-thumb { background: var(--brd); border-radius: 4px; }
-        `}</style>
+      `}</style>
 
-        {/* Watermark */}
-        <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
+      {/* Watermark */}
+      <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
         <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
-        </div>
+      </div>
 
-        {isMobileSidebarOpen && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
-        )}
-        <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+      )}
+      <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <Sidebar />
-        </div>
+      </div>
 
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Нова команда" icon={<Users size={18} className="text-blue-600" />} />
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <MobileHeader
+          onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+          title={rt.pageTitle}
+          icon={<Users size={18} className="text-blue-600" />}
+        />
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
 
-        <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-        <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
-        <ChevronRight size={10} />
-        <button onClick={() => router.push("/teams")} className="hover:text-blue-600 transition-colors">Команди</button>
-        <ChevronRight size={10} />
-        <span className="text-(--t1)">Реєстрація</span>
-        </nav>
+          {/* Breadcrumb */}
+          <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
+            <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">
+              {rt.breadcrumbHome}
+            </button>
+            <ChevronRight size={10} />
+            <button onClick={() => router.push("/teams")} className="hover:text-blue-600 transition-colors">
+              {rt.breadcrumbTeams}
+            </button>
+            <ChevronRight size={10} />
+            <span className="text-(--t1)">{rt.breadcrumbCurrent}</span>
+          </nav>
 
-        <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-(--t1) uppercase mb-8 text-center">
-        🏅 Реєстрація команди
-        </h1>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-(--t1) uppercase mb-8 text-center">
+            {rt.h1}
+          </h1>
 
-        {/* Success */}
-        {submitted && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-(--bg)/80 backdrop-blur-md">
-          <div className="success-pop bg-(--card) border border-green-500/30 rounded-3xl p-10 text-center shadow-2xl max-w-sm mx-4">
-          <div className="w-16 h-16 rounded-full bg-green-500/10 border-2 border-green-500/30 flex items-center justify-center mx-auto mb-4">
-          <Check size={32} className="text-green-500" />
-          </div>
-          <p className="text-xl font-black text-(--t1) uppercase tracking-tight mb-1">Команду створено!</p>
-          {members.length > 0 && (
-            <p className="text-sm text-blue-500 font-bold mt-2">
-            📨 Запрошення надіслано {members.length} учасник{members.length === 1 ? "у" : "ам"}
-            </p>
+          {/* Success overlay */}
+          {submitted && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-(--bg)/80 backdrop-blur-md">
+              <div className="success-pop bg-(--card) border border-green-500/30 rounded-3xl p-10 text-center shadow-2xl max-w-sm mx-4">
+                <div className="w-16 h-16 rounded-full bg-green-500/10 border-2 border-green-500/30 flex items-center justify-center mx-auto mb-4">
+                  <Check size={32} className="text-green-500" />
+                </div>
+                <p className="text-xl font-black text-(--t1) uppercase tracking-tight mb-1">
+                  {rt.successTitle}
+                </p>
+                {members.length > 0 && (
+                  <p className="text-sm text-blue-500 font-bold mt-2">
+                    {invitesSentStr}
+                  </p>
+                )}
+                <p className="text-sm text-(--t2) font-bold mt-1">{rt.successRedirect}</p>
+              </div>
+            </div>
           )}
-          <p className="text-sm text-(--t2) font-bold mt-1">Перенаправляємо на список команд...</p>
-          </div>
-          </div>
-        )}
 
-        <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-5">
+          <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-5">
 
-        {/* 1. Загальна інформація */}
-        <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) shadow-xl">
-        <SectionHeader num="1" title="Загальна інформація" />
-        <div className="p-6 sm:p-8 space-y-5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="flex flex-col gap-1.5">
-        <label className="text-[10px] font-black text-(--t2) uppercase tracking-[0.15em] ml-1">
-        Назва команди <span className="text-red-500">*</span>
-        </label>
-        <input type="text" placeholder="Team Alpha..." value={teamName} onChange={e => setTeamName(e.target.value)} required
-        className="w-full px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none text-sm transition-all" />
-        </div>
-        <div className="flex flex-col gap-1.5">
-        <label className="text-[10px] font-black text-(--t2) uppercase tracking-[0.15em] ml-1">Організація</label>
-        <input type="text" placeholder="КПІ, Polytechnic..." value={organization} onChange={e => setOrganization(e.target.value)}
-        className="w-full px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none text-sm transition-all" />
-        </div>
-        </div>
+            {/* 1. General information */}
+            <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) shadow-xl">
+              <SectionHeader num="1" title={rt.sec1Title} />
+              <div className="p-6 sm:p-8 space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-black text-(--t2) uppercase tracking-[0.15em] ml-1">
+                      {rt.nameRequired} <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={rt.namePlaceholder}
+                      value={teamName}
+                      onChange={e => setTeamName(e.target.value)}
+                      required
+                      className="w-full px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none text-sm transition-all"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-black text-(--t2) uppercase tracking-[0.15em] ml-1">
+                      {rt.orgLabel}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={rt.orgPlaceholder}
+                      value={organization}
+                      onChange={e => setOrganization(e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none text-sm transition-all"
+                    />
+                  </div>
+                </div>
 
-        <div className="flex flex-col gap-1.5">
-        <label className="text-[10px] font-black text-(--t2) uppercase tracking-[0.15em] ml-1 flex items-center gap-1.5">
-        <Mail size={11} /> Контактний email
-        </label>
-        <input type="email" placeholder="team@example.com" value={contactEmail} onChange={e => setContactEmail(e.target.value)}
-        className="w-full px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none text-sm transition-all" />
-        </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-black text-(--t2) uppercase tracking-[0.15em] ml-1 flex items-center gap-1.5">
+                    <Mail size={11} /> {rt.emailLabel}
+                  </label>
+                  <input
+                    type="email"
+                    placeholder={rt.emailPlaceholder}
+                    value={contactEmail}
+                    onChange={e => setContactEmail(e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none text-sm transition-all"
+                  />
+                </div>
 
-        <div className="space-y-3">
-        <p className="text-[10px] font-black text-(--t2) uppercase tracking-[0.15em] ml-1">
-        Соціальні мережі <span className="opacity-50">(необов'язково)</span>
-        </p>
-        <div className="flex gap-2 flex-wrap">
-        <button type="button" onClick={() => setShowDiscord(p => !p)}
-        className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border text-xs font-black uppercase tracking-widest transition-all active:scale-95 ${showDiscord ? "bg-indigo-600/10 border-indigo-600/40 text-indigo-500" : "bg-(--bg) border-(--brd) text-(--t2) hover:border-indigo-600/30 hover:text-indigo-400"}`}>
-        <svg viewBox="0 0 127.14 96.36" className="w-4 h-4" fill="#5865F2">
-          <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/>
-        </svg>
-        Discord {showDiscord ? <X size={11} /> : <Plus size={11} />}
-        </button>
-        <button type="button" onClick={() => setShowTelegram(p => !p)}
-        className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border text-xs font-black uppercase tracking-widest transition-all active:scale-95 ${showTelegram ? "bg-sky-600/10 border-sky-600/40 text-sky-500" : "bg-(--bg) border-(--brd) text-(--t2) hover:border-sky-600/30 hover:text-sky-400"}`}>
-        <Send size={13} />
-        Telegram {showTelegram ? <X size={11} /> : <Plus size={11} />}
-        </button>
-        </div>
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black text-(--t2) uppercase tracking-[0.15em] ml-1">
+                    {rt.socialLabel} <span className="opacity-50">{rt.socialOptional}</span>
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setShowDiscord(p => !p)}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border text-xs font-black uppercase tracking-widest transition-all active:scale-95 ${showDiscord ? "bg-indigo-600/10 border-indigo-600/40 text-indigo-500" : "bg-(--bg) border-(--brd) text-(--t2) hover:border-indigo-600/30 hover:text-indigo-400"}`}
+                    >
+                      <svg viewBox="0 0 127.14 96.36" className="w-4 h-4" fill="#5865F2">
+                        <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/>
+                      </svg>
+                      {rt.discordBtn} {showDiscord ? <X size={11} /> : <Plus size={11} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowTelegram(p => !p)}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border text-xs font-black uppercase tracking-widest transition-all active:scale-95 ${showTelegram ? "bg-sky-600/10 border-sky-600/40 text-sky-500" : "bg-(--bg) border-(--brd) text-(--t2) hover:border-sky-600/30 hover:text-sky-400"}`}
+                    >
+                      <Send size={13} />
+                      {rt.telegramBtn} {showTelegram ? <X size={11} /> : <Plus size={11} />}
+                    </button>
+                  </div>
 
-        {showDiscord && (
-          <div className="fadeIn flex flex-col gap-1.5">
-          <label className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.15em] ml-1">Посилання на Discord сервер</label>
-          <input
-          type="text"
-          placeholder="https://discord.gg/..."
-          value={discordLink}
-          onChange={e => { setDiscordLink(e.target.value); setDiscordError(validateDiscord(e.target.value)); }}
-          onBlur={e => setDiscordError(validateDiscord(e.target.value))}
-          className={`w-full px-4 py-3 rounded-2xl border bg-(--bg) text-(--t1) focus:ring-2 focus:bg-(--card) outline-none text-sm transition-all ${discordError ? "border-red-500/60 focus:ring-red-500/20 focus:border-red-500" : "border-indigo-600/30 focus:ring-indigo-500/20 focus:border-indigo-600"}`}
-          />
-          {discordError && (
-            <p className="text-[10px] font-bold text-red-500 ml-1 flex items-center gap-1">
-            <AlertCircle size={10} /> {discordError}
-            </p>
-          )}
-          </div>
-        )}
-        {showTelegram && (
-          <div className="fadeIn flex flex-col gap-1.5">
-          <label className="text-[10px] font-black text-sky-400 uppercase tracking-[0.15em] ml-1">Посилання на Telegram канал/чат</label>
-          <input
-          type="text"
-          placeholder="https://t.me/..."
-          value={telegramLink}
-          onChange={e => { setTelegramLink(e.target.value); setTelegramError(validateTelegram(e.target.value)); }}
-          onBlur={e => setTelegramError(validateTelegram(e.target.value))}
-          className={`w-full px-4 py-3 rounded-2xl border bg-(--bg) text-(--t1) focus:ring-2 focus:bg-(--card) outline-none text-sm transition-all ${telegramError ? "border-red-500/60 focus:ring-red-500/20 focus:border-red-500" : "border-sky-600/30 focus:ring-sky-500/20 focus:border-sky-600"}`}
-          />
-          {telegramError && (
-            <p className="text-[10px] font-bold text-red-500 ml-1 flex items-center gap-1">
-            <AlertCircle size={10} /> {telegramError}
-            </p>
-          )}
-          </div>
-        )}
-        </div>
-        </div>
-        </section>
+                  {showDiscord && (
+                    <div className="fadeIn flex flex-col gap-1.5">
+                      <label className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.15em] ml-1">
+                        {rt.discordInputLabel}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder={rt.discordPlaceholder}
+                        value={discordLink}
+                        onChange={e => { setDiscordLink(e.target.value); setDiscordError(validateDiscord(e.target.value)); }}
+                        onBlur={e => setDiscordError(validateDiscord(e.target.value))}
+                        className={`w-full px-4 py-3 rounded-2xl border bg-(--bg) text-(--t1) focus:ring-2 focus:bg-(--card) outline-none text-sm transition-all ${discordError ? "border-red-500/60 focus:ring-red-500/20 focus:border-red-500" : "border-indigo-600/30 focus:ring-indigo-500/20 focus:border-indigo-600"}`}
+                      />
+                      {discordError && (
+                        <p className="text-[10px] font-bold text-red-500 ml-1 flex items-center gap-1">
+                          <AlertCircle size={10} /> {discordError}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {showTelegram && (
+                    <div className="fadeIn flex flex-col gap-1.5">
+                      <label className="text-[10px] font-black text-sky-400 uppercase tracking-[0.15em] ml-1">
+                        {rt.telegramInputLabel}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder={rt.telegramPlaceholder}
+                        value={telegramLink}
+                        onChange={e => { setTelegramLink(e.target.value); setTelegramError(validateTelegram(e.target.value)); }}
+                        onBlur={e => setTelegramError(validateTelegram(e.target.value))}
+                        className={`w-full px-4 py-3 rounded-2xl border bg-(--bg) text-(--t1) focus:ring-2 focus:bg-(--card) outline-none text-sm transition-all ${telegramError ? "border-red-500/60 focus:ring-red-500/20 focus:border-red-500" : "border-sky-600/30 focus:ring-sky-500/20 focus:border-sky-600"}`}
+                      />
+                      {telegramError && (
+                        <p className="text-[10px] font-bold text-red-500 ml-1 flex items-center gap-1">
+                          <AlertCircle size={10} /> {telegramError}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
 
-        {/* 2. Капітан */}
-        <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) shadow-xl overflow-visible" style={{ animationDelay: "70ms" }}>
-        <SectionHeader num="2" title="Капітан" right={<Crown size={15} className="text-amber-500" />} />
-        <div className="p-6 sm:p-8 overflow-visible">
-        <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest mb-4">
-        За замовчуванням — ваш акаунт. Можна змінити через пошук.
-        </p>
-        <UserSearchDropdown
-        label="Капітан команди *"
-        placeholder="Пошук за логіном або ім'ям..."
-        selected={captain}
-        onSelect={setCaptain}
-        onClear={() => setCaptain(null)}
-        excludeIds={members.map(m => m.id)}
-        maxVisible={3}
-        />
+            {/* 2. Captain */}
+            <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) shadow-xl overflow-visible" style={{ animationDelay: "70ms" }}>
+              <SectionHeader num="2" title={rt.sec2Title} right={<Crown size={15} className="text-amber-500" />} />
+              <div className="p-6 sm:p-8 overflow-visible">
+                <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest mb-4">
+                  {rt.captainHint}
+                </p>
+                <UserSearchDropdown
+                  label={rt.captainLabel}
+                  placeholder={rt.captainPlaceholder}
+                  selected={captain}
+                  onSelect={setCaptain}
+                  onClear={() => setCaptain(null)}
+                  excludeIds={members.map(m => m.id)}
+                  maxVisible={3}
+                  emptyText={rt.dropdownEmpty}
+                />
+              </div>
+            </section>
+
+            {/* 3. Members */}
+            <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) shadow-xl overflow-visible" style={{ animationDelay: "140ms" }}>
+              <SectionHeader
+                num="3"
+                title={rt.sec3Title}
+                right={
+                  <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg border ${members.length >= 10 ? "bg-red-500/10 text-red-500 border-red-500/20" : "bg-(--bg) text-(--t2) border-(--brd)"}`}>
+                    {members.length} / 10
+                  </span>
+                }
+              />
+              <div className="p-6 sm:p-8 space-y-4 overflow-visible">
+                {members.length > 0 && (
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    {members.map(m => <MemberChip key={m.id} user={m} onRemove={() => removeMember(m.id)} />)}
+                  </div>
+                )}
+
+                {members.length < 10 ? (
+                  <UserSearchDropdown
+                    label={rt.memberLabel}
+                    placeholder={rt.memberPlaceholder}
+                    selected={null}
+                    onSelect={addMember}
+                    onClear={() => {}}
+                    excludeIds={excludedFromMembers}
+                    maxVisible={3}
+                    emptyText={rt.dropdownEmpty}
+                  />
+                ) : (
+                  <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-red-500 bg-red-500/5 border border-red-500/20 rounded-2xl px-4 py-3">
+                    <AlertCircle size={14} /> {rt.membersMax}
+                  </div>
+                )}
+
+                {members.length === 0 && (
+                  <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest opacity-60">
+                    {rt.noMembersHint}
+                  </p>
+                )}
+                {members.length > 0 && (
+                  <p className="text-[10px] font-bold text-blue-500/70 uppercase tracking-widest flex items-center gap-1">
+                    {rt.inviteHint}
+                  </p>
+                )}
+              </div>
+            </section>
+
+            {/* Buttons */}
+            <div className="fuIn flex flex-col sm:flex-row gap-3 pt-2 justify-center" style={{ animationDelay: "200ms" }}>
+              <button
+                type="submit"
+                disabled={!teamName.trim() || !captain || submitting || !!discordError || !!telegramError}
+                className={`flex items-center justify-center gap-2 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex-1 sm:flex-none ${!teamName.trim() || !captain || submitting || !!discordError || !!telegramError ? "bg-(--brd) text-(--t2) cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/25"}`}
+              >
+                {submitting
+                  ? <><Loader size={14} className="animate-spin" /> {rt.submitting}</>
+                  : <><Users size={14} /> {rt.submitBtn}</>
+                }
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/teams")}
+                className="px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) bg-(--bg) text-(--t2) hover:bg-(--card) hover:text-(--t1) transition-all active:scale-95"
+              >
+                {rt.cancelBtn}
+              </button>
+            </div>
+
+            {submitError && (
+              <div className="flex items-center gap-2 text-[11px] font-bold text-red-500 bg-red-500/5 border border-red-500/20 rounded-2xl px-4 py-3">
+                <AlertCircle size={14} className="flex-shrink-0" /> {submitError}
+              </div>
+            )}
+
+          </form>
         </div>
-        </section>
-
-        {/* 3. Учасники */}
-        <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) shadow-xl overflow-visible" style={{ animationDelay: "140ms" }}>
-        <SectionHeader
-        num="3"
-        title="Учасники"
-        right={
-          <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg border ${members.length >= 10 ? "bg-red-500/10 text-red-500 border-red-500/20" : "bg-(--bg) text-(--t2) border-(--brd)"}`}>
-          {members.length} / 10
-          </span>
-        }
-        />
-        <div className="p-6 sm:p-8 space-y-4 overflow-visible">
-        {members.length > 0 && (
-          <div className="flex flex-wrap gap-2 justify-center">
-          {members.map(m => <MemberChip key={m.id} user={m} onRemove={() => removeMember(m.id)} />)}
-          </div>
-        )}
-
-        {members.length < 10 ? (
-          <UserSearchDropdown
-          label="Додати учасника"
-          placeholder="Пошук за логіном або ім'ям..."
-          selected={null}
-          onSelect={addMember}
-          onClear={() => {}}
-          excludeIds={excludedFromMembers}
-          maxVisible={3}
-          />
-        ) : (
-          <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-red-500 bg-red-500/5 border border-red-500/20 rounded-2xl px-4 py-3">
-          <AlertCircle size={14} /> Максимум 10 учасників досягнуто
-          </div>
-        )}
-
-        {members.length === 0 && (
-          <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest opacity-60">
-          Команда може бути без учасників — додайте їх пізніше
-          </p>
-        )}
-        {members.length > 0 && (
-          <p className="text-[10px] font-bold text-blue-500/70 uppercase tracking-widest flex items-center gap-1">
-          📨 Запрошення буде надіслано — учасники потраплять до команди після підтвердження
-          </p>
-        )}
-        </div>
-        </section>
-
-        {/* Кнопки */}
-        <div className="fuIn flex flex-col sm:flex-row gap-3 pt-2 justify-center" style={{ animationDelay: "200ms" }}>
-        <button
-        type="submit"
-        disabled={!teamName.trim() || !captain || submitting || !!discordError || !!telegramError}
-        className={`flex items-center justify-center gap-2 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex-1 sm:flex-none ${!teamName.trim() || !captain || submitting || !!discordError || !!telegramError ? "bg-(--brd) text-(--t2) cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/25"}`}
-        >
-        {submitting ? <><Loader size={14} className="animate-spin" /> Створення...</> : <><Users size={14} /> Створити команду</>}
-        </button>
-        <button type="button" onClick={() => router.push("/teams")}
-        className="px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) bg-(--bg) text-(--t2) hover:bg-(--card) hover:text-(--t1) transition-all active:scale-95">
-        Скасувати
-        </button>
-        </div>
-
-        {submitError && (
-          <div className="flex items-center gap-2 text-[11px] font-bold text-red-500 bg-red-500/5 border border-red-500/20 rounded-2xl px-4 py-3">
-          <AlertCircle size={14} className="flex-shrink-0" /> {submitError}
-          </div>
-        )}
-
-        </form>
-        </div>
-        </main>
-        </div>
-    );
+      </main>
+    </div>
+  );
 }
