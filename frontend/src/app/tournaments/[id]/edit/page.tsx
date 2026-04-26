@@ -53,7 +53,12 @@ function toTimeStr(iso?: string) {
 }
 function toIso(date: string, time: string) {
     if (!date) return null;
-    return new Date(`${date}T${time || "00:00"}:00`).toISOString();
+    // FIX (високий): datetime-local не містить timezone info — браузер інтерпретує
+    // як локальний час. Явно додаємо 'Z' аби сервер завжди отримував UTC.
+    // Якщо адмін хоче вводити в локальному часі — потрібен окремий timezone picker.
+    const localStr = `${date}T${time || "00:00"}:00`;
+    const offsetMs = new Date(localStr).getTimezoneOffset() * 60 * 1000;
+    return new Date(new Date(localStr).getTime() + offsetMs).toISOString();
 }
 
 const inp = "w-full px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none transition-all";

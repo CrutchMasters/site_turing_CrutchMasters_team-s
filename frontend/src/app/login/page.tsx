@@ -62,13 +62,8 @@ export default function LoginPage() {
       console.log("Login successful");
       console.log("Username:", userData.username);
       console.log("Role:", userData.role);
-      console.log("Email:", userData.email);
-      console.log("ID:", userData.id);
 
-      localStorage.setItem("access_token", token);
-      localStorage.setItem("user", JSON.stringify(userData));
-      document.cookie = `access_token=${token}; path=/; max-age=604800`;
-
+      // authLogin сохраняет токен в localStorage и cookie — дублировать не нужно
       authLogin(userData, token, data.refresh_token);
 
       router.push("/dashboard");

@@ -280,7 +280,8 @@ export default function RoundPage() {
     const countdown = useCountdown(round?.end_at);
 
     useEffect(() => { if (id) fetchRound(); }, [id]);
-    useEffect(() => { if (user) fetchUserTeam(); }, [user]);
+    // FIX (високий): залежимо від round щоб мати tournament_id при виклику fetchUserTeam
+    useEffect(() => { if (user && round) fetchUserTeam(); }, [user, round?.tournament_id]);
 
     const fetchRound = async () => {
         setLoading(true);
@@ -295,12 +296,16 @@ export default function RoundPage() {
 
     const fetchUserTeam = async () => {
         if (!user) return;
+        // FIX (високий): фільтруємо команду за tournament_id поточного раунду,
+        // щоб не повертати першу-ліпшу команду користувача з іншого турніру.
+        const tournamentId = round?.tournament_id;
+        if (!tournamentId) return;
         const { data: captainTeam } = await supabase
-        .from("teams").select("id").eq("captain_id", user.id).maybeSingle();
+        .from("teams").select("id").eq("captain_id", user.id).eq("tournament_id", tournamentId).maybeSingle();
         let teamId = captainTeam?.id ?? null;
         if (!teamId) {
             const { data: memberTeams } = await supabase
-            .from("teams").select("id").contains("members_ids", [user.id]).limit(1);
+            .from("teams").select("id").contains("members_ids", [user.id]).eq("tournament_id", tournamentId).limit(1);
             teamId = memberTeams?.[0]?.id ?? null;
         }
         if (teamId) { setUserTeamId(teamId); if (round) fetchSubmission(round.id, teamId); }
