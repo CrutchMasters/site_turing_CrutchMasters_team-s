@@ -4,6 +4,7 @@ import {
     Bold, Italic, Underline, List, Quote, Type,
     X, Plus, Clock, Upload, Link2, Trash2, CalendarDays
 } from 'lucide-react';
+import { DatePicker, TimePicker } from '@/components/DateTimePicker';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 export interface RoundData {
@@ -42,51 +43,15 @@ const addBtn = "flex items-center gap-1.5 text-[10px] font-black uppercase track
 function DateTimeField({
     label, dateVal, onDate, timeVal, onTime,
 }: { label: string; dateVal: string; onDate: (v: string) => void; timeVal: string; onTime: (v: string) => void }) {
-    const timeRef = useRef<HTMLInputElement>(null);
-    const dateRef = useRef<HTMLInputElement>(null);
     return (
         <div className="flex flex-col gap-1.5">
         <span className={label10}>{label}</span>
-        {/* Date + Time in one row */}
         <div className="flex gap-2">
-        {/* Date — hide native icon, show custom CalendarDays */}
-        <div className="relative flex-1 min-w-0">
-        <input
-        ref={dateRef}
-        type="date"
-        value={dateVal}
-        onChange={e => onDate(e.target.value)}
-        className={inp + " w-full pr-9"}
-        />
-        <style>{`input[type="date"]::-webkit-calendar-picker-indicator, input[type="time"]::-webkit-calendar-picker-indicator { display: none !important; }`}</style>
-        <button
-        type="button"
-        tabIndex={-1}
-        onClick={() => dateRef.current?.showPicker?.()}
-        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-(--t2) hover:text-blue-500 transition-colors cursor-pointer"
-        aria-label="Вибрати дату"
-        >
-        <CalendarDays className="w-4 h-4" />
-        </button>
+        <div className="flex-1 min-w-0">
+        <DatePicker value={dateVal} onChange={onDate} />
         </div>
-        {/* Time — hide native icon, show custom Clock */}
-        <div className="relative flex-1 min-w-0">
-        <input
-        ref={timeRef}
-        type="time"
-        value={timeVal}
-        onChange={e => onTime(e.target.value)}
-        className={inp + " w-full pr-9"}
-        />
-        <button
-        type="button"
-        tabIndex={-1}
-        onClick={() => timeRef.current?.showPicker?.()}
-        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-(--t2) hover:text-blue-500 transition-colors cursor-pointer"
-        aria-label="Вибрати час"
-        >
-        <Clock className="w-4 h-4" />
-        </button>
+        <div className="flex-1 min-w-0">
+        <TimePicker value={timeVal} onChange={onTime} />
         </div>
         </div>
         </div>
