@@ -209,7 +209,7 @@ export default function RegisterPage() {
   const inputClass = "w-full px-5 py-4 rounded-2xl border border-(--brd) bg-(--bg)/50 focus:ring-2 focus:ring-blue-500 focus:bg-(--card) outline-none text-sm text-(--t1) transition-all";
 
  const isDark = dark;
- return (return (
+ return (
     <div className="min-h-screen bg-(--bg) flex flex-col items-center justify-center font-sans text-(--t1) relative overflow-hidden transition-colors duration-300 px-4">
     <style jsx global>{`
       .reveal-drop { transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
