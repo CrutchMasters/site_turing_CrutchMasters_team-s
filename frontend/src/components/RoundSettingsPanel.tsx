@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
     Bold, Italic, Underline, List, Quote, Type,
     X, Plus, Clock, Upload, Link2, Trash2, CalendarDays
@@ -29,6 +29,7 @@ interface Props {
     roundCount: number;
     selectedRound: number;
     onSelectRound: (n: number) => void;
+    onRoundsChange?: (rounds: Record<number, RoundData>) => void;
 }
 
 // ── Shared styles ──────────────────────────────────────────────────────────
@@ -298,8 +299,10 @@ function RichTextEditor({
 }
 
 // ── RoundSettingsPanel (main export) ──────────────────────────────────────
-export default function RoundSettingsPanel({ roundCount, selectedRound, onSelectRound }: Props) {
+export default function RoundSettingsPanel({ roundCount, selectedRound, onSelectRound, onRoundsChange }: Props) {
     const [rounds, setRounds] = useState<Record<number, RoundData>>({});
+
+    useEffect(() => { onRoundsChange?.(rounds); }, [rounds]);
 
     const getRound = (n: number): RoundData => rounds[n] ?? {
         name: '', description: '',
