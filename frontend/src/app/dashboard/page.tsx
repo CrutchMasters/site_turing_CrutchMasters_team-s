@@ -1,4 +1,3 @@
-//src/app/dashboard/page.tsx
 'use client';
 
 import { useRouter } from "next/navigation";
@@ -69,7 +68,7 @@ export default function DashboardPage() {
         let counts: Record<string, number> = {};
         if (ids.length) {
           const { data: regData } = await supabase
-          .from("teams")
+          .from("tournament_teams")
           .select("tournament_id")
           .in("tournament_id", ids);
           (regData ?? []).forEach((r: any) => {
@@ -159,7 +158,7 @@ export default function DashboardPage() {
       <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-(--t1) uppercase">{t.mainPage.overview}</h1>
       </header>
 
-      <div className="space-y-6 sm:space-y-8">
+      <div className="max-w-6xl space-y-6 sm:space-y-8">
 
       {/* Admin Banner */}
       {isAdmin && (
@@ -181,10 +180,10 @@ export default function DashboardPage() {
         {user.role === "superadmin" ? "Superadmin" : "Admin"} panel
         </span>
         <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight leading-tight">
-        Управління турнірами
+          {t.admin.manageTournaments}
         </h2>
         <p className="text-xs font-bold text-(--t2) mt-1 max-w-sm">
-        Створюйте нові турніри, керуйте командами та налаштовуйте параметри змагань
+          {t.admin.manageTournamentsDesc}
         </p>
         </div>
         </div>
@@ -193,15 +192,15 @@ export default function DashboardPage() {
         className="flex-shrink-0 flex items-center justify-center gap-2 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl px-6 sm:px-8 py-4 hover:bg-blue-700 shadow-lg shadow-blue-600/25 active:scale-95 transition-all w-full sm:w-auto group"
         >
         <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
-        Створити турнір
+        {t.admin.createTournament}
         </button>
         </div>
 
         <div className="relative z-10 mt-6 pt-5 border-t border-(--brd) flex flex-wrap gap-4 sm:gap-8">
         {[
-          { label: "Активних турнірів", value: tournaments.filter(t => t.status === "ongoing").length.toString() },
-                   { label: "Відкритих реєстрацій", value: tournaments.filter(t => t.status === "registration").length.toString() },
-                   { label: "Всього у базі", value: tournaments.length.toString() },
+          { label: t.admin.statActive, value: tournaments.filter(t => t.status === "ongoing").length.toString() },
+          { label: t.admin.statOpen,   value: tournaments.filter(t => t.status === "registration").length.toString() },
+          { label: t.admin.statTotal,  value: tournaments.length.toString() },
         ].map(({ label, value }) => (
           <div key={label}>
           <p className="text-[10px] font-black uppercase tracking-wider text-(--t2)">{label}</p>
