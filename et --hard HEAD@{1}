@@ -1,0 +1,100 @@
+[33mc942e94[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{0}: checkout: moving from front31 to main
+[33m7f3360d[m[33m ([m[1;32mfront31[m[33m)[m HEAD@{1}: reset: moving to HEAD~5
+[33m9804c92[m HEAD@{2}: pull origin main: Fast-forward
+[33m248f825[m[33m ([m[1;31morigin/front31[m[33m)[m HEAD@{3}: reset: moving to HEAD
+[33m248f825[m[33m ([m[1;31morigin/front31[m[33m)[m HEAD@{4}: commit: редизайн rounds
+[33m0675c4f[m HEAD@{5}: commit: Исправление багов подачи данных для БД
+[33mbf36f19[m HEAD@{6}: commit: Заготовка под реализацию систем раунда (промежуточный коммыт :)ыгыгыгыггы\)
+[33m750ece6[m HEAD@{7}: commit: Добавлен модуль настройки раундов так же редизайн регистрации команд, заготовочка под БД кароч круто все
+[33m15e9b05[m HEAD@{8}: commit: Слияние teams \ my_teams в одну страничку, изменения дизайна register_tournay,заготовка под систему раундов
+[33m0bf8292[m[33m ([m[1;32mfront30[m[33m)[m HEAD@{9}: checkout: moving from front30 to front31
+[33m0bf8292[m[33m ([m[1;32mfront30[m[33m)[m HEAD@{10}: pull origin main: Fast-forward
+[33mff485c6[m[33m ([m[1;31morigin/front30[m[33m)[m HEAD@{11}: commit: редизайн register_tourney
+[33m6805774[m[33m ([m[1;31morigin/front29[m[33m, [m[1;32mfront29[m[33m)[m HEAD@{12}: checkout: moving from front29 to front30
+[33m6805774[m[33m ([m[1;31morigin/front29[m[33m, [m[1;32mfront29[m[33m)[m HEAD@{13}: commit: Блашка участие в турнире в страничке team/[id] так же перенос my_team в team, и отображение аватарок на всех страничках
+[33m00a2cff[m[33m ([m[1;31morigin/front28[m[33m, [m[1;32mfront28[m[33m)[m HEAD@{14}: checkout: moving from front28 to front29
+[33m00a2cff[m[33m ([m[1;31morigin/front28[m[33m, [m[1;32mfront28[m[33m)[m HEAD@{15}: commit: Сделал оценку сложности пароля в register, Так же отображение участия в турнире, удаление ну нужного блока смены роли в profile, Изменение дизайна показа аватарки
+[33mb955e26[m[33m ([m[1;31morigin/front27[m[33m, [m[1;31morigin/front26[m[33m, [m[1;32mfront27[m[33m, [m[1;32mfront26[m[33m, [m[1;32mfront25[m[33m)[m HEAD@{16}: checkout: moving from front27 to front28
+[33mb955e26[m[33m ([m[1;31morigin/front27[m[33m, [m[1;31morigin/front26[m[33m, [m[1;32mfront27[m[33m, [m[1;32mfront26[m[33m, [m[1;32mfront25[m[33m)[m HEAD@{17}: checkout: moving from front26 to front27
+[33mb955e26[m[33m ([m[1;31morigin/front27[m[33m, [m[1;31morigin/front26[m[33m, [m[1;32mfront27[m[33m, [m[1;32mfront26[m[33m, [m[1;32mfront25[m[33m)[m HEAD@{18}: checkout: moving from front25 to front26
+[33mb955e26[m[33m ([m[1;31morigin/front27[m[33m, [m[1;31morigin/front26[m[33m, [m[1;32mfront27[m[33m, [m[1;32mfront26[m[33m, [m[1;32mfront25[m[33m)[m HEAD@{19}: pull origin main: Fast-forward
+[33m1f601e4[m[33m ([m[1;31morigin/front25[m[33m, [m[1;32mfront24[m[33m)[m HEAD@{20}: checkout: moving from front24 to front25
+[33m1f601e4[m[33m ([m[1;31morigin/front25[m[33m, [m[1;32mfront24[m[33m)[m HEAD@{21}: commit: Трансфер в БД с auth_id на id так же добавлены ендпоинты в бэк и функция регестрации и отмены регестрации на турнир команды
+[33m5296b96[m[33m ([m[1;31morigin/front23[m[33m)[m HEAD@{22}: checkout: moving from front23 to front24
+[33m5296b96[m[33m ([m[1;31morigin/front23[m[33m)[m HEAD@{23}: commit: Добавлена система аватарок
+[33m3f3e328[m[33m ([m[1;31morigin/front22[m[33m, [m[1;32mfront22[m[33m)[m HEAD@{24}: checkout: moving from front22 to front23
+[33m3f3e328[m[33m ([m[1;31morigin/front22[m[33m, [m[1;32mfront22[m[33m)[m HEAD@{25}: commit: поченил визуал баг с обновлением profile
+[33mfe40693[m[33m ([m[1;31morigin/front21[m[33m, [m[1;32mfront21[m[33m)[m HEAD@{26}: checkout: moving from front21 to front22
+[33mfe40693[m[33m ([m[1;31morigin/front21[m[33m, [m[1;32mfront21[m[33m)[m HEAD@{27}: commit: Перенос уведомлений в страничку профиля, добавленно заготовку под отображение участия в турнитре, так же готово полное рабочая система смена ПАРОЛЯЯЯЯЯЯЯЯЯЯ
+[33mf1d8006[m[33m ([m[1;32mfront18[m[33m)[m HEAD@{28}: checkout: moving from front18 to front21
+[33mf1d8006[m[33m ([m[1;32mfront18[m[33m)[m HEAD@{29}: pull origin main: Fast-forward
+[33m833f088[m[33m ([m[1;32mfront11[m[33m)[m HEAD@{30}: reset: moving to HEAD~2
+[33mbdb72c8[m HEAD@{31}: pull origin main --no-rebase: Merge made by the 'ort' strategy.
+[33m3e03d31[m[33m ([m[1;31morigin/front18[m[33m)[m HEAD@{32}: commit: Реализация сестемы турниров опять
+[33m833f088[m[33m ([m[1;32mfront11[m[33m)[m HEAD@{33}: checkout: moving from front11 to front18
+[33m833f088[m[33m ([m[1;32mfront11[m[33m)[m HEAD@{34}: pull origin main: Fast-forward
+[33m32dd1e9[m[33m ([m[1;31morigin/front11[m[33m)[m HEAD@{35}: reset: moving to HEAD
+[33m32dd1e9[m[33m ([m[1;31morigin/front11[m[33m)[m HEAD@{36}: commit: Добавлена вкладка для оповещений
+[33m7546f5a[m[33m ([m[1;31morigin/front10[m[33m, [m[1;32mfront10[m[33m)[m HEAD@{37}: checkout: moving from front10 to front11
+[33m7546f5a[m[33m ([m[1;31morigin/front10[m[33m, [m[1;32mfront10[m[33m)[m HEAD@{38}: commit: Добавлена старница просмотра существующий команд,а так же редактирование твоей команды
+[33m036988b[m[33m ([m[1;32mfront8[m[33m)[m HEAD@{39}: checkout: moving from front8 to front10
+[33m036988b[m[33m ([m[1;32mfront8[m[33m)[m HEAD@{40}: pull origin main: Fast-forward
+[33m5c4143c[m[33m ([m[1;31morigin/front8[m[33m)[m HEAD@{41}: commit: Исправлен редирект на dashboard и register_tourney
+[33mb1a1a01[m[33m ([m[1;32mtraslate[m[33m)[m HEAD@{42}: checkout: moving from traslate to front8
+[33mb1a1a01[m[33m ([m[1;32mtraslate[m[33m)[m HEAD@{43}: pull origin main: Fast-forward
+[33mae6d52c[m[33m ([m[1;31morigin/traslate[m[33m)[m HEAD@{44}: reset: moving to HEAD
+[33mae6d52c[m[33m ([m[1;31morigin/traslate[m[33m)[m HEAD@{45}: commit: repair hosting, repair fo file translations.ts
+[33mae706c4[m[33m ([m[1;31morigin/front7[m[33m, [m[1;32mfront7[m[33m)[m HEAD@{46}: checkout: moving from front7 to traslate
+[33mae706c4[m[33m ([m[1;31morigin/front7[m[33m, [m[1;32mfront7[m[33m)[m HEAD@{47}: commit: Поченив profile YES
+[33m4b8f0e7[m[33m ([m[1;31morigin/comment_add[m[33m, [m[1;32mcomment_add[m[33m)[m HEAD@{48}: checkout: moving from comment_add to front7
+[33m4b8f0e7[m[33m ([m[1;31morigin/comment_add[m[33m, [m[1;32mcomment_add[m[33m)[m HEAD@{49}: commit: add registe
+[33me80b1cf[m HEAD@{50}: commit: add comment (again)
+[33m1089b7c[m[33m ([m[1;32mfront5[m[33m)[m HEAD@{51}: checkout: moving from front5 to comment_add
+[33m1089b7c[m[33m ([m[1;32mfront5[m[33m)[m HEAD@{52}: pull origin main: Fast-forward
+[33mb56f0c4[m[33m ([m[1;31morigin/front5[m[33m)[m HEAD@{53}: commit: repair hosting
+[33me1f22ae[m HEAD@{54}: commit: Исправлен баг с открыванием сайдбара в закртытом состоянии (снова)
+[33md0a1e29[m[33m ([m[1;31morigin/front4[m[33m, [m[1;32mfront4[m[33m)[m HEAD@{55}: checkout: moving from front4 to front5
+[33md0a1e29[m[33m ([m[1;31morigin/front4[m[33m, [m[1;32mfront4[m[33m)[m HEAD@{56}: commit: repair hosting
+[33mf0438b0[m HEAD@{57}: commit: Поченил смену роли добавил кнопку при нажатии на лого в главной странице, анимацию на скрытие сайдбара
+[33m06e61cd[m[33m ([m[1;31morigin/front3[m[33m, [m[1;32mfront3[m[33m)[m HEAD@{58}: checkout: moving from front3 to front4
+[33m06e61cd[m[33m ([m[1;31morigin/front3[m[33m, [m[1;32mfront3[m[33m)[m HEAD@{59}: commit: Починили смену языка,запретили супермамину понижать супермаминов
+[33m9c9ec44[m[33m ([m[1;32mfront1[m[33m)[m HEAD@{60}: checkout: moving from front1 to front3
+[33m9c9ec44[m[33m ([m[1;32mfront1[m[33m)[m HEAD@{61}: pull origin main: Fast-forward
+[33me694783[m[33m ([m[1;31morigin/front1[m[33m)[m HEAD@{62}: commit: Реализована РАБОЧАЯ система переключение ролей для супермамина
+[33mf5754a9[m[33m ([m[1;32mfrontend_work2[m[33m)[m HEAD@{63}: checkout: moving from frontend_work2 to front1
+[33mf5754a9[m[33m ([m[1;32mfrontend_work2[m[33m)[m HEAD@{64}: pull origin main: Fast-forward
+[33me8c3d31[m[33m ([m[1;31morigin/frontend_work2[m[33m)[m HEAD@{65}: commit: Подготовка к добавлению функции, смены ролей (только супермамин)
+[33me984557[m[33m ([m[1;31morigin/frontend_work1[m[33m, [m[1;32mfrontend_work1[m[33m)[m HEAD@{66}: checkout: moving from frontend_work1 to frontend_work2
+[33me984557[m[33m ([m[1;31morigin/frontend_work1[m[33m, [m[1;32mfrontend_work1[m[33m)[m HEAD@{67}: commit: Добавлено функция просмотра профиля в поисках людей
+[33m0c9164b[m[33m ([m[1;31morigin/front_yes[m[33m, [m[1;32mfront_yes[m[33m)[m HEAD@{68}: checkout: moving from front_yes to frontend_work1
+[33m0c9164b[m[33m ([m[1;31morigin/front_yes[m[33m, [m[1;32mfront_yes[m[33m)[m HEAD@{69}: commit: Добавленно сворачивание сайдбара а так же его модульность
+[33m9f4885f[m[33m ([m[1;31morigin/front[m[33m, [m[1;32mfront[m[33m)[m HEAD@{70}: checkout: moving from front to front_yes
+[33m9f4885f[m[33m ([m[1;31morigin/front[m[33m, [m[1;32mfront[m[33m)[m HEAD@{71}: commit: Добавлена страничка поиска людей а так же настройки в profile
+[33medbe0ba[m[33m ([m[1;31morigin/testing[m[33m, [m[1;32mtesting[m[33m)[m HEAD@{72}: checkout: moving from testing to front
+[33medbe0ba[m[33m ([m[1;31morigin/testing[m[33m, [m[1;32mtesting[m[33m)[m HEAD@{73}: commit: repair for whitescreen register page
+[33m81a7644[m[33m ([m[1;31morigin/backend[m[33m, [m[1;32mbackend[m[33m)[m HEAD@{74}: checkout: moving from backend to testing
+[33m81a7644[m[33m ([m[1;31morigin/backend[m[33m, [m[1;32mbackend[m[33m)[m HEAD@{75}: commit: adaptiv for new table database
+[33m63d4593[m[33m ([m[1;32mfront_pezda[m[33m)[m HEAD@{76}: checkout: moving from front_pezda to backend
+[33m63d4593[m[33m ([m[1;32mfront_pezda[m[33m)[m HEAD@{77}: pull origin main: Fast-forward
+[33m3bbed39[m[33m ([m[1;31morigin/front_pezda[m[33m)[m HEAD@{78}: commit: repair site YES
+[33m106f66c[m[33m ([m[1;31morigin/nogood_work[m[33m, [m[1;32mnogood_work[m[33m)[m HEAD@{79}: checkout: moving from nogood_work to front_pezda
+[33m106f66c[m[33m ([m[1;31morigin/nogood_work[m[33m, [m[1;32mnogood_work[m[33m)[m HEAD@{80}: commit: бдышь молния писздес
+[33mc7e421d[m[33m ([m[1;31morigin/work_bebra[m[33m, [m[1;32mwork_bebra[m[33m)[m HEAD@{81}: checkout: moving from work_bebra to nogood_work
+[33mc7e421d[m[33m ([m[1;31morigin/work_bebra[m[33m, [m[1;32mwork_bebra[m[33m)[m HEAD@{82}: commit: Фикс не загрузки страничек, + оторбражение аккаунта на главной странице при входе в аккаунт
+[33m63fa714[m[33m ([m[1;31morigin/good_work[m[33m, [m[1;32mgood_work[m[33m)[m HEAD@{83}: checkout: moving from good_work to work_bebra
+[33m63fa714[m[33m ([m[1;31morigin/good_work[m[33m, [m[1;32mgood_work[m[33m)[m HEAD@{84}: commit: Фикс не загрузки страничек, + оторбражение аккаунта на главной странице при входе в аккаунт
+[33mc942e94[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{85}: checkout: moving from main to good_work
+[33mc942e94[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{86}: pull origin main: Fast-forward
+[33m7a050fc[m HEAD@{87}: reset: moving to HEAD
+[33m7a050fc[m HEAD@{88}: pull: Fast-forward
+[33m73012b7[m HEAD@{89}: checkout: moving from front_work to main
+[33m4128dd3[m[33m ([m[1;31morigin/front_work[m[33m, [m[1;32mfront_work[m[33m)[m HEAD@{90}: commit: Адаптация ГС (главной страници) и станици профиля под мобил устройства, а так же доделаный визуал :3
+[33m8407b92[m HEAD@{91}: commit: Адаптация ГС (главной страници) и станици профиля под мобил устройства, а так же доделаный визуал :3
+[33me0f1b78[m[33m ([m[1;31morigin/nigar[m[33m, [m[1;32mnigar[m[33m)[m HEAD@{92}: checkout: moving from nigar to front_work
+[33me0f1b78[m[33m ([m[1;31morigin/nigar[m[33m, [m[1;32mnigar[m[33m)[m HEAD@{93}: commit: Кнопка просмотра пароля
+[33mfca82ae[m[33m ([m[1;31morigin/work_backend[m[33m, [m[1;32mwork_backend[m[33m)[m HEAD@{94}: checkout: moving from work_backend to nigar
+[33mfca82ae[m[33m ([m[1;31morigin/work_backend[m[33m, [m[1;32mwork_backend[m[33m)[m HEAD@{95}: commit: Добавление в CORS ссылку на фронкт
+[33m328d12b[m[33m ([m[1;31morigin/work[m[33m, [m[1;32mwork[m[33m)[m HEAD@{96}: checkout: moving from work to work_backend
+[33m328d12b[m[33m ([m[1;31morigin/work[m[33m, [m[1;32mwork[m[33m)[m HEAD@{97}: commit: Добавленно переклечение ссылки соединения бэк и фронта в зависимости от хоста (локал или онлайн хостинга)
+[33m73012b7[m HEAD@{98}: checkout: moving from main to work
+[33m73012b7[m HEAD@{99}: clone: from https://github.com/CrutchMasters/site_turing_CrutchMasters_team-s.git
