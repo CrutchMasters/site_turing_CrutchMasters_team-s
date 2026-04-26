@@ -20,8 +20,26 @@ interface Tournament {
   name: string;
   status: "upcoming" | "registration" | "ongoing" | "finished";
   start_at: string;
+  end_at?: string;
+  registration_from?: string;
+  registration_to?: string;
   max_teams?: number;
   team_count?: number;
+}
+
+type TournamentStatus = Tournament["status"];
+
+function computeStatus(t: Pick<Tournament, "start_at" | "end_at" | "registration_from" | "registration_to">): TournamentStatus {
+  const now     = Date.now();
+  const start   = t.start_at          ? new Date(t.start_at).getTime()          : null;
+  const end     = t.end_at            ? new Date(t.end_at).getTime()            : null;
+  const regFrom = t.registration_from ? new Date(t.registration_from).getTime() : null;
+  const regTo   = t.registration_to   ? new Date(t.registration_to).getTime()   : null;
+
+  if (end && now > end)                                   return "finished";
+  if (start && now >= start && (!end || now <= end))      return "ongoing";
+  if (regFrom && regTo && now >= regFrom && now <= regTo) return "registration";
+  return "upcoming";
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -57,8 +75,7 @@ export default function DashboardPage() {
       try {
         const { data, error } = await supabase
         .from("tournaments")
-        .select("id, name, status, start_at, max_teams")
-        .in("status", ["upcoming", "registration", "ongoing"])
+        .select("id, name, status, start_at, end_at, registration_from, registration_to, max_teams")
         .order("start_at", { ascending: true })
         .limit(10);
 
@@ -76,7 +93,11 @@ export default function DashboardPage() {
           });
         }
 
-        setTournaments((data ?? []).map((t: any) => ({ ...t, team_count: counts[t.id] ?? 0 })));
+        setTournaments((data ?? []).map((t: any) => ({
+          ...t,
+          team_count: counts[t.id] ?? 0,
+          status: computeStatus(t),   // всегда вычисляем по датам — как в tournaments page
+        })));
       } catch (e) {
         console.error(e);
       } finally {
