@@ -203,7 +203,7 @@ export default function SubmitPage() {
 
                 setUserTeamId(teamId);
                 if (!teamId) { setPageLoading(false); return; }
-                const { data: subData } = await supabase.from("submissions").select("id, github_url, video_url, demo_url, description, submitted_at, status").eq("round_id", roundId).eq("team_id", teamId).maybeSingle();
+                const { data: subData } = await supabase.from("submissions").select("id, github_url, video_url, live_demo_url, description, submitted_at, status").eq("round_id", roundId).eq("team_id", teamId).maybeSingle();
                 if (subData) {
                     setExisting(subData);
                     setGithubUrl(subData.github_url ?? "");
