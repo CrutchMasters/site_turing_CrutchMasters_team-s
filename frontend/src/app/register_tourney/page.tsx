@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 
 import Sidebar from "@/components/Sidebar";
+import { DatePicker, TimePicker } from "@/components/DateTimePicker";
 import RoundSettingsPanel, { type RoundData } from "@/components/RoundSettingsPanel";
 import MobileHeader from "@/components/MobileHeader";
 import { useTheme } from "@/hooks/useTheme";
@@ -30,8 +31,6 @@ function DateTimePair({
   timeVal: string; onTime: (v: string) => void;
   required?: boolean;
 }) {
-  const timeRef = React.useRef<HTMLInputElement>(null);
-  const dateRef = React.useRef<HTMLInputElement>(null);
   return (
     <div className="flex flex-col gap-2">
     <div className="flex items-center justify-between">
@@ -42,44 +41,8 @@ function DateTimePair({
       </span>
     )}
     </div>
-    <div className="relative">
-    <input
-    ref={dateRef}
-    type="date"
-    value={dateVal}
-    onChange={e => onDate(e.target.value)}
-    className={inp + " pr-9"}
-    style={{ colorScheme: 'dark' }}
-    />
-    <button
-    type="button"
-    tabIndex={-1}
-    onClick={() => dateRef.current?.showPicker?.()}
-    className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-(--t2) hover:text-blue-500 transition-colors cursor-pointer"
-    aria-label="Вибрати дату"
-    >
-    <CalendarDays className="w-4 h-4" />
-    </button>
-    </div>
-    <div className="relative">
-    <input
-    ref={timeRef}
-    type="time"
-    value={timeVal}
-    onChange={e => onTime(e.target.value)}
-    className={inp + " pr-9"}
-    style={{ colorScheme: 'dark' }}
-    />
-    <button
-    type="button"
-    tabIndex={-1}
-    onClick={() => timeRef.current?.showPicker?.()}
-    className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-(--t2) hover:text-blue-500 transition-colors cursor-pointer"
-    aria-label="Вибрати час"
-    >
-    <Clock className="w-4 h-4" />
-    </button>
-    </div>
+    <DatePicker value={dateVal} onChange={onDate} />
+    <TimePicker value={timeVal} onChange={onTime} />
     </div>
   );
 }
@@ -477,6 +440,16 @@ export default function RegisterTourney() {
       <style>{`
         input[type="date"]::-webkit-calendar-picker-indicator,
         input[type="time"]::-webkit-calendar-picker-indicator {
+          display: none !important;
+          opacity: 0 !important;
+          width: 0 !important;
+        }
+        input[type="date"],
+        input[type="time"] {
+          -moz-appearance: textfield;
+        }
+        input[type="date"]::-moz-calendar-picker-indicator,
+        input[type="time"]::-moz-calendar-picker-indicator {
           display: none !important;
         }
         `}</style>
