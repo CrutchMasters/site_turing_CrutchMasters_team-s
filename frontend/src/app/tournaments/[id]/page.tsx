@@ -30,6 +30,7 @@ interface Team {
     name: string;
     city_school_org?: string;
     captain_id?: string;
+    members_ids?: string[];  // Bug 7 fix
 }
 
 interface Tournament {
@@ -83,7 +84,7 @@ export default function TournamentPage() {
             // Fetch registered teams via teams.tournament_id
             const { data: teamsData, error: teamsErr } = await supabase
             .from("teams")
-            .select("id, name, city_school_org, captain_id")
+            .select("id, name, city_school_org, captain_id, members_ids")
             .eq("tournament_id", id);
             if (teamsErr) throw teamsErr;
 
@@ -199,7 +200,10 @@ export default function TournamentPage() {
     const isFull = !!tournament.max_teams && teamCount >= tournament.max_teams;
     const isAdmin = user?.role === "admin" || user?.role === "superadmin";
     const isRegistrationOpen = tournament.status === "registration";
-    const myTeamInTournament = tournament.teams?.find(t => t.captain_id === user?.id);
+    // БАГ 7 fix: перевіряємо і captain_id, і members_ids — учасники теж бачать статус
+    const myTeamInTournament = tournament.teams?.find(
+        t => t.captain_id === user?.id || (t.members_ids as string[] | undefined)?.includes(user?.id ?? "")
+    );
 
     return (
         <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1)">

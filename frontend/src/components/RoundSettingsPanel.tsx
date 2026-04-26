@@ -30,6 +30,7 @@ interface Props {
     selectedRound: number;
     onSelectRound: (n: number) => void;
     onRoundsChange?: (rounds: Record<number, RoundData>) => void;
+    initialData?: Record<number, Partial<RoundData>>;
 }
 
 // ── Shared styles ──────────────────────────────────────────────────────────
@@ -299,8 +300,23 @@ function RichTextEditor({
 }
 
 // ── RoundSettingsPanel (main export) ──────────────────────────────────────
-export default function RoundSettingsPanel({ roundCount, selectedRound, onSelectRound, onRoundsChange }: Props) {
+export default function RoundSettingsPanel({ roundCount, selectedRound, onSelectRound, onRoundsChange, initialData }: Props) {
     const [rounds, setRounds] = useState<Record<number, RoundData>>({});
+    const [seeded, setSeeded] = useState(false);
+
+    // Seed initial data once when it arrives (for edit mode)
+    useEffect(() => {
+        if (!initialData || seeded) return;
+        const hasAny = Object.keys(initialData).length > 0;
+        if (!hasAny) return;
+        const defaults: RoundData = { name: '', description: '', startDate: '', startTime: '', deadlineDate: '', deadlineTime: '', requirements: [], criteria: [], links: [], files: [] };
+        const seededRounds: Record<number, RoundData> = {};
+        for (const [key, val] of Object.entries(initialData)) {
+            seededRounds[Number(key)] = { ...defaults, ...val };
+        }
+        setRounds(seededRounds);
+        setSeeded(true);
+    }, [initialData, seeded]);
 
     useEffect(() => { onRoundsChange?.(rounds); }, [rounds]);
 
