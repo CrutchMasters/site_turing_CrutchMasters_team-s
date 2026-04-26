@@ -1,4 +1,3 @@
-//src/app/dashboard/page.tsx
 'use client';
 
 import { useRouter } from "next/navigation";
@@ -21,15 +20,33 @@ interface Tournament {
   name: string;
   status: "upcoming" | "registration" | "ongoing" | "finished";
   start_at: string;
+  end_at?: string;
+  registration_from?: string;
+  registration_to?: string;
   max_teams?: number;
   team_count?: number;
 }
 
-const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  upcoming:     { label: "Скоро",       color: "bg-amber-500/10 text-amber-600 border-amber-500/30" },
-  registration: { label: "Реєстрація",  color: "bg-green-500/10 text-green-600 border-green-500/30" },
-  ongoing:      { label: "Тривають",    color: "bg-blue-600/10 text-blue-600 border-blue-600/30" },
-  finished:     { label: "Завершено",   color: "bg-gray-500/10 text-gray-500 border-gray-500/20" },
+type TournamentStatus = Tournament["status"];
+
+function computeStatus(t: Pick<Tournament, "start_at" | "end_at" | "registration_from" | "registration_to">): TournamentStatus {
+  const now     = Date.now();
+  const start   = t.start_at          ? new Date(t.start_at).getTime()          : null;
+  const end     = t.end_at            ? new Date(t.end_at).getTime()            : null;
+  const regFrom = t.registration_from ? new Date(t.registration_from).getTime() : null;
+  const regTo   = t.registration_to   ? new Date(t.registration_to).getTime()   : null;
+
+  if (end && now > end)                                   return "finished";
+  if (start && now >= start && (!end || now <= end))      return "ongoing";
+  if (regFrom && regTo && now >= regFrom && now <= regTo) return "registration";
+  return "upcoming";
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  upcoming:     "bg-amber-500/10 text-amber-600 border-amber-500/30",
+  registration: "bg-green-500/10 text-green-600 border-green-500/30",
+  ongoing:      "bg-blue-600/10 text-blue-600 border-blue-600/30",
+  finished:     "bg-gray-500/10 text-gray-500 border-gray-500/20",
 };
 
 function fmtDate(iso?: string) {
@@ -49,6 +66,13 @@ export default function DashboardPage() {
   const { user, isLoading } = useAuth();
   const { t } = useT();
 
+  const STATUS_CONFIG = {
+    upcoming:     { label: t.mainPage.statusUpcoming,     color: STATUS_COLORS.upcoming },
+    registration: { label: t.mainPage.statusRegistration, color: STATUS_COLORS.registration },
+    ongoing:      { label: t.mainPage.statusOngoing,      color: STATUS_COLORS.ongoing },
+    finished:     { label: t.mainPage.statusFinished,     color: STATUS_COLORS.finished },
+  };
+
   useEffect(() => {
     if (!isLoading && !user) router.push("/login");
   }, [isLoading, user, router]);
@@ -58,8 +82,7 @@ export default function DashboardPage() {
       try {
         const { data, error } = await supabase
         .from("tournaments")
-        .select("id, name, status, start_at, max_teams")
-        .in("status", ["upcoming", "registration", "ongoing"])
+        .select("id, name, status, start_at, end_at, registration_from, registration_to, max_teams")
         .order("start_at", { ascending: true })
         .limit(10);
 
@@ -69,7 +92,7 @@ export default function DashboardPage() {
         let counts: Record<string, number> = {};
         if (ids.length) {
           const { data: regData } = await supabase
-          .from("teams")
+          .from("tournament_teams")
           .select("tournament_id")
           .in("tournament_id", ids);
           (regData ?? []).forEach((r: any) => {
@@ -77,7 +100,11 @@ export default function DashboardPage() {
           });
         }
 
-        setTournaments((data ?? []).map((t: any) => ({ ...t, team_count: counts[t.id] ?? 0 })));
+        setTournaments((data ?? []).map((t: any) => ({
+          ...t,
+          team_count: counts[t.id] ?? 0,
+          status: computeStatus(t),   // всегда вычисляем по датам — как в tournaments page
+        })));
       } catch (e) {
         console.error(e);
       } finally {
@@ -115,9 +142,10 @@ export default function DashboardPage() {
 
   const filterLabels: { key: typeof activeFilter; label: string }[] = [
     { key: "all",          label: t.mainPage.filterAll },
-    { key: "upcoming",     label: "Скоро" },
+    { key: "upcoming",     label: t.mainPage.filterUpcoming },
     { key: "registration", label: t.mainPage.filterOpen },
     { key: "ongoing",      label: t.mainPage.filterRunning },
+    { key: "finished",     label: t.mainPage.filterFinished },
   ];
 
   const filteredTournaments = activeFilter === "all"
@@ -159,7 +187,7 @@ export default function DashboardPage() {
       <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-(--t1) uppercase">{t.mainPage.overview}</h1>
       </header>
 
-      <div className="space-y-6 sm:space-y-8">
+      <div className="max-w-6xl space-y-6 sm:space-y-8">
 
       {/* Admin Banner */}
       {isAdmin && (
@@ -181,10 +209,10 @@ export default function DashboardPage() {
         {user.role === "superadmin" ? "Superadmin" : "Admin"} panel
         </span>
         <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight leading-tight">
-        Управління турнірами
+          {t.admin.manageTournaments}
         </h2>
         <p className="text-xs font-bold text-(--t2) mt-1 max-w-sm">
-        Створюйте нові турніри, керуйте командами та налаштовуйте параметри змагань
+          {t.admin.manageTournamentsDesc}
         </p>
         </div>
         </div>
@@ -193,15 +221,15 @@ export default function DashboardPage() {
         className="flex-shrink-0 flex items-center justify-center gap-2 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl px-6 sm:px-8 py-4 hover:bg-blue-700 shadow-lg shadow-blue-600/25 active:scale-95 transition-all w-full sm:w-auto group"
         >
         <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
-        Створити турнір
+        {t.admin.createTournament}
         </button>
         </div>
 
         <div className="relative z-10 mt-6 pt-5 border-t border-(--brd) flex flex-wrap gap-4 sm:gap-8">
         {[
-          { label: "Активних турнірів", value: tournaments.filter(t => t.status === "ongoing").length.toString() },
-                   { label: "Відкритих реєстрацій", value: tournaments.filter(t => t.status === "registration").length.toString() },
-                   { label: "Всього у базі", value: tournaments.length.toString() },
+          { label: t.admin.statActive, value: tournaments.filter(t => t.status === "ongoing").length.toString() },
+          { label: t.admin.statOpen,   value: tournaments.filter(t => t.status === "registration").length.toString() },
+          { label: t.admin.statTotal,  value: tournaments.length.toString() },
         ].map(({ label, value }) => (
           <div key={label}>
           <p className="text-[10px] font-black uppercase tracking-wider text-(--t2)">{label}</p>

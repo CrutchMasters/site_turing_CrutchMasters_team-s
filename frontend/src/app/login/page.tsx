@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, FormEvent } from "react";
+import { Settings } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 import { useTheme } from "@/hooks/useTheme";
 import { useRouter } from "next/navigation";
@@ -14,10 +15,12 @@ typeof window !== "undefined" && window.location.hostname === "localhost"
 : "https://site-turing-crutchmasters-team-s.onrender.com";
 
 export default function LoginPage() {
-  const { t } = useLanguage();
-  const { dark } = useTheme();
+  const { t, locale, setLocale } = useLanguage();
+  const { dark, isDark, toggle } = useTheme();
   const router = useRouter();
   const cardRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const { login: authLogin } = useAuth();
 
@@ -211,6 +214,71 @@ export default function LoginPage() {
       </Link>
       </div>
       </div>
+
+      {/* SETTINGS BUTTON */}
+      <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[60]" ref={settingsRef}>
+        <div
+          className={`
+            absolute bottom-16 right-0
+            w-[calc(100vw-2rem)] max-w-[16rem]
+            bg-(--card)/90 backdrop-blur-2xl rounded-3xl shadow-2xl border border-(--brd) p-5
+            transition-all duration-300 origin-bottom-right
+            ${isSettingsOpen
+              ? "opacity-100 scale-100 translate-y-0"
+              : "opacity-0 scale-95 translate-y-4 pointer-events-none"
+            }
+          `}
+        >
+          <h3 className="text-xs font-black uppercase tracking-widest text-(--t2) mb-4 px-1">
+            {t.settings.title}
+          </h3>
+          <div className="space-y-4">
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-bold text-(--t2)">Theme</span>
+              <button
+                onClick={toggle}
+                className="flex items-center justify-between px-3 py-2 rounded-xl bg-(--bg) hover:bg-(--brd) transition border border-(--brd)"
+              >
+                <span className="text-xs font-black uppercase tracking-wide text-(--t1)">
+                  {isDark ? "🌙 Dark" : "☀️ Light"}
+                </span>
+                <div className={`w-10 h-5 rounded-full transition-all relative ${isDark ? "bg-blue-600" : "bg-gray-400"}`}>
+                  <div className={`absolute top-0 left-0 w-5 h-5 bg-white rounded-full shadow transition-all ${isDark ? "translate-x-5" : "translate-x-0"}`} />
+                </div>
+              </button>
+            </div>
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-bold text-(--t2)">{t.settings.lang}</span>
+              <div className="flex bg-(--bg) p-1 rounded-xl gap-1 border border-(--brd)">
+                {(["en", "ru", "ua"] as const).map((lang) => (
+                  <button
+                    key={lang}
+                    onClick={() => setLocale(lang)}
+                    className={`flex-1 py-1.5 text-[10px] font-black rounded-lg transition-all ${
+                      locale === lang
+                        ? "bg-(--card) shadow-sm text-blue-600"
+                        : "text-(--t2) hover:text-blue-400"
+                    }`}
+                  >
+                    {lang.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+          className={`p-3.5 sm:p-4 rounded-2xl bg-(--card) shadow-xl border border-(--brd) transition-all duration-300 hover:scale-110 active:scale-95 ${
+            isSettingsOpen ? "rotate-90 text-blue-600 border-blue-600/20" : "text-(--t2)"
+          }`}
+        >
+          <Settings className="w-5 h-5 sm:w-6 sm:h-6" />
+        </button>
       </div>
+
+    </div>
+
   );
 }
