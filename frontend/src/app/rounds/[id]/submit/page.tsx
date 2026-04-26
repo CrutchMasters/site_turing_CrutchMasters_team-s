@@ -179,23 +179,24 @@ export default function SubmitPage() {
                 if (roundErr || !roundData) throw new Error("Раунд не знайдено");
                 setRound(roundData);
 
-                // Шукаємо команду: спочатку де капітан, потім де учасник
+                // Шукаємо команду прив'язану до турніру цього раунду (фільтр по tournament_id)
                 let teamId: string | null = null;
-                const token = localStorage.getItem("access_token") || "";
 
                 const { data: captainTeam } = await supabase
                 .from("teams")
                 .select("id")
                 .eq("captain_id", user.id)
+                .eq("tournament_id", roundData.tournament_id)
                 .maybeSingle();
 
                 if (captainTeam?.id) {
                     teamId = captainTeam.id;
                 } else {
-                    // Fallback: шукаємо команди де user є учасником
+                    // Fallback: шукаємо команди де user є учасником у цьому турнірі
                     const { data: memberTeams } = await supabase
                     .from("teams")
                     .select("id")
+                    .eq("tournament_id", roundData.tournament_id)
                     .contains("members_ids", [user.id])
                     .limit(1);
                     teamId = memberTeams?.[0]?.id ?? null;

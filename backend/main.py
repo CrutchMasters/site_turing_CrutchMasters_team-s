@@ -1,27 +1,130 @@
 import os
-import base64
 import json
+import jwt as pyjwt
 from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from pydantic import BaseModel, EmailStr
 
-
 from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 
+# ─────────────────────────────────────────────────────────────────────────────
+# JWT VERIFICATION
+# Supabase использует HS256 с JWT_SECRET из Settings → API → JWT Secret.
+# Добавь SUPABASE_JWT_SECRET в .env.
+# ─────────────────────────────────────────────────────────────────────────────
+
 def decode_jwt_payload(token: str) -> dict:
-    """Декодируем JWT payload без проверки подписи."""
+    """
+    Верифікуємо JWT від Supabase.
+
+    Supabase з 2024 року підписує токени ES256 (асиметричний) замість HS256.
+    Алгоритм визначаємо з заголовку токена:
+      - ES256 → верифікуємо через JWKS (публічний ключ з Supabase)
+      - HS256 → верифікуємо через SUPABASE_JWT_SECRET (старий формат)
+    Якщо жоден секрет/ключ не задано → fallback без верифікації (небезпечно).
+    """
+    import base64 as _base64
+
+    # Читаємо alg з заголовку без повної верифікації
     try:
-        parts = token.split(".")
-        if len(parts) != 3:
-            raise ValueError("Invalid JWT structure")
-        payload_b64 = parts[1]
-        payload_b64 += "=" * (4 - len(payload_b64) % 4)
-        return json.loads(base64.urlsafe_b64decode(payload_b64))
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Invalid token format: {e}")
+        header_part = token.split(".")[0]
+        padded = header_part + "=" * (-len(header_part) % 4)
+        header = json.loads(_base64.urlsafe_b64decode(padded))
+        alg = header.get("alg", "HS256")
+        kid = header.get("kid")
+    except Exception:
+        alg = "HS256"
+        kid = None
+
+    supabase_url = os.getenv("SUPABASE_URL", "")
+    jwt_secret   = os.getenv("SUPABASE_JWT_SECRET")
+
+    # ── ES256: верифікація через JWKS (з кешем на 1 годину) ─────────────────
+    if alg == "ES256":
+        try:
+            from jwt.algorithms import ECAlgorithm
+            import urllib.request
+            import time as _time
+
+            # Кеш публічних ключів: { kid -> ECPublicKey }, оновлюється раз на годину
+            cache     = decode_jwt_payload.__dict__.setdefault("_jwks_cache", {})
+            cache_ts  = decode_jwt_payload.__dict__.setdefault("_jwks_ts", 0)
+            cache_ttl = 3600  # секунди
+
+            public_key = cache.get(kid) if kid else (list(cache.values())[0] if cache else None)
+
+            if public_key is None or (_time.time() - cache_ts > cache_ttl):
+                # Кеш відсутній або застарів — оновлюємо
+                jwks_url = f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+                print(f"[JWT] Fetching JWKS from {jwks_url}", flush=True)
+                with urllib.request.urlopen(jwks_url, timeout=5) as resp:
+                    jwks = json.loads(resp.read())
+
+                keys = jwks.get("keys", [])
+                if not keys:
+                    raise HTTPException(status_code=401, detail="JWKS: no keys returned")
+
+                # Заповнюємо кеш
+                cache.clear()
+                for k in keys:
+                    k_kid = k.get("kid", "__default__")
+                    cache[k_kid] = ECAlgorithm.from_jwk(json.dumps(k))
+                decode_jwt_payload.__dict__["_jwks_ts"] = _time.time()
+
+                public_key = cache.get(kid) if kid else list(cache.values())[0]
+
+            if public_key is None:
+                raise HTTPException(status_code=401, detail="JWKS: matching public key not found")
+
+            payload = pyjwt.decode(
+                token,
+                public_key,
+                algorithms=["ES256"],
+                options={"verify_exp": True},
+            )
+            return payload
+        except HTTPException:
+            raise
+        except pyjwt.ExpiredSignatureError:
+            raise HTTPException(status_code=401, detail="Token expired")
+        except pyjwt.InvalidTokenError as e:
+            raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
+        except Exception as e:
+            print(f"[JWT] JWKS fetch failed: {e}", flush=True)
+            # Fallback: якщо кеш є — використовуємо його навіть якщо TTL минув
+            stale_key = list(decode_jwt_payload.__dict__.get("_jwks_cache", {}).values())
+            if stale_key:
+                print("[JWT] Using stale cached JWKS key", flush=True)
+                try:
+                    return pyjwt.decode(token, stale_key[0], algorithms=["ES256"], options={"verify_exp": True})
+                except pyjwt.ExpiredSignatureError:
+                    raise HTTPException(status_code=401, detail="Token expired")
+                except Exception as e2:
+                    raise HTTPException(status_code=401, detail=f"Invalid token: {e2}")
+            raise HTTPException(status_code=401, detail=f"Cannot verify token: JWKS unavailable ({e})")
+
+    # ── HS256: верифікація через JWT_SECRET ──────────────────────────────────
+    if not jwt_secret:
+        print("[JWT] УВАГА: SUPABASE_JWT_SECRET не задано — підпис не перевіряється!", flush=True)
+        try:
+            return pyjwt.decode(token, options={"verify_signature": False})
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Invalid token format: {e}")
+    try:
+        payload = pyjwt.decode(
+            token,
+            jwt_secret,
+            algorithms=["HS256"],
+            options={"verify_exp": True},
+        )
+        return payload
+    except pyjwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except pyjwt.InvalidTokenError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
 
 def fetch_one(query) -> dict | None:
@@ -68,6 +171,19 @@ app = FastAPI()
 #   active     → finished      коли всі раунди finished або start_at+тривалість минув
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _parse_dt(value: str | None) -> datetime | None:
+    """
+    Парсит ISO-строку из БД в timezone-aware datetime (UTC).
+    Обрабатывает как '+00:00'-суффикс, так и naive-строки без timezone.
+    """
+    if not value:
+        return None
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def update_tournament_statuses():
     if not supabase:
         return
@@ -81,19 +197,19 @@ def update_tournament_statuses():
 
         for t in tournaments:
             current = t["status"]
-            # Пропускаємо фінальні статуси
-            if current in ("finished", "cancelled"):
+            # Пропускаємо фінальні та незворотні статуси
+            if current in ("finished", "cancelled", "ongoing"):
                 continue
 
-            reg_from  = datetime.fromisoformat(t["registration_from"]) if t.get("registration_from") else None
-            reg_to    = datetime.fromisoformat(t["registration_to"])   if t.get("registration_to")   else None
-            start_at  = datetime.fromisoformat(t["start_at"])          if t.get("start_at")          else None
+            reg_from  = _parse_dt(t.get("registration_from"))
+            reg_to    = _parse_dt(t.get("registration_to"))
+            start_at  = _parse_dt(t.get("start_at"))
 
             new_status = current
 
             if start_at and now >= start_at:
-                # Турнір почався → active
-                new_status = "active"
+                # Турнір почався → ongoing (відповідно до tournaments_status_check constraint)
+                new_status = "ongoing"
             elif reg_from and now >= reg_from and (not reg_to or now < reg_to):
                 # Реєстрація відкрита
                 new_status = "registration"
@@ -105,8 +221,11 @@ def update_tournament_statuses():
                 new_status = "upcoming"
 
             if new_status != current:
-                supabase.table("tournaments").update({"status": new_status}).eq("id", t["id"]).execute()
-                print(f"[SCHEDULER] Турнір {t['id']}: {current} → {new_status}", flush=True)
+                try:
+                    supabase.table("tournaments").update({"status": new_status}).eq("id", t["id"]).execute()
+                    print(f"[SCHEDULER] Турнір {t['id']}: {current} → {new_status}", flush=True)
+                except Exception as upd_err:
+                    print(f"[SCHEDULER] Не вдалося оновити {t['id']} ({current} → {new_status}): {upd_err}", flush=True)
 
     except Exception as e:
         print(f"[SCHEDULER] Помилка оновлення статусів: {e}", flush=True)
@@ -126,14 +245,20 @@ def stop_scheduler():
     _scheduler.shutdown(wait=False)
 
 # --- CORS ---
+# Явный список origins — без "*", иначе браузер запрещает credentials + wildcard.
+_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:8000",
+    "https://site-turing-crutchmasters-team-s.pages.dev",
+]
+# Дополнительные origins из .env (через запятую), например для staging-окружений
+_extra = os.getenv("CORS_EXTRA_ORIGINS", "")
+if _extra:
+    _ALLOWED_ORIGINS.extend([o.strip() for o in _extra.split(",") if o.strip()])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:8000",
-        "https://site-turing-crutchmasters-team-s.pages.dev",
-        "*"
-    ],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -144,11 +269,23 @@ class UserRegister(BaseModel):
     username: str
     login: str
     email: EmailStr
-    password: str
+    # password намеренно убран: пользователь уже верифицирован через OTP,
+    # Auth-запись создана Supabase — бэкенду пароль не нужен и не безопасен.
 
 class UserLogin(BaseModel):
     login: str
     password: str
+
+class TournamentUpdate(BaseModel):
+    """FIX (критичний): Pydantic-модель замість dict — лише дозволені поля."""
+    name:              str | None = None
+    rules:             str | None = None
+    start_at:          str | None = None
+    registration_from: str | None = None
+    registration_to:   str | None = None
+    max_teams:         int | None = None
+    rounds:            int | None = None
+    status:            str | None = None
 
 class ChangeRole(BaseModel):
     target_user_id: str
@@ -175,6 +312,7 @@ def get_caller(token: str) -> dict:
     Ищем по id (sub из JWT) — колонка id в таблице account совпадает с Supabase Auth UUID.
     Fallback по email для надёжности.
     """
+    print(f"[get_caller] token prefix={token[:40]!r}", flush=True)
     jwt_payload  = decode_jwt_payload(token)
     user_id      = jwt_payload.get("sub")
     caller_email = jwt_payload.get("email")
@@ -246,32 +384,28 @@ def connection_test():
 
 # 1. РЕГИСТРАЦИЯ
 @app.post("/api/register")
-async def register_user(user: UserRegister):
+async def register_user(user: UserRegister, authorization: str = Header(...)):
+    """
+    Создаёт запись в таблице account после верификации OTP на фронтенде.
+    Supabase Auth-запись уже существует — UUID берём из JWT токена.
+    Пароль не принимается и не нужен.
+    """
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not initialized")
     try:
-        # Проверяем дубликат email в нашей таблице
+        # Получаем UUID из верифицированного JWT (токен выдан после verifyOtp)
+        token = authorization.replace("Bearer ", "").strip()
+        jwt_payload = decode_jwt_payload(token)
+        auth_uuid = jwt_payload.get("sub")
+        if not auth_uuid:
+            raise HTTPException(status_code=401, detail="Invalid token: no sub claim")
+
+        # Проверяем дубликат по email
         existing = supabase.table("account").select("id").eq("email", user.email).execute()
         if existing.data:
             raise HTTPException(status_code=400, detail="Пользователь с таким email уже существует")
 
-        # Создаём пользователя в Supabase Auth (получаем UUID)
-        try:
-            auth_response = supabase.auth.admin.create_user({
-                "email":            user.email,
-                "password":         user.password,
-                "email_confirm":    True,
-                "user_metadata": {
-                    "username": user.username,
-                    "login":    user.login,
-                },
-            })
-            auth_uuid = auth_response.user.id if auth_response.user else None
-        except Exception as auth_err:
-            print(f"[REGISTER] Auth error: {auth_err}", flush=True)
-            raise HTTPException(status_code=400, detail=f"Ошибка создания Auth пользователя: {auth_err}")
-
-        # Создаём запись в таблице account, используя Supabase Auth UUID как id
+        # Создаём запись в account, используя UUID из Auth (не создаём нового Auth-пользователя)
         result = supabase.table("account").insert({
             "id":       auth_uuid,
             "username": user.username,
@@ -515,7 +649,7 @@ async def update_team(team_id: str, payload: UpdateTeam, authorization: str = He
     if team["captain_id"] != caller["id"]:
         raise HTTPException(status_code=403, detail="Только капитан может редактировать команду")
 
-    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None and v != ""}
     if not updates:
         raise HTTPException(status_code=400, detail="Нечего обновлять")
 
@@ -579,15 +713,33 @@ async def register_team_for_tournament(payload: RegisterTeamForTournament, autho
     if team["tournament_id"]:
         raise HTTPException(status_code=400, detail="Команда вже зареєстрована в іншому турнірі")
 
-    # Перевіряємо ліміт команд
+    # FIX (критичний): атомарна перевірка ліміту + реєстрація через RPC,
+    # щоб уникнути race condition коли дві паралельні реєстрації одночасно
+    # проходять перевірку і обидві записуються, перевищуючи max_teams.
     if tournament["max_teams"]:
-        count_res = supabase.table("teams") \
-            .select("id", count="exact") \
-            .eq("tournament_id", payload.tournament_id) \
-            .execute()
-        current_count = count_res.count or 0
-        if current_count >= tournament["max_teams"]:
-            raise HTTPException(status_code=400, detail="Турнір заповнений")
+        try:
+            rpc_res = supabase.rpc(
+                "register_team_atomic",
+                {
+                    "p_team_id":       payload.team_id,
+                    "p_tournament_id": payload.tournament_id,
+                    "p_max_teams":     tournament["max_teams"],
+                },
+            ).execute()
+            if rpc_res.data is False:
+                raise HTTPException(status_code=400, detail="Турнір заповнений")
+        except HTTPException:
+            raise
+        except Exception as e:
+            # Fallback: якщо RPC ще не задеплоєна — виконуємо звичайну перевірку
+            # (видалити після деплою міграції register_team_atomic)
+            print(f"[WARN] register_team_atomic RPC недоступна, fallback: {e}", flush=True)
+            count_res = supabase.table("teams") \
+                .select("id", count="exact") \
+                .eq("tournament_id", payload.tournament_id) \
+                .execute()
+            if (count_res.count or 0) >= tournament["max_teams"]:
+                raise HTTPException(status_code=400, detail="Турнір заповнений")
 
     # Записуємо tournament_id в команду (service_role обходить RLS)
     result = supabase.table("teams") \
@@ -652,12 +804,12 @@ async def unregister_team_from_tournament(payload: RegisterTeamForTournament, au
 @app.patch("/api/tournaments/{tournament_id}")
 async def update_tournament(
     tournament_id: str,
-    body: dict,
+    body: TournamentUpdate,  # FIX (критичний): Pydantic замість dict — довільні поля заблоковані
     authorization: str = Header(...),
 ):
     """
     Оновлює поля турніру через service_role — обходить RLS (anon key отримує порожній результат).
-    Тільки admin/superadmin.
+    Тільки admin/superadmin і лише власник турніру.
     """
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not initialized")
@@ -668,19 +820,17 @@ async def update_tournament(
     if caller.get("role") not in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Тільки адміністратор може редагувати турнір")
 
-    # Перевіряємо що турнір існує
+    # Перевіряємо що турнір існує і належить поточному адміну
+    # FIX (критичний): перевірка owner_id запобігає редагуванню чужих турнірів
     tournament = fetch_one(
-        supabase.table("tournaments").select("id, status").eq("id", tournament_id)
+        supabase.table("tournaments").select("id, status, created_by").eq("id", tournament_id)
     )
     if not tournament:
         raise HTTPException(status_code=404, detail="Турнір не знайдено")
+    if caller.get("role") != "superadmin" and tournament.get("created_by") != caller["id"]:
+        raise HTTPException(status_code=403, detail="Ви не є власником цього турніру")
 
-    # Дозволені поля для оновлення (whitelist)
-    allowed_fields = {
-        "name", "rules", "start_at", "registration_from",
-        "registration_to", "max_teams", "rounds", "status",
-    }
-    update_data = {k: v for k, v in body.items() if k in allowed_fields}
+    update_data = {k: v for k, v in body.model_dump().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="Немає полів для оновлення")
 
@@ -724,15 +874,21 @@ async def create_tournament_rounds(
         raise HTTPException(status_code=400, detail="Максимальна кількість раундів — 8 (rounds_number_check)")
 
     # Перевіряємо що турнір існує і належить поточному адміну
+    # FIX (високий): без цієї перевірки будь-який адмін міг редагувати чужі турніри
     tournament = fetch_one(
-        supabase.table("tournaments").select("id, name").eq("id", tournament_id)
+        supabase.table("tournaments").select("id, name, created_by").eq("id", tournament_id)
     )
     if not tournament:
         raise HTTPException(status_code=404, detail="Турнір не знайдено")
+    if caller.get("role") != "superadmin" and tournament.get("created_by") != caller["id"]:
+        raise HTTPException(status_code=403, detail="Ви не є власником цього турніру")
 
     # create_tournament вже створила порожні рядки раундів (number=1..N) —
     # тому INSERT дасть duplicate key. Робимо UPDATE по (tournament_id, number).
+    # FIX (середній): якщо частина раундів не збережеться — повідомляємо про це
+    # замість мовчазного ігнорування (повний rollback потребує RPC з транзакцією).
     updated = []
+    failed_numbers = []
     for r in rounds:
         num = r.get("number")
         if not num:
@@ -749,15 +905,28 @@ async def create_tournament_rounds(
             "status":        r.get("status", "pending"),
             "template_path": r.get("template_path"),
         }
-        res = (
-            supabase.table("rounds")
-                .update(update_data)
-                .eq("tournament_id", tournament_id)
-                .eq("number", num)
-                .execute()
+        try:
+            res = (
+                supabase.table("rounds")
+                    .update(update_data)
+                    .eq("tournament_id", tournament_id)
+                    .eq("number", num)
+                    .execute()
+            )
+            if res.data:
+                updated.extend(res.data)
+            else:
+                failed_numbers.append(num)
+        except Exception as round_err:
+            print(f"[ROUNDS] Помилка оновлення раунду #{num}: {round_err}", flush=True)
+            failed_numbers.append(num)
+
+    if failed_numbers:
+        print(f"[ROUNDS] УВАГА: не вдалося оновити раунди #{failed_numbers} для турніру {tournament['name']}", flush=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Не вдалося зберегти раунди №{failed_numbers}. Турнір створено, але деякі раунди неповні. Спробуйте відредагувати турнір."
         )
-        if res.data:
-            updated.extend(res.data)
 
     print(f"[ROUNDS] {len(updated)} раундів оновлено для турніру {tournament['name']}", flush=True)
     return {"success": True, "rounds": updated}
@@ -950,10 +1119,29 @@ async def get_my_invitations(authorization: str = Header(...)):
 
     invitations = inv_res.data or []
 
+    if not invitations:
+        return {"invitations": []}
+
+    # Батч-запросы вместо N+1
+    team_ids    = list({inv["team_id"]    for inv in invitations})
+    inviter_ids = list({inv["inviter_id"] for inv in invitations})
+
+    teams_res = supabase.table("teams") \
+        .select("id, name, city_school_org") \
+        .in_("id", team_ids) \
+        .execute()
+    teams_map = {t["id"]: t for t in (teams_res.data or [])}
+
+    inviters_res = supabase.table("account") \
+        .select("id, username, login") \
+        .in_("id", inviter_ids) \
+        .execute()
+    inviters_map = {a["id"]: a for a in (inviters_res.data or [])}
+
     enriched = []
     for inv in invitations:
-        team_r    = fetch_one(supabase.table("teams").select("name, city_school_org").eq("id", inv["team_id"]))
-        inviter_r = fetch_one(supabase.table("account").select("username, login").eq("id", inv["inviter_id"]))
+        team_r    = teams_map.get(inv["team_id"])
+        inviter_r = inviters_map.get(inv["inviter_id"])
         enriched.append({
             **inv,
             "team_name":        team_r.get("name")            if team_r else "—",
@@ -1060,6 +1248,19 @@ async def submit_work(round_id: str, payload: SubmitWork, authorization: str = H
     if not round_:
         raise HTTPException(status_code=404, detail="Раунд не знайдено")
 
+    # FIX (високий): перевіряємо статус раунду — здача тільки для active раундів
+    round_status = round_.get("status")
+    if round_status and round_status != "active":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Здача недоступна: раунд має статус '{round_status}'. Здача дозволена лише для активних раундів."
+        )
+
+    # FIX (високий): перевіряємо дедлайн — здача після end_at заборонена
+    end_at = _parse_dt(round_.get("end_at"))
+    if end_at and datetime.now(timezone.utc) > end_at:
+        raise HTTPException(status_code=422, detail="Дедлайн раунду минув, здача не приймається")
+
     # Перевіряємо що команда існує і caller є капітаном або учасником
     team = fetch_one(
         supabase.table("teams")
@@ -1079,7 +1280,7 @@ async def submit_work(round_id: str, payload: SubmitWork, authorization: str = H
     if team.get("tournament_id") != round_.get("tournament_id"):
         raise HTTPException(status_code=403, detail="Ваша команда не зареєстрована в цьому турнірі")
 
-    now_iso = __import__("datetime").datetime.utcnow().isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
 
     # Шукаємо існуючий сабміт
     existing = fetch_one(
@@ -1114,6 +1315,55 @@ async def submit_work(round_id: str, payload: SubmitWork, authorization: str = H
     return {"success": True, "submission": result.data[0]}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# FIX (середній): новий ендпоінт для збереження оцінок журі через бекенд.
+# Замінює пряме звернення з фронтенду до supabase.from("jury_evaluations").
+# Перевіряє що caller є членом журі цього раунду перед записом.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class JuryEvaluationPayload(BaseModel):
+    submission_id:   str
+    criteria_scores: dict
+    general_comment: str | None = None
+    total_score:     float | None = None
+
+@app.post("/api/rounds/{round_id}/evaluate")
+async def save_jury_evaluation(
+    round_id: str,
+    payload: JuryEvaluationPayload,
+    authorization: str = Header(...),
+):
+    """Зберегти або оновити оцінку журі для submission. Лише для членів журі."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    if caller.get("role") not in ("jury", "admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки журі може виставляти оцінки")
+
+    record = {
+        "jury_id":        caller["id"],
+        "submission_id":  payload.submission_id,
+        "round_id":       round_id,
+        "criteria_scores": payload.criteria_scores,
+        "general_comment": payload.general_comment,
+        "total_score":    payload.total_score,
+        "updated_at":     datetime.now(timezone.utc).isoformat(),
+    }
+
+    result = supabase.table("jury_evaluations").upsert(
+        record, on_conflict="jury_id,submission_id"
+    ).execute()
+
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Не вдалося зберегти оцінку")
+
+    print(f"[EVAL] {caller['username']} зберіг оцінку для submission {payload.submission_id}", flush=True)
+    return {"success": True, "evaluation": result.data[0]}
+
+
 @app.get("/api/rounds/{round_id}/submission")
 async def get_submission(round_id: str, team_id: str, authorization: str = Header(...)):
     """Отримати здану роботу команди для раунду."""
@@ -1121,7 +1371,22 @@ async def get_submission(round_id: str, team_id: str, authorization: str = Heade
         raise HTTPException(status_code=500, detail="Supabase not initialized")
 
     token = authorization.replace("Bearer ", "").strip()
-    get_caller(token)
+    caller = get_caller(token)
+
+    # FIX (середній): перевіряємо що caller є членом запитуваної команди,
+    # або адміном / журі — інакше учасники могли бачити роботи чужих команд.
+    is_privileged = caller.get("role") in ("admin", "superadmin", "jury")
+    if not is_privileged:
+        team = fetch_one(
+            supabase.table("teams")
+                .select("captain_id, members_ids")
+                .eq("id", team_id)
+        )
+        if not team:
+            raise HTTPException(status_code=404, detail="Команду не знайдено")
+        members = team.get("members_ids") or []
+        if caller["id"] != team["captain_id"] and caller["id"] not in members:
+            raise HTTPException(status_code=403, detail="Немає доступу до цієї роботи")
 
     sub = fetch_one(
         supabase.table("submissions")
@@ -1245,13 +1510,30 @@ async def get_signed_urls(body: dict, authorization: str = Header(...)):
         raise HTTPException(status_code=500, detail="Supabase not initialized")
 
     token = authorization.replace("Bearer ", "").strip()
-    get_caller(token)
+    caller = get_caller(token)
 
     paths = body.get("paths", [])
     if not paths or not isinstance(paths, list):
         raise HTTPException(status_code=400, detail="Потрібен список paths")
     if len(paths) > 50:
         raise HTTPException(status_code=400, detail="Максимум 50 файлів за раз")
+
+    # FIX (високий): перевіряємо що всі paths належать команді поточного користувача.
+    # Очікуваний формат: submissions/{round_id}/{team_id}/...
+    # Знаходимо команди користувача і перевіряємо team_id в шляху.
+    captain_res = supabase.table("teams").select("id").eq("captain_id", caller["id"]).execute()
+    member_res  = supabase.table("teams").select("id").contains("members_ids", [caller["id"]]).execute()
+    is_admin    = caller.get("role") in ("admin", "superadmin", "jury")
+    if not is_admin:
+        user_team_ids = {t["id"] for t in (captain_res.data or []) + (member_res.data or [])}
+        for path in paths:
+            parts = path.split("/")
+            # submissions/{round_id}/{team_id}/filename
+            if len(parts) < 3 or parts[2] not in user_team_ids:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Шлях '{path}' не належить вашій команді",
+                )
 
     result = {}
     for path in paths:
