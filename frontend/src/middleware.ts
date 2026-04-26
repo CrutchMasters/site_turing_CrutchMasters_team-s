@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PROTECTED = ["/main_page", "/profile", "/register_team"];
+const PROTECTED = ["/dashboard", "/profile", "/register_team"];
 const ADMIN_ONLY = ["/admin"];
 const AUTH_PAGES = ["/login", "/register"];
 
@@ -16,12 +16,12 @@ export function middleware(request: NextRequest) {
 
     // Якщо вже залогінений — не пускаємо на /login /register
     if (AUTH_PAGES.includes(pathname) && token) {
-        return NextResponse.redirect(new URL("/main_page", request.url));
+        return NextResponse.redirect(new URL("/dashboard", request.url));
     }
 
     return NextResponse.next();
 }
 
 export const config = {
-    matcher: ["/main_page/:path*", "/profile/:path*", "/register_team/:path*", "/login", "/register"],
+    matcher: ["/dashboard/:path*", "/profile/:path*", "/register_team/:path*", "/login", "/register"],
 };

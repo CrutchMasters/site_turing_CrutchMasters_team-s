@@ -1,3 +1,4 @@
+//site_turing_CrutchMasters_team-s/frontend/src/app/register/page.tsx
 "use client";
 
 import Link from "next/link";
@@ -6,6 +7,7 @@ import { useLanguage } from "@/context/LanguageContext";
 import { useTheme } from "@/hooks/useTheme";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
+import { useAuth } from "@/context/AuthContext";
 
 const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -18,9 +20,10 @@ const EyeIcon = () => (
   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268-2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
   </svg>
 );
+
 const EyeOffIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268-2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
   </svg>
 );
 
@@ -28,6 +31,7 @@ export default function RegisterPage() {
   const { t } = useLanguage();
   const { dark } = useTheme();
   const router = useRouter();
+  const { login: authLogin } = useAuth();
 
   const supabase = useMemo(() => createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
@@ -39,6 +43,8 @@ export default function RegisterPage() {
   const [showOtp, setShowOtp] = useState(false);
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);   // ошибки формы регистрации
+  const [otpError, setOtpError] = useState<string | null>(null);     // ошибки OTP
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -47,6 +53,15 @@ export default function RegisterPage() {
   const isPasswordMatch = formData.password === formData.confirmPassword;
   const canSubmit = agreed && isPasswordMatch && formData.password.length > 0 && !loading;
 
+  const pwStrength = (() => {
+    if (!formData.password) return null;
+    let s = 0;
+    if (formData.password.length >= 8) s++;
+    if (/[A-Z]/.test(formData.password)) s++;
+    if (/[0-9]/.test(formData.password)) s++;
+    if (/[^A-Za-z0-9]/.test(formData.password)) s++;
+    return s;
+  })();
   useEffect(() => {
     if (cardRef.current && !showOtp) {
       setTimeout(() => {
@@ -59,75 +74,130 @@ export default function RegisterPage() {
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormError(null);
   };
 
+  // Шаг 1: проверяем уникальность → signUp → OTP
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
     setLoading(true);
+    setFormError(null);
+
     try {
+      // 1. Проверяем уникальность login
+      const { data: existingLogin } = await supabase
+      .from("account")
+      .select("id")
+      .eq("login", formData.login)
+      .maybeSingle();
+
+      if (existingLogin) {
+        setFormError("Цей логін вже зайнятий. Оберіть інший.");
+        return;
+      }
+
+      // 2. Проверяем уникальность email
+      const { data: existingEmail } = await supabase
+      .from("account")
+      .select("id")
+      .eq("email", formData.email)
+      .maybeSingle();
+
+      if (existingEmail) {
+        setFormError("Користувач з таким email вже існує.");
+        return;
+      }
+
+      // 3. Регистрируем в Supabase Auth
       const { error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
-        options: { data: { username: formData.username, login: formData.login } },
+        options: {
+          data: { username: formData.username, login: formData.login },
+        },
       });
-      if (error) throw error;
+
+      if (error) {
+        if (error.message.includes("already registered") || error.message.includes("already been registered")) {
+          setFormError("Користувач з таким email вже існує.");
+        } else {
+          setFormError(error.message);
+        }
+        return;
+      }
+
       setShowOtp(true);
     } catch (error: any) {
-      alert(error.message || "Registration failed");
+      setFormError(error.message || "Помилка реєстрації");
     } finally {
       setLoading(false);
     }
   };
 
+  // Шаг 2: верифицируем OTP → бэкенд создаёт account → берём account из БД
   const handleOtpVerify = async () => {
     if (otp.length !== 6) return;
     setLoading(true);
+    setOtpError(null);
     try {
-      // 1. Верифікуємо OTP — отримуємо сесію
+      // 1. Верифицируем OTP
       const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
         email: formData.email,
         token: otp,
-        type: "signup"
+        type: "signup",
       });
-      if (verifyError) throw verifyError;
 
-      // 2. Зберігаємо реєстрацію на бекенді
+      if (verifyError) throw verifyError;
+      if (!verifyData.session) throw new Error("Сесія не отримана після верифікації");
+
+      const accessToken = verifyData.session.access_token;
+      const refreshToken = verifyData.session.refresh_token;
+
+      // 2. Бэкенд создаёт запись в account (account.id = auth UUID)
       const res = await fetch(`${API_URL}/api/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username: formData.username,
-          login: formData.login,
-          email: formData.email,
-          password: formData.password
+          login:    formData.login,
+          email:    formData.email,
+          password: formData.password,
         }),
       });
+
       if (!res.ok) {
         const d = await res.json();
         throw new Error(d.detail || "Failed to save user");
       }
 
-      // 3. Зберігаємо токен і юзера — щоб AuthContext не кинув на /login
-      if (verifyData.session) {
-        const token = verifyData.session.access_token;
-        const supabaseUser = verifyData.session.user;
+      // 3. Берём account из БД — получаем настоящий account.id
+      const { data: accountData, error: accErr } = await supabase
+      .from("account")
+      .select("id, username, login, email, role, status, avatar_url")
+      .eq("email", formData.email)
+      .single();
 
-        localStorage.setItem("access_token", token);
-        localStorage.setItem("user", JSON.stringify({
-          id: supabaseUser.id,
-          email: supabaseUser.email ?? "",
-          username: formData.username,
-          login: formData.login,
-          role: "user",
-        }));
-        // Cookie для middleware
-        document.cookie = `access_token=${token}; path=/; max-age=604800`;
+      if (accErr || !accountData) {
+        throw new Error("Не вдалося отримати дані акаунту після реєстрації");
       }
 
-      router.push("/main_page");
+      // 4. Сохраняем в контекст и localStorage
+      const userData = {
+        id:         accountData.id,
+        email:      accountData.email,
+        username:   accountData.username,
+        login:      accountData.login,
+        role:       accountData.role as "user" | "admin" | "jury" | "superadmin",
+        status:     accountData.status,
+        avatar_url: accountData.avatar_url,
+      };
+
+      authLogin(userData, accessToken, refreshToken);
+      router.push("/dashboard");
+
     } catch (error: any) {
-      alert(error.message || "Verification failed");
+      setOtpError(error.message || "Verification failed");
     } finally {
       setLoading(false);
     }
@@ -168,13 +238,31 @@ export default function RegisterPage() {
         <input name="login"    type="text" placeholder={t.auth.login}    value={formData.login}    onChange={handleChange} className={inputClass} required />
         <input name="email"    type="email" placeholder={t.auth.email}   value={formData.email}    onChange={handleChange} className={inputClass} required />
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1.5">
         <div className="relative">
         <input name="password" type={showPassword ? "text" : "password"} placeholder={t.auth.password} value={formData.password} onChange={handleChange}
         className="w-full px-4 py-4 pr-10 rounded-2xl border border-(--brd) bg-(--bg)/50 focus:ring-2 focus:ring-blue-500 focus:bg-(--card) outline-none text-sm text-(--t1)" required />
         <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-500 transition-colors">
         {showPassword ? <EyeOffIcon /> : <EyeIcon />}
         </button>
+        </div>
+        {pwStrength !== null && (
+          <div className="space-y-1 px-1">
+          <div className="flex gap-1">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+              i <= pwStrength
+              ? pwStrength <= 1 ? "bg-red-500" : pwStrength === 2 ? "bg-amber-500" : pwStrength === 3 ? "bg-blue-500" : "bg-green-500"
+              : "bg-(--brd)"
+            }`} />
+          ))}
+          </div>
+          <p className="text-[10px] font-bold text-(--t2)">
+          {pwStrength <= 1 ? "Слабкий" : pwStrength === 2 ? "Середній" : pwStrength === 3 ? "Хороший" : "Надійний"}
+          </p>
+          </div>
+        )}
         </div>
         <div className="relative">
         <input name="confirmPassword" type={showConfirmPassword ? "text" : "password"} placeholder={t.auth.confirmPassword} value={formData.confirmPassword} onChange={handleChange}
@@ -188,9 +276,20 @@ export default function RegisterPage() {
         <div className="flex items-center gap-3 py-1">
         <input type="checkbox" id="privacy" checked={agreed} onChange={() => setAgreed(!agreed)} className="w-5 h-5 cursor-pointer accent-blue-600 rounded-lg flex-shrink-0" />
         <label htmlFor="privacy" className="text-[11px] font-bold text-(--t2) cursor-pointer uppercase tracking-wider">
-        {t.auth.privacy}
+        {t.auth.privacy}{" "}
+        <Link href="/privacy_policy" target="_blank" onClick={(e) => e.stopPropagation()}
+        className="text-blue-600 hover:text-blue-500 hover:underline underline-offset-2 transition-colors">
+        Privacy Policy
+        </Link>
         </label>
         </div>
+
+        {/* Ошибка формы */}
+        {formError && (
+          <div className="px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-[11px] font-bold text-center">
+          {formError}
+          </div>
+        )}
 
         <button type="submit" disabled={!canSubmit}
         className={`w-full py-5 rounded-[2rem] text-xl font-black shadow-xl transition-all active:scale-95 uppercase tracking-tighter ${
@@ -218,19 +317,29 @@ export default function RegisterPage() {
         <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-8">
         Enter 6-digit code sent to {formData.email}
         </p>
+
         <input
         type="text" maxLength={6} value={otp}
-        onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+        onChange={(e) => { setOtp(e.target.value.replace(/\D/g, "")); setOtpError(null); }}
         placeholder="000000"
-        className="w-full text-center text-4xl font-black tracking-[0.2em] py-5 rounded-2xl bg-(--bg)/50 focus:bg-(--card) focus:ring-2 focus:ring-blue-500 outline-none transition-all text-blue-600 mb-8 placeholder:text-(--t2)/30"
+        className="w-full text-center text-4xl font-black tracking-[0.2em] py-5 rounded-2xl bg-(--bg)/50 focus:bg-(--card) focus:ring-2 focus:ring-blue-500 outline-none transition-all text-blue-600 mb-4 placeholder:text-(--t2)/30"
         />
+
+        {otpError && (
+          <div className="w-full mb-4 px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-[11px] font-bold text-center">
+          {otpError}
+          </div>
+        )}
+
         <button onClick={handleOtpVerify} disabled={otp.length !== 6 || loading}
         className={`w-full py-5 rounded-[1.8rem] font-black uppercase shadow-lg transition-all mb-4 ${
-          otp.length === 6 ? "bg-blue-600 text-white shadow-blue-500/20" : "bg-(--brd) text-(--t2)"
+          otp.length === 6 && !loading ? "bg-blue-600 text-white shadow-blue-500/20" : "bg-(--brd) text-(--t2) cursor-not-allowed"
         }`}>
         {loading ? "..." : "Confirm"}
         </button>
-        <button onClick={() => { setShowOtp(false); setOtp(""); }} className="text-[10px] font-black text-(--t2) hover:text-red-500 uppercase tracking-[0.3em] transition-all flex items-center gap-2">
+
+        <button onClick={() => { setShowOtp(false); setOtp(""); setOtpError(null); }}
+        className="text-[10px] font-black text-(--t2) hover:text-red-500 uppercase tracking-[0.3em] transition-all flex items-center gap-2">
         <span>←</span> Back
         </button>
         </div>
