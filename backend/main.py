@@ -42,22 +42,43 @@ def decode_jwt_payload(token: str) -> dict:
     supabase_url = os.getenv("SUPABASE_URL", "")
     jwt_secret   = os.getenv("SUPABASE_JWT_SECRET")
 
-    # ── ES256: верифікація через JWKS ────────────────────────────────────────
+    # ── ES256: верифікація через JWKS (з кешем на 1 годину) ─────────────────
     if alg == "ES256":
         try:
             from jwt.algorithms import ECAlgorithm
             import urllib.request
+            import time as _time
 
-            jwks_url = f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
-            with urllib.request.urlopen(jwks_url, timeout=5) as resp:
-                jwks = json.loads(resp.read())
+            # Кеш публічних ключів: { kid -> ECPublicKey }, оновлюється раз на годину
+            cache     = decode_jwt_payload.__dict__.setdefault("_jwks_cache", {})
+            cache_ts  = decode_jwt_payload.__dict__.setdefault("_jwks_ts", 0)
+            cache_ttl = 3600  # секунди
 
-            keys = jwks.get("keys", [])
-            jwk = next((k for k in keys if k.get("kid") == kid), None) or (keys[0] if keys else None)
-            if not jwk:
-                raise HTTPException(status_code=401, detail="JWKS: public key not found")
+            public_key = cache.get(kid) if kid else (list(cache.values())[0] if cache else None)
 
-            public_key = ECAlgorithm.from_jwk(json.dumps(jwk))
+            if public_key is None or (_time.time() - cache_ts > cache_ttl):
+                # Кеш відсутній або застарів — оновлюємо
+                jwks_url = f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+                print(f"[JWT] Fetching JWKS from {jwks_url}", flush=True)
+                with urllib.request.urlopen(jwks_url, timeout=5) as resp:
+                    jwks = json.loads(resp.read())
+
+                keys = jwks.get("keys", [])
+                if not keys:
+                    raise HTTPException(status_code=401, detail="JWKS: no keys returned")
+
+                # Заповнюємо кеш
+                cache.clear()
+                for k in keys:
+                    k_kid = k.get("kid", "__default__")
+                    cache[k_kid] = ECAlgorithm.from_jwk(json.dumps(k))
+                decode_jwt_payload.__dict__["_jwks_ts"] = _time.time()
+
+                public_key = cache.get(kid) if kid else list(cache.values())[0]
+
+            if public_key is None:
+                raise HTTPException(status_code=401, detail="JWKS: matching public key not found")
+
             payload = pyjwt.decode(
                 token,
                 public_key,
@@ -72,11 +93,18 @@ def decode_jwt_payload(token: str) -> dict:
         except pyjwt.InvalidTokenError as e:
             raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
         except Exception as e:
-            print(f"[JWT] JWKS fetch failed, fallback no-verify: {e}", flush=True)
-            try:
-                return pyjwt.decode(token, options={"verify_signature": False})
-            except Exception as e2:
-                raise HTTPException(status_code=401, detail=f"Invalid token format: {e2}")
+            print(f"[JWT] JWKS fetch failed: {e}", flush=True)
+            # Fallback: якщо кеш є — використовуємо його навіть якщо TTL минув
+            stale_key = list(decode_jwt_payload.__dict__.get("_jwks_cache", {}).values())
+            if stale_key:
+                print("[JWT] Using stale cached JWKS key", flush=True)
+                try:
+                    return pyjwt.decode(token, stale_key[0], algorithms=["ES256"], options={"verify_exp": True})
+                except pyjwt.ExpiredSignatureError:
+                    raise HTTPException(status_code=401, detail="Token expired")
+                except Exception as e2:
+                    raise HTTPException(status_code=401, detail=f"Invalid token: {e2}")
+            raise HTTPException(status_code=401, detail=f"Cannot verify token: JWKS unavailable ({e})")
 
     # ── HS256: верифікація через JWT_SECRET ──────────────────────────────────
     if not jwt_secret:
@@ -169,8 +197,8 @@ def update_tournament_statuses():
 
         for t in tournaments:
             current = t["status"]
-            # Пропускаємо фінальні статуси
-            if current in ("finished", "cancelled"):
+            # Пропускаємо фінальні та незворотні статуси
+            if current in ("finished", "cancelled", "ongoing"):
                 continue
 
             reg_from  = _parse_dt(t.get("registration_from"))
@@ -180,8 +208,8 @@ def update_tournament_statuses():
             new_status = current
 
             if start_at and now >= start_at:
-                # Турнір почався → active
-                new_status = "active"
+                # Турнір почався → ongoing (відповідно до tournaments_status_check constraint)
+                new_status = "ongoing"
             elif reg_from and now >= reg_from and (not reg_to or now < reg_to):
                 # Реєстрація відкрита
                 new_status = "registration"
@@ -193,8 +221,11 @@ def update_tournament_statuses():
                 new_status = "upcoming"
 
             if new_status != current:
-                supabase.table("tournaments").update({"status": new_status}).eq("id", t["id"]).execute()
-                print(f"[SCHEDULER] Турнір {t['id']}: {current} → {new_status}", flush=True)
+                try:
+                    supabase.table("tournaments").update({"status": new_status}).eq("id", t["id"]).execute()
+                    print(f"[SCHEDULER] Турнір {t['id']}: {current} → {new_status}", flush=True)
+                except Exception as upd_err:
+                    print(f"[SCHEDULER] Не вдалося оновити {t['id']} ({current} → {new_status}): {upd_err}", flush=True)
 
     except Exception as e:
         print(f"[SCHEDULER] Помилка оновлення статусів: {e}", flush=True)
@@ -281,6 +312,7 @@ def get_caller(token: str) -> dict:
     Ищем по id (sub из JWT) — колонка id в таблице account совпадает с Supabase Auth UUID.
     Fallback по email для надёжности.
     """
+    print(f"[get_caller] token prefix={token[:40]!r}", flush=True)
     jwt_payload  = decode_jwt_payload(token)
     user_id      = jwt_payload.get("sub")
     caller_email = jwt_payload.get("email")
@@ -791,11 +823,11 @@ async def update_tournament(
     # Перевіряємо що турнір існує і належить поточному адміну
     # FIX (критичний): перевірка owner_id запобігає редагуванню чужих турнірів
     tournament = fetch_one(
-        supabase.table("tournaments").select("id, status, owner_id").eq("id", tournament_id)
+        supabase.table("tournaments").select("id, status, created_by").eq("id", tournament_id)
     )
     if not tournament:
         raise HTTPException(status_code=404, detail="Турнір не знайдено")
-    if caller.get("role") != "superadmin" and tournament.get("owner_id") != caller["id"]:
+    if caller.get("role") != "superadmin" and tournament.get("created_by") != caller["id"]:
         raise HTTPException(status_code=403, detail="Ви не є власником цього турніру")
 
     update_data = {k: v for k, v in body.model_dump().items() if v is not None}
@@ -844,16 +876,19 @@ async def create_tournament_rounds(
     # Перевіряємо що турнір існує і належить поточному адміну
     # FIX (високий): без цієї перевірки будь-який адмін міг редагувати чужі турніри
     tournament = fetch_one(
-        supabase.table("tournaments").select("id, name, owner_id").eq("id", tournament_id)
+        supabase.table("tournaments").select("id, name, created_by").eq("id", tournament_id)
     )
     if not tournament:
         raise HTTPException(status_code=404, detail="Турнір не знайдено")
-    if caller.get("role") != "superadmin" and tournament.get("owner_id") != caller["id"]:
+    if caller.get("role") != "superadmin" and tournament.get("created_by") != caller["id"]:
         raise HTTPException(status_code=403, detail="Ви не є власником цього турніру")
 
     # create_tournament вже створила порожні рядки раундів (number=1..N) —
     # тому INSERT дасть duplicate key. Робимо UPDATE по (tournament_id, number).
+    # FIX (середній): якщо частина раундів не збережеться — повідомляємо про це
+    # замість мовчазного ігнорування (повний rollback потребує RPC з транзакцією).
     updated = []
+    failed_numbers = []
     for r in rounds:
         num = r.get("number")
         if not num:
@@ -870,15 +905,28 @@ async def create_tournament_rounds(
             "status":        r.get("status", "pending"),
             "template_path": r.get("template_path"),
         }
-        res = (
-            supabase.table("rounds")
-                .update(update_data)
-                .eq("tournament_id", tournament_id)
-                .eq("number", num)
-                .execute()
+        try:
+            res = (
+                supabase.table("rounds")
+                    .update(update_data)
+                    .eq("tournament_id", tournament_id)
+                    .eq("number", num)
+                    .execute()
+            )
+            if res.data:
+                updated.extend(res.data)
+            else:
+                failed_numbers.append(num)
+        except Exception as round_err:
+            print(f"[ROUNDS] Помилка оновлення раунду #{num}: {round_err}", flush=True)
+            failed_numbers.append(num)
+
+    if failed_numbers:
+        print(f"[ROUNDS] УВАГА: не вдалося оновити раунди #{failed_numbers} для турніру {tournament['name']}", flush=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Не вдалося зберегти раунди №{failed_numbers}. Турнір створено, але деякі раунди неповні. Спробуйте відредагувати турнір."
         )
-        if res.data:
-            updated.extend(res.data)
 
     print(f"[ROUNDS] {len(updated)} раундів оновлено для турніру {tournament['name']}", flush=True)
     return {"success": True, "rounds": updated}
@@ -1199,6 +1247,14 @@ async def submit_work(round_id: str, payload: SubmitWork, authorization: str = H
     )
     if not round_:
         raise HTTPException(status_code=404, detail="Раунд не знайдено")
+
+    # FIX (високий): перевіряємо статус раунду — здача тільки для active раундів
+    round_status = round_.get("status")
+    if round_status and round_status != "active":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Здача недоступна: раунд має статус '{round_status}'. Здача дозволена лише для активних раундів."
+        )
 
     # FIX (високий): перевіряємо дедлайн — здача після end_at заборонена
     end_at = _parse_dt(round_.get("end_at"))

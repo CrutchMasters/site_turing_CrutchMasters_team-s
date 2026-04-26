@@ -162,9 +162,16 @@ export default function RegisterTourney() {
   const handleConfirmYes = () => { if (timerRef.current) clearInterval(timerRef.current); setAccessState('denied'); };
   const handleConfirmNo  = () => { if (timerRef.current) clearInterval(timerRef.current); router.push('/login'); };
 
+  // FIX (середній): компенсуємо timezone offset щоб локальний час зберігався як UTC.
+  // new Date("2026-05-01T18:00:00") інтерпретується як LOCAL time браузером,
+  // але .toISOString() повертає UTC — без компенсації час зміщується на UTC offset.
   const toTimestamp = (date: string, time: string): string | null => {
     if (!date) return null;
-    return new Date(`${date}T${time || '00:00'}:00`).toISOString();
+    const localStr = `${date}T${time || '00:00'}:00`;
+    const localDate = new Date(localStr);
+    // Компенсуємо різницю між локальним часом і UTC
+    const offsetMs = localDate.getTimezoneOffset() * 60 * 1000;
+    return new Date(localDate.getTime() + offsetMs).toISOString();
   };
 
   const API_URL =
@@ -260,15 +267,18 @@ export default function RegisterTourney() {
       // Явно передаємо p_rounds_data: null — Postgres вибере 8-параметрову версію
       // (без цього — "ambiguous overload" між 7- та 8-параметровою функцією)
       // Раунди вставляємо окремо нижче через supabase.from("rounds").insert(...)
+      // FIX: передаємо p_end_at (кінець турніру) і p_created_by (fallback якщо auth.uid() null)
       const { data: tournamentId, error: rpcError } = await supabase.rpc("create_tournament", {
         p_name:              tourneyName.trim(),
                                                                          p_rules:             description.trim() || null,
                                                                          p_start_at:          toTimestamp(startDate, startTime),
+                                                                         p_end_at:            toTimestamp(endDate, endTime) || null,
                                                                          p_registration_from: toTimestamp(regStartDate, regStartTime),
                                                                          p_registration_to:   toTimestamp(regEndDate, regEndTime),
                                                                          p_max_teams:         teamCount > 0 ? teamCount : null,
                                                                          p_rounds:            roundCount,
                                                                          p_rounds_data:       null,
+                                                                         p_created_by:        user?.id ?? null,
       });
       if (rpcError) throw new Error(rpcError.message || rpcError.details || JSON.stringify(rpcError));
       if (!tournamentId) throw new Error('Турнір створено, але ID не повернуто');

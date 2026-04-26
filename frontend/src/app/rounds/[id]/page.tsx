@@ -1,3 +1,4 @@
+// src/app/rounds/[id]/page.tsx
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -376,21 +377,16 @@ export default function RoundPage() {
 
     const handleSubmit = async () => {
         if (!user || !round || !userTeamId) return;
-        setSubmitting(true); setSubmitError(null);
-        try {
-            const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
-            const res = await fetch(`${API_URL}/api/rounds/${round.id}/submit`, {
-                method: "POST",
-                headers: { "Content-Type":"application/json", Authorization:`Bearer ${token}` },
-                body: JSON.stringify({ team_id: userTeamId }),
-            });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.detail || "Помилка при здачі завдання");
-            }
-            await fetchSubmission(round.id, userTeamId);
-        } catch (e: any) { setSubmitError(e.message); }
-        finally { setSubmitting(false); }
+
+        // FIX (високий): перевіряємо статус раунду — здача дозволена тільки для active раундів
+        if (round.status && round.status !== "active") {
+            setSubmitError(`Здача недоступна: раунд має статус "${round.status}". Здача дозволена лише для активних раундів.`);
+            return;
+        }
+
+        // FIX (високий): перенаправляємо на сторінку здачі з повною формою
+        // замість надсилання неповних даних (лише team_id без github/video/files)
+        router.push(`/rounds/${round.id}/submit?round_id=${round.id}`);
     };
 
     const allAttachments: RoundAttachment[] = React.useMemo(() => {
