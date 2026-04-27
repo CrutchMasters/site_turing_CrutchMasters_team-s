@@ -221,7 +221,19 @@ export default function TournamentEditPage() {
                                          links: (r.attachments ?? [])
                                          .filter(a => a.type === "link")
                                          .map(a => a.url),
-                                         files: [],
+                                         // Існуючі файли з bucket показуємо як FileItem з маркером existing: true.
+                                         // При збереженні вони фільтруються (file instanceof File з new File([], name)
+                                         // технічно проходить, тому перевіряємо маркер нижче).
+                                         files: (r.attachments ?? [])
+                                         .filter((a: any) => a.type === "file")
+                                         .map((a: any) => ({
+                                             file: null,
+                                             name: a.name,
+                                             size: 0,
+                                             type: "",
+                                             url:  a.url,
+                                             existing: true,
+                                         })) as any,
                         };
                     }
                     setInitialRoundsData(initial);
@@ -345,14 +357,36 @@ export default function TournamentEditPage() {
                             }));
 
                             const fileAttachments: { id: string; name: string; url: string; type: "file" }[] = [];
-                            const rawFiles: File[] = ((rd as any)?.files ?? []).filter(
-                                (f: unknown) => f instanceof File
+
+                            // Існуючі файли (existing: true) — вже в bucket, зберігаємо їх URL без повторного завантаження
+                            const existingFiles = ((rd as any)?.files ?? []).filter(
+                                (f: any) => f?.existing === true
                             );
+                            for (let fi = 0; fi < existingFiles.length; fi++) {
+                                const f = existingFiles[fi];
+                                fileAttachments.push({
+                                    id: `file-existing-${n}-${fi}`,
+                                    name: f.name,
+                                    url: f.url,
+                                    type: "file" as const,
+                                });
+                            }
+
+                            // Нові файли (FileItem з реальним File об'єктом) → завантажуємо в bucket
+                            const rawFiles: File[] = ((rd as any)?.files ?? [])
+                            .filter((f: any) => !f?.existing)
+                            .map((f: unknown): File | null => {
+                                if (f instanceof File) return f;
+                                if (f && typeof f === 'object' && (f as any).file instanceof File)
+                                    return (f as any).file as File;
+                                return null;
+                            })
+                            .filter((f: File | null): f is File => f !== null);
                             for (let fi = 0; fi < rawFiles.length; fi++) {
                                 const file = rawFiles[fi];
                                 const publicUrl = await uploadFile(file, n);
                                 fileAttachments.push({
-                                    id: `file-${n}-${fi}`,
+                                    id: `file-new-${n}-${fi}`,
                                     name: file.name,
                                     url: publicUrl,
                                     type: "file" as const,
