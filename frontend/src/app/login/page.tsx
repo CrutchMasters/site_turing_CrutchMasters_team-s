@@ -78,8 +78,8 @@ export default function LoginPage() {
     }
   };
 
- const isDark = dark;
- return (
+  const isDark = dark;
+  return (
     <div className="min-h-screen bg-(--bg) flex flex-col items-center justify-center font-sans text-(--t1) relative overflow-hidden transition-colors duration-300">
     <style jsx global>{`
       .reveal-drop {
