@@ -236,7 +236,7 @@ export default function LoginPage() {
                 className="flex items-center justify-between px-3 py-2 rounded-xl bg-(--bg) hover:bg-(--brd) transition border border-(--brd)"
               >
                 <span className="text-xs font-black uppercase tracking-wide text-(--t1)">
-                 const isDark = dark; {isDark ? "🌙 Dark" : "☀️ Light"}
+                {isDark ? "🌙 Dark" : "☀️ Light"}
                 </span>
                 <div className={`w-10 h-5 rounded-full transition-all relative ${isDark ? "bg-blue-600" : "bg-gray-400"}`}>
                   <div className={`absolute top-0 left-0 w-5 h-5 bg-white rounded-full shadow transition-all ${isDark ? "translate-x-5" : "translate-x-0"}`} />
