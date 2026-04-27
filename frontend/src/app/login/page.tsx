@@ -16,7 +16,7 @@ typeof window !== "undefined" && window.location.hostname === "localhost"
 
 export default function LoginPage() {
   const { t, locale, setLocale } = useLanguage();
-  const { dark, isDark, toggle } = useTheme();
+  const { dark, toggle } = useTheme();
   const router = useRouter();
   const cardRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -83,6 +83,7 @@ export default function LoginPage() {
     }
   };
 
+  const isDark = dark;
   return (
     <div className="min-h-screen bg-(--bg) flex flex-col items-center justify-center font-sans text-(--t1) relative overflow-hidden transition-colors duration-300">
     <style jsx global>{`
