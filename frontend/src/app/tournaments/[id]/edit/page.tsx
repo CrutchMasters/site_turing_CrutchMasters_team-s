@@ -1,7 +1,7 @@
 //src/app/tournaments/[id]/edit/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useT } from "@/context/LanguageContext";
@@ -9,9 +9,11 @@ import { useTheme } from "@/hooks/useTheme";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
+import RoundSettingsPanel, { type RoundData } from "@/components/RoundSettingsPanel";
 import {
-    Trophy, ChevronRight, Save, ArrowLeft, AlertCircle,
-    CheckCircle, Clock, Layers, Zap,
+    Trophy, ChevronRight, Save, AlertCircle,
+    CheckCircle, Clock, Layers, Zap, Users, CalendarDays,
+    Bold, Italic, Underline, List, Quote, Type, ArrowLeft,
 } from "lucide-react";
 
 interface Tournament {
@@ -28,6 +30,19 @@ interface Tournament {
     created_at?: string;
 }
 
+interface RoundRow {
+    id: string;
+    number: number;
+    name?: string;
+    description?: string;
+    criteria?: string;
+    technologies?: string[];
+    start_at?: string;
+    end_at?: string;
+    links?: { url: string }[];
+    attachments?: { id: string; name: string; url: string; type: string }[];
+}
+
 function toDateStr(iso?: string) {
     if (!iso) return "";
     return new Date(iso).toISOString().slice(0, 10);
@@ -38,7 +53,77 @@ function toTimeStr(iso?: string) {
 }
 function toIso(date: string, time: string) {
     if (!date) return null;
-    return new Date(`${date}T${time || "00:00"}:00`).toISOString();
+    // FIX (високий): datetime-local не містить timezone info — браузер інтерпретує
+    // як локальний час. Явно додаємо 'Z' аби сервер завжди отримував UTC.
+    // Якщо адмін хоче вводити в локальному часі — потрібен окремий timezone picker.
+    const localStr = `${date}T${time || "00:00"}:00`;
+    // FIX: new Date(localStr) парсить як локальний час, .toISOString() конвертує в UTC.
+    // Попередній код робив подвійний зсув timezone.
+    return new Date(localStr).toISOString();
+}
+
+const inp = "w-full px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none transition-all";
+const label10 = "text-[10px] font-black uppercase tracking-widest text-(--t2)";
+
+function DateTimePair({
+    label, dateVal, onDate, timeVal, onTime, required, disabled,
+}: {
+    label: string;
+    dateVal: string; onDate: (v: string) => void;
+    timeVal: string; onTime: (v: string) => void;
+    required?: boolean;
+    disabled?: boolean;
+}) {
+    const timeRef = useRef<HTMLInputElement>(null);
+    const dateRef = useRef<HTMLInputElement>(null);
+    return (
+        <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+        <span className={label10}>{label}</span>
+        {required && (
+            <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1">
+            <Zap className="w-2.5 h-2.5 fill-red-500" /> Обов&apos;язково
+            </span>
+        )}
+        </div>
+        <div className="relative">
+        <input
+        ref={dateRef}
+        type="date"
+        value={dateVal}
+        onChange={e => onDate(e.target.value)}
+        disabled={disabled}
+        className={inp + " pr-9 disabled:opacity-50 disabled:cursor-not-allowed"}
+        style={{ colorScheme: "dark" }}
+        />
+        {!disabled && (
+            <button type="button" tabIndex={-1}
+            onClick={() => dateRef.current?.showPicker?.()}
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-(--t2) hover:text-blue-500 transition-colors cursor-pointer">
+            <CalendarDays className="w-4 h-4" />
+            </button>
+        )}
+        </div>
+        <div className="relative">
+        <input
+        ref={timeRef}
+        type="time"
+        value={timeVal}
+        onChange={e => onTime(e.target.value)}
+        disabled={disabled}
+        className={inp + " pr-9 disabled:opacity-50 disabled:cursor-not-allowed"}
+        style={{ colorScheme: "dark" }}
+        />
+        {!disabled && (
+            <button type="button" tabIndex={-1}
+            onClick={() => timeRef.current?.showPicker?.()}
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-(--t2) hover:text-blue-500 transition-colors cursor-pointer">
+            <Clock className="w-4 h-4" />
+            </button>
+        )}
+        </div>
+        </div>
+    );
 }
 
 export default function TournamentEditPage() {
@@ -56,383 +141,650 @@ export default function TournamentEditPage() {
     const [success, setSuccess]     = useState("");
     const [tourney, setTourney]     = useState<Tournament | null>(null);
 
-    // Form state
-    const [name, setName]           = useState("");
-    const [rules, setRules]         = useState("");
-    const [startDate, setStartDate] = useState("");
-    const [startTime, setStartTime] = useState("");
+    // Tournament form state
+    const [name, setName]               = useState("");
+    const [rules, setRules]             = useState("");
+    const [startDate, setStartDate]     = useState("");
+    const [startTime, setStartTime]     = useState("");
     const [regFromDate, setRegFromDate] = useState("");
     const [regFromTime, setRegFromTime] = useState("");
-    const [regToDate, setRegToDate] = useState("");
-    const [regToTime, setRegToTime] = useState("");
-    const [maxTeams, setMaxTeams]   = useState(0);
-    const [rounds, setRounds]       = useState<number | null>(null);
-    const [status, setStatus]       = useState<string>("upcoming");
+    const [regToDate, setRegToDate]     = useState("");
+    const [regToTime, setRegToTime]     = useState("");
+    const [maxTeams, setMaxTeams]       = useState(0);
+    const [roundCount, setRoundCount]   = useState<number>(1);
+    const [status, setStatus]           = useState<string>("upcoming");
+
+    // Round panel state
+    const [selectedRoundTab, setSelectedRoundTab]   = useState<number>(1);
+    const [roundsData, setRoundsData]               = useState<Record<number, RoundData>>({});
+    const [initialRoundsData, setInitialRoundsData] = useState<Record<number, Partial<RoundData>>>({});
+
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+
+    const API_URL =
+    typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? "http://localhost:8000"
+    : "https://site-turing-crutchmasters-team-s.onrender.com";
 
     useEffect(() => {
         if (!authLoading && !user) router.push("/login");
         if (!authLoading && user && !isAdmin) router.push("/tournaments");
     }, [authLoading, user, isAdmin, router]);
 
-    const fetchTourney = useCallback(async () => {
-        if (!id) return;
-        setLoading(true);
-        try {
-            const { data, error } = await supabase
+        const fetchTourney = useCallback(async () => {
+            if (!id) return;
+            setLoading(true);
+            try {
+                const { data, error } = await supabase
                 .from("tournaments")
                 .select("*")
                 .eq("id", id)
                 .single();
-            if (error) throw error;
+                if (error) throw error;
 
-            console.log("[edit] fetched tournament:", data);
+                setTourney(data);
+                setName(data.name ?? "");
+                setRules(data.rules ?? "");
+                setStartDate(toDateStr(data.start_at));
+                setStartTime(toTimeStr(data.start_at));
+                setRegFromDate(toDateStr(data.registration_from));
+                setRegFromTime(toTimeStr(data.registration_from));
+                setRegToDate(toDateStr(data.registration_to));
+                setRegToTime(toTimeStr(data.registration_to));
+                setMaxTeams(data.max_teams ?? 0);
+                setRoundCount(data.rounds ?? 1);
+                setStatus(data.status ?? "upcoming");
 
-            setTourney(data);
-            setName(data.name ?? "");
-            setRules(data.rules ?? "");
-            setStartDate(toDateStr(data.start_at));
-            setStartTime(toTimeStr(data.start_at));
-            setRegFromDate(toDateStr(data.registration_from));
-            setRegFromTime(toTimeStr(data.registration_from));
-            setRegToDate(toDateStr(data.registration_to));
-            setRegToTime(toTimeStr(data.registration_to));
-            setMaxTeams(data.max_teams ?? 0);
-            setRounds(data.rounds ?? null);
-            setStatus(data.status ?? "upcoming");
-        } catch (e: any) {
-            setError(e?.message ?? "Помилка завантаження");
-        } finally {
-            setLoading(false);
-        }
-    }, [id]);
+                // Fetch rounds data to pre-populate RoundSettingsPanel
+                const { data: roundRows, error: roundErr } = await supabase
+                .from("rounds")
+                .select("*")
+                .eq("tournament_id", id)
+                .order("number");
 
-    useEffect(() => { fetchTourney(); }, [fetchTourney]);
+                if (!roundErr && roundRows) {
+                    const initial: Record<number, Partial<RoundData>> = {};
+                    for (const r of roundRows as RoundRow[]) {
+                        initial[r.number] = {
+                            name:         r.name        ?? "",
+                            description:  r.description ?? "",
+                            startDate:    toDateStr(r.start_at),
+                                         startTime:    toTimeStr(r.start_at),
+                                         deadlineDate: toDateStr(r.end_at),
+                                         deadlineTime: toTimeStr(r.end_at),
+                                         requirements: r.technologies ?? [],
+                                         criteria:     r.criteria
+                                         ? r.criteria.split("\n").filter(Boolean)
+                                         : [],
+                                         links: (r.attachments ?? [])
+                                         .filter(a => a.type === "link")
+                                         .map(a => a.url),
+                                         files: [],
+                        };
+                    }
+                    setInitialRoundsData(initial);
+                }
+            } catch (e: any) {
+                setError(e?.message ?? "Помилка завантаження");
+            } finally {
+                setLoading(false);
+            }
+        }, [id]);
 
-    const isOngoing = tourney?.status === "ongoing";
-    const ongoingWithin24h = isOngoing &&
+        useEffect(() => { fetchTourney(); }, [fetchTourney]);
+
+        const isOngoing    = tourney?.status === "ongoing";
+        const ongoingWithin24h = isOngoing &&
         tourney && (new Date().getTime() - new Date(tourney.start_at).getTime()) < 24 * 60 * 60 * 1000;
-    const canEditFull = tourney?.status === "upcoming" || tourney?.status === "registration";
-    const canEditLimited = ongoingWithin24h;
-    const isFinished = tourney?.status === "finished";
+        const canEditFull    = tourney?.status === "upcoming" || tourney?.status === "registration";
+        const canEditLimited = ongoingWithin24h;
+        const isFinished     = tourney?.status === "finished";
+        const fieldsDisabled = !!(canEditLimited && !canEditFull);
 
-    const handleSave = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError("");
-        setSuccess("");
+        const applyFormat = (syntax: string, wrap = false) => {
+            const el = textareaRef.current;
+            if (!el) return;
+            const start = el.selectionStart;
+            const end   = el.selectionEnd;
+            const selected = rules.slice(start, end);
+            let newText: string;
+            let newCursorStart: number;
+            let newCursorEnd: number;
+            if (wrap) {
+                const wrapped = `${syntax}${selected || "текст"}${syntax}`;
+                newText = rules.slice(0, start) + wrapped + rules.slice(end);
+                newCursorStart = selected ? start : start + syntax.length;
+                newCursorEnd   = selected ? start + wrapped.length : start + syntax.length + 4;
+            } else {
+                const lineStart = rules.lastIndexOf("\n", start - 1) + 1;
+                const line = rules.slice(lineStart, end);
+                const alreadyApplied = line.startsWith(syntax);
+                const newLine = alreadyApplied ? line.slice(syntax.length) : syntax + line;
+                newText = rules.slice(0, lineStart) + newLine + rules.slice(lineStart + line.length);
+                newCursorStart = newCursorEnd = alreadyApplied ? start - syntax.length : start + syntax.length;
+            }
+            setRules(newText);
+            requestAnimationFrame(() => { el.focus(); el.setSelectionRange(newCursorStart, newCursorEnd); });
+        };
 
-        if (!name.trim()) { setError("Назва обов'язкова"); return; }
-        if (!startDate)   { setError("Дата старту обов'язкова"); return; }
+        const uploadFile = async (file: File, roundNumber: number): Promise<string> => {
+            const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+            if (!token) throw new Error("Не вдалося отримати токен авторизації. Спробуйте увійти знову.");
+            const form = new FormData();
+            form.append("round_number", String(roundNumber));
+            form.append("file", file);
+            const res = await fetch(`${API_URL}/api/upload/round-file`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+                body: form,
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(`Помилка завантаження файлу "${file.name}": ${err.detail ?? res.statusText}`);
+            }
+            const data = await res.json();
+            return data.signed_url as string;
+        };
 
-        setSaving(true);
-        try {
-            // Завжди зберігаємо status — це головне поле
-            const payload: Record<string, any> = {
-                name: name.trim(),
-                rules: rules.trim() || null,
-                start_at: toIso(startDate, startTime),
-                registration_from: toIso(regFromDate, regFromTime),
-                registration_to: toIso(regToDate, regToTime),
-                max_teams: maxTeams > 0 ? maxTeams : null,
-                rounds,
-                status, // <-- завжди включаємо
-            };
+        const handleSave = async (e: React.FormEvent) => {
+            e.preventDefault();
+            setError(""); setSuccess("");
 
-            // Якщо ongoing і в межах 24год — тільки статус
-            if (canEditLimited && !canEditFull) {
-                Object.keys(payload).forEach(k => {
-                    if (k !== "status") delete payload[k];
+            if (!name.trim()) { setError("Назва обов'язкова"); return; }
+            if (!startDate)   { setError("Дата старту обов'язкова"); return; }
+
+            setSaving(true);
+            try {
+                // ── 1. Оновлюємо турнір ──────────────────────────────────────
+                const payload: Record<string, any> = {
+                    name:              name.trim(),
+                    rules:             rules.trim() || null,
+                    start_at:          toIso(startDate, startTime),
+                    registration_from: toIso(regFromDate, regFromTime),
+                    registration_to:   toIso(regToDate, regToTime),
+                    max_teams:         maxTeams > 0 ? maxTeams : null,
+                    rounds:            roundCount,
+                    status,
+                };
+
+                if (canEditLimited && !canEditFull) {
+                    Object.keys(payload).forEach(k => { if (k !== "status") delete payload[k]; });
+                }
+
+                const tourneyRes = await fetch(`${API_URL}/api/tournaments/${id}`, {
+                    method: "PATCH",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${(typeof window !== "undefined" && localStorage.getItem("access_token")) || ""}`,
+                    },
+                    body: JSON.stringify(payload),
                 });
+                if (!tourneyRes.ok) {
+                    const err = await tourneyRes.json().catch(() => ({}));
+                    throw new Error(err.detail ?? `Помилка збереження турніру: ${tourneyRes.statusText}`);
+                }
+
+                // ── 2. Оновлюємо раунди (тільки при повному редагуванні) ─────
+                if (!fieldsDisabled) {
+                    const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+
+                    const roundsPayload = await Promise.all(
+                        Array.from({ length: roundCount }, async (_, i) => {
+                            const n  = i + 1;
+                            const rd = roundsData[n];
+
+                            const linkAttachments = (rd?.links ?? [])
+                            .filter(Boolean)
+                            .map((url, idx) => ({
+                                id: `link-${n}-${idx}`,
+                                name: url,
+                                url,
+                                type: "link" as const,
+                            }));
+
+                            const fileAttachments: { id: string; name: string; url: string; type: "file" }[] = [];
+                            const rawFiles: File[] = ((rd as any)?.files ?? []).filter(
+                                (f: unknown) => f instanceof File
+                            );
+                            for (let fi = 0; fi < rawFiles.length; fi++) {
+                                const file = rawFiles[fi];
+                                const publicUrl = await uploadFile(file, n);
+                                fileAttachments.push({
+                                    id: `file-${n}-${fi}`,
+                                    name: file.name,
+                                    url: publicUrl,
+                                    type: "file" as const,
+                                });
+                            }
+
+                            const attachments = [...linkAttachments, ...fileAttachments];
+
+                            return {
+                                number:       n,
+                                name:         rd?.name?.trim()                         || `Раунд ${n}`,
+                                   description:  rd?.description?.trim()                  || null,
+                                   criteria:     rd?.criteria?.filter(Boolean).join("\n") || null,
+                                   technologies: rd?.requirements?.filter(Boolean)        ?? [],
+                                   start_at:     toIso(rd?.startDate ?? "", rd?.startTime ?? "") ?? null,
+                                   end_at:       toIso(rd?.deadlineDate ?? "", rd?.deadlineTime ?? "") ?? null,
+                                   links:        linkAttachments,
+                                   attachments,
+                                   status:       "pending",
+                            };
+                        })
+                    );
+
+                    const roundsRes = await fetch(`${API_URL}/api/tournaments/${id}/rounds`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({ rounds: roundsPayload }),
+                    });
+
+                    if (!roundsRes.ok) {
+                        const err = await roundsRes.json().catch(() => ({}));
+                        throw new Error(`Турнір збережено, але раунди не оновлено: ${err.detail ?? JSON.stringify(err)}`);
+                    }
+                }
+
+                setSuccess("Зміни збережено ✓");
+                await fetchTourney();
+            } catch (e: any) {
+                setError(e?.message ?? "Помилка збереження");
+            } finally {
+                setSaving(false);
             }
+        };
 
-            console.log("[edit] saving payload:", payload);
-
-            const { data: upData, error: upErr } = await supabase
-                .from("tournaments")
-                .update(payload)
-                .eq("id", id)
-                .select(); // повертає оновлений рядок
-
-            console.log("[edit] update result:", upData, "error:", upErr);
-
-            if (upErr) throw upErr;
-
-            if (!upData || upData.length === 0) {
-                // Якщо нічого не оновилось — скоріш за все немає колонки status в БД
-                setError("Supabase нічого не оновив. Перевір чи є колонка 'status' в таблиці tournaments.");
-                return;
-            }
-
-            setSuccess("Зміни збережено ✓");
-            await fetchTourney();
-        } catch (e: any) {
-            console.error("[edit] save error:", e);
-            setError(e?.message ?? "Помилка збереження");
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const inputCls = "w-full px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 transition-all";
-    const labelCls = "block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-2";
-
-    if (authLoading || !user || loading) {
-        return (
-            <div className="min-h-screen bg-(--bg) flex items-center justify-center">
+        // ── Loading ──
+        if (authLoading || !user || loading) {
+            return (
+                <div className="min-h-screen bg-(--bg) flex items-center justify-center">
                 <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            </div>
-        );
-    }
+                </div>
+            );
+        }
 
-    if (!tourney || isFinished) {
-        return (
-            <div className="min-h-screen bg-(--bg) flex items-center justify-center flex-col gap-4">
+        // ── Finished / not found ──
+        if (!tourney || isFinished) {
+            return (
+                <div className="min-h-screen bg-(--bg) flex items-center justify-center flex-col gap-4">
                 <Trophy size={48} className="text-(--t2) opacity-30" />
                 <p className="font-black text-(--t1) uppercase">
-                    {isFinished ? "Завершений турнір не можна редагувати" : "Турнір не знайдено"}
+                {isFinished ? "Завершений турнір не можна редагувати" : "Турнір не знайдено"}
                 </p>
                 <button onClick={() => router.push(`/tournaments/${id}`)} className="text-blue-600 text-sm font-bold">← Назад</button>
-            </div>
-        );
-    }
+                </div>
+            );
+        }
 
-    return (
-        <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1)">
+        return (
+            <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
             <style jsx global>{`
-                @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
-                .fuIn { animation: fadeUp 340ms cubic-bezier(.22,1,.36,1) both }
-                .cdIn { animation: fadeUp 340ms cubic-bezier(.22,1,.36,1) both }
-            `}</style>
+                @keyframes fadeUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
+                @keyframes cardDrop { from{opacity:0;transform:translateY(-26px) scale(.97)} to{opacity:1;transform:none} }
+                @keyframes slideInRight { from{opacity:0;transform:translateX(40px)} to{opacity:1;transform:translateX(0)} }
+                .fuIn  { animation: fadeUp      340ms cubic-bezier(.22,1,.36,1) both }
+                .cdIn  { animation: cardDrop    500ms cubic-bezier(.22,1,.36,1) both }
+                .sirIn { animation: slideInRight 400ms cubic-bezier(.22,1,.36,1) both }
+                input[type="date"]::-webkit-calendar-picker-indicator,
+                input[type="time"]::-webkit-calendar-picker-indicator { display: none !important; }
+                `}</style>
 
-            <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
+                {/* Watermark */}
+                <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
                 <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
-            </div>
+                </div>
 
-            {isMobileSidebarOpen && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
-            )}
-            <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+                {isMobileSidebarOpen && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+                )}
+                <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
                 <Sidebar />
-            </div>
+                </div>
 
-            <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                <main className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
                 <MobileHeader
-                    onOpenSidebar={() => setIsMobileSidebarOpen(true)}
-                    title="Редагування"
-                    icon={<Trophy size={18} className="text-blue-600" />}
+                onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+                title="Редагування турніру"
+                icon={<Trophy size={18} className="text-blue-600" />}
                 />
 
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
-                    {/* Breadcrumb */}
-                    <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2) flex-wrap">
-                        <button onClick={() => router.push("/")} className="hover:text-blue-600">{t.nav.home}</button>
-                        <ChevronRight size={10} />
-                        <button onClick={() => router.push("/tournaments")} className="hover:text-blue-600">Турніри</button>
-                        <ChevronRight size={10} />
-                        <button onClick={() => router.push(`/tournaments/${id}`)} className="hover:text-blue-600 truncate max-w-[120px]">{tourney.name}</button>
-                        <ChevronRight size={10} />
-                        <span className="text-(--t1)">Редагування</span>
-                    </nav>
+                <div className="flex-1 p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
+                {/* Breadcrumb */}
+                <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2) flex-wrap">
+                <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">{t.nav?.home ?? "Головна"}</button>
+                <ChevronRight size={10} />
+                <button onClick={() => router.push("/tournaments")} className="hover:text-blue-600 transition-colors">Турніри</button>
+                <ChevronRight size={10} />
+                <button onClick={() => router.push(`/tournaments/${id}`)} className="hover:text-blue-600 transition-colors truncate max-w-[120px]">{tourney.name}</button>
+                <ChevronRight size={10} />
+                <span className="text-(--t1)">Редагування</span>
+                </nav>
 
-                    {/* Ongoing notice */}
-                    {isOngoing && (
-                        <div className="mb-6 flex items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl">
-                            <AlertCircle size={18} className="text-amber-500 flex-shrink-0" />
-                            <p className="text-sm font-bold text-amber-500">
-                                Турнір розпочато.{" "}
-                                {canEditLimited
-                                    ? "Ви можете змінити лише статус (у межах 24 год після старту)."
-                                    : "Редагування доступне лише в перші 24 год після старту."
-                                }
-                            </p>
-                        </div>
-                    )}
+                <button onClick={() => router.back()} className="mb-6 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
+                <ArrowLeft size={14} /> Назад
+                </button>
 
-                    <form onSubmit={handleSave} className="max-w-3xl space-y-6">
+                <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-(--t1) mb-8">
+                Редагування турніру
+                </h1>
 
-                        {/* ── Section 1: General ── */}
-                        <section className="cdIn bg-(--card) rounded-[2rem] border border-(--brd) overflow-hidden shadow-sm">
-                            <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-(--bg)/50">
-                                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white">
-                                    <Trophy size={16} />
-                                </div>
-                                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">1. Загальна інформація</span>
-                            </div>
+                {/* Ongoing notice */}
+                {isOngoing && (
+                    <div className="mb-6 flex items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl">
+                    <AlertCircle size={18} className="text-amber-500 flex-shrink-0" />
+                    <p className="text-sm font-bold text-amber-500">
+                    Турнір розпочато.{" "}
+                    {canEditLimited
+                        ? "Ви можете змінити лише статус (у межах 24 год після старту)."
+                        : "Редагування доступне лише в перші 24 год після старту."
+                    }
+                    </p>
+                    </div>
+                )}
 
-                            <div className="p-6 sm:p-8 space-y-5">
-                                <div>
-                                    <label className={labelCls}>Назва турніру</label>
-                                    <input
-                                        value={name}
-                                        onChange={e => setName(e.target.value)}
-                                        placeholder="Назва турніру"
-                                        disabled={canEditLimited && !canEditFull}
-                                        className={`${inputCls} disabled:opacity-50 disabled:cursor-not-allowed`}
-                                    />
-                                </div>
-                                <div>
-                                    <label className={labelCls}>Опис / Правила</label>
-                                    <textarea
-                                        value={rules}
-                                        onChange={e => setRules(e.target.value)}
-                                        rows={5}
-                                        placeholder="Опис і правила турніру..."
-                                        disabled={canEditLimited && !canEditFull}
-                                        className={`${inputCls} resize-none disabled:opacity-50 disabled:cursor-not-allowed`}
-                                    />
-                                </div>
-                            </div>
-                        </section>
+                <form className="space-y-5" onSubmit={handleSave}>
+                <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
 
-                        {/* ── Section 2: Time ── */}
-                        <section className="cdIn bg-(--card) rounded-[2rem] border border-(--brd) overflow-hidden shadow-sm" style={{ animationDelay: "60ms" }}>
-                            <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-(--bg)/50">
-                                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white">
-                                    <Clock size={16} />
-                                </div>
-                                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">2. Час та умови</span>
-                            </div>
+                {/* ── LEFT COLUMN ── */}
+                <div className="flex flex-col gap-5 w-full xl:flex-1 xl:min-w-0">
 
-                            <div className="p-6 sm:p-8 space-y-6">
-                                {/* Start */}
-                                <div>
-                                    <label className={labelCls}>Дата та час старту</label>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                                            disabled={canEditLimited && !canEditFull} className={`${inputCls} disabled:opacity-50`} />
-                                        <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)}
-                                            disabled={canEditLimited && !canEditFull} className={`${inputCls} disabled:opacity-50`} />
-                                    </div>
-                                </div>
-
-                                {/* Reg window */}
-                                <div>
-                                    <label className={labelCls}>Вікно реєстрації</label>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="p-4 rounded-2xl border border-(--brd) bg-(--bg)/50 space-y-3">
-                                            <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Початок</p>
-                                            <input type="date" value={regFromDate} onChange={e => setRegFromDate(e.target.value)}
-                                                disabled={canEditLimited && !canEditFull} className={`${inputCls} disabled:opacity-50`} />
-                                            <input type="time" value={regFromTime} onChange={e => setRegFromTime(e.target.value)}
-                                                disabled={canEditLimited && !canEditFull} className={`${inputCls} disabled:opacity-50`} />
-                                        </div>
-                                        <div className="p-4 rounded-2xl border border-(--brd) bg-(--bg)/50 space-y-3">
-                                            <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Кінець</p>
-                                            <input type="date" value={regToDate} onChange={e => setRegToDate(e.target.value)}
-                                                disabled={canEditLimited && !canEditFull} className={`${inputCls} disabled:opacity-50`} />
-                                            <input type="time" value={regToTime} onChange={e => setRegToTime(e.target.value)}
-                                                disabled={canEditLimited && !canEditFull} className={`${inputCls} disabled:opacity-50`} />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Max teams */}
-                                <div>
-                                    <label className={labelCls}>Максимум команд <span className="normal-case font-bold opacity-60">(0 = без ліміту)</span></label>
-                                    <div className="flex items-center overflow-hidden border border-(--brd) rounded-2xl w-fit">
-                                        <button type="button" onClick={() => setMaxTeams(Math.max(0, maxTeams - 1))}
-                                            disabled={canEditLimited && !canEditFull}
-                                            className="w-12 h-12 text-lg flex items-center justify-center bg-(--bg) text-(--t2) hover:text-blue-600 transition-colors border-r border-(--brd) disabled:opacity-50">−</button>
-                                        <input type="number" value={maxTeams} onChange={e => setMaxTeams(Math.max(0, +e.target.value))}
-                                            disabled={canEditLimited && !canEditFull}
-                                            className="w-20 text-center text-sm font-black outline-none h-12 bg-transparent text-(--t1) disabled:opacity-50" />
-                                        <button type="button" onClick={() => setMaxTeams(Math.min(256, maxTeams + 1))}
-                                            disabled={canEditLimited && !canEditFull}
-                                            className="w-12 h-12 text-lg flex items-center justify-center bg-(--bg) text-(--t2) hover:text-blue-600 transition-colors border-l border-(--brd) disabled:opacity-50">+</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-
-                        {/* ── Section 3: Format ── */}
-                        <section className="cdIn bg-(--card) rounded-[2rem] border border-(--brd) overflow-hidden shadow-sm" style={{ animationDelay: "120ms" }}>
-                            <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-(--bg)/50">
-                                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white">
-                                    <Layers size={16} />
-                                </div>
-                                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">3. Формат</span>
-                            </div>
-                            <div className="p-6 sm:p-8 space-y-6">
-                                {/* Rounds */}
-                                <div>
-                                    <label className={labelCls}>Кількість раундів</label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-                                            <button key={n} type="button" onClick={() => setRounds(n)}
-                                                disabled={canEditLimited && !canEditFull}
-                                                className={`w-12 h-12 rounded-2xl font-black text-sm border transition-all active:scale-95 disabled:opacity-50 ${
-                                                    rounds === n
-                                                        ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/25"
-                                                        : "bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50"
-                                                }`}
-                                            >{n}</button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Status */}
-                                <div>
-                                    <label className={labelCls}>Статус турніру</label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {(["upcoming", "registration", "ongoing", "finished"] as const).map(s => (
-                                            <button key={s} type="button" onClick={() => setStatus(s)}
-                                                disabled={canEditLimited && !canEditFull && s !== "finished" && s !== tourney.status}
-                                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95 disabled:opacity-30 ${
-                                                    status === s
-                                                        ? "bg-blue-600 text-white border-blue-600 shadow-md"
-                                                        : "bg-(--bg) text-(--t2) border-(--brd) hover:border-blue-600/40"
-                                                }`}
-                                            >
-                                                {s === "upcoming" ? "Скоро" : s === "registration" ? "Реєстрація" : s === "ongoing" ? "Тривають" : "Завершено"}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    {isOngoing && !canEditLimited && (
-                                        <p className="mt-2 text-[10px] font-bold text-amber-500">⚠️ Зміна статусу недоступна після перших 24 год</p>
-                                    )}
-                                </div>
-                            </div>
-                        </section>
-
-                        {/* Errors & Success */}
-                        {error && (
-                            <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl">
-                                <AlertCircle size={16} className="text-red-500 flex-shrink-0" />
-                                <p className="text-sm font-bold text-red-500">{error}</p>
-                            </div>
-                        )}
-                        {success && (
-                            <div className="flex items-center gap-3 p-4 bg-green-500/10 border border-green-500/30 rounded-2xl">
-                                <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
-                                <p className="text-sm font-bold text-green-500">{success}</p>
-                            </div>
-                        )}
-
-                        {/* Actions */}
-                        <div className="flex flex-col sm:flex-row gap-3 pb-8">
-                            <button
-                                type="submit"
-                                disabled={saving}
-                                className="flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60"
-                            >
-                                {saving
-                                    ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Збереження...</>
-                                    : <><Save size={15} /> Зберегти зміни</>
-                                }
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => router.push(`/tournaments/${id}`)}
-                                disabled={saving}
-                                className="px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all"
-                            >
-                                Скасувати
-                            </button>
-                        </div>
-                    </form>
+                {/* BLOCK 1: Загальна інформація */}
+                <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
+                <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-(--bg)/50">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
+                <Trophy size={16} />
                 </div>
-            </main>
-        </div>
-    );
+                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">1. Загальна інформація</span>
+                </div>
+                <div className="p-6 sm:p-8 space-y-5">
+                <div>
+                <div className="flex items-center justify-between mb-2">
+                <label className={label10}>Назва турніру</label>
+                <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1">
+                <Zap className="w-2.5 h-2.5 fill-red-500" /> Обов&apos;язково
+                </span>
+                </div>
+                <input
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Назва турніру..."
+                disabled={fieldsDisabled}
+                className={inp + " disabled:opacity-50 disabled:cursor-not-allowed"}
+                />
+                </div>
+
+                <div>
+                <label className={`block ${label10} mb-2`}>Опис / Правила</label>
+                <div className={`border border-(--brd) rounded-2xl overflow-hidden transition-all ${fieldsDisabled ? "opacity-50 pointer-events-none" : "focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-600"}`}>
+                <div className="border-b border-(--brd) px-4 py-2.5 flex items-center gap-1 bg-(--bg)/60 flex-wrap">
+                {([
+                    { Icon: Bold,      label: "Жирний",    action: () => applyFormat("**", true)   },
+                  { Icon: Italic,    label: "Курсив",    action: () => applyFormat("*",  true)   },
+                  { Icon: Underline, label: "Підкресл.", action: () => applyFormat("__", true)   },
+                  { Icon: List,      label: "Список",    action: () => applyFormat("- ", false)  },
+                  { Icon: Quote,     label: "Цитата",    action: () => applyFormat("> ", false)  },
+                  { Icon: Type,      label: "Заголовок", action: () => applyFormat("## ", false) },
+                ] as const).map(({ Icon, label, action }) => (
+                    <button key={label} type="button" onClick={action} title={label}
+                    className="p-2 rounded-xl hover:bg-(--card) text-(--t2) hover:text-blue-600 transition-all active:scale-90">
+                    <Icon className="w-3.5 h-3.5" />
+                    </button>
+                ))}
+                </div>
+                <textarea
+                ref={textareaRef}
+                rows={5}
+                value={rules}
+                onChange={e => setRules(e.target.value)}
+                placeholder="Введіть опис та правила турніру..."
+                disabled={fieldsDisabled}
+                className="w-full px-5 py-4 outline-none resize-y text-sm bg-transparent text-(--t1) placeholder:text-(--t2)/50"
+                />
+                </div>
+                </div>
+                </div>
+                </section>
+
+                {/* BLOCK 2: Реєстрація + Дати */}
+                <section className="cdIn grid grid-cols-1 md:grid-cols-2 gap-5" style={{ animationDelay: "60ms" }}>
+
+                <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
+                <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd) bg-(--bg)/50">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white flex-shrink-0">
+                <Users size={16} />
+                </div>
+                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">Реєстрація команд</span>
+                </div>
+                <div className="p-6 space-y-4 flex-1">
+                <DateTimePair
+                label="Початок реєстрації"
+                dateVal={regFromDate} onDate={setRegFromDate}
+                timeVal={regFromTime} onTime={setRegFromTime}
+                disabled={fieldsDisabled}
+                />
+                <div className="border-t border-(--brd)" />
+                <DateTimePair
+                label="Кінець реєстрації"
+                dateVal={regToDate} onDate={setRegToDate}
+                timeVal={regToTime} onTime={setRegToTime}
+                disabled={fieldsDisabled}
+                />
+                </div>
+                </div>
+
+                <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
+                <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd) bg-(--bg)/50">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
+                <Clock size={16} />
+                </div>
+                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">Дати старту</span>
+                </div>
+                <div className="p-6 space-y-4 flex-1">
+                <DateTimePair
+                label="Початок турніру"
+                dateVal={startDate} onDate={setStartDate}
+                timeVal={startTime} onTime={setStartTime}
+                required
+                disabled={fieldsDisabled}
+                />
+                </div>
+                </div>
+                </section>
+
+                {/* BLOCK 3: Формат + Команди */}
+                <section className="cdIn grid grid-cols-1 sm:grid-cols-2 gap-5 items-stretch" style={{ animationDelay: "120ms" }}>
+
+                <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
+                <div className="flex items-center gap-3 px-5 py-4 border-b border-(--brd) bg-(--bg)/50">
+                <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
+                <Layers size={14} />
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">3. Формат</span>
+                <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1 whitespace-nowrap">
+                <Zap className="w-2 h-2 fill-red-500" /> Обов&apos;язково
+                </span>
+                </div>
+                <div className="p-5 flex flex-col gap-3 flex-1">
+                <div className="flex items-center justify-between">
+                <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Кількість раундів</p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">
+                Вибрано: <span className="text-blue-500">{roundCount}</span>{" "}
+                {roundCount === 1 ? "раунд" : roundCount < 5 ? "раунди" : "раундів"}
+                </p>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                    <button key={n} type="button"
+                    onClick={() => {
+                        if (!fieldsDisabled) {
+                            setRoundCount(n);
+                            if (selectedRoundTab > n) setSelectedRoundTab(1);
+                        }
+                    }}
+                    disabled={fieldsDisabled}
+                    className={`h-10 rounded-xl font-black text-sm border transition-all duration-150 active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed ${
+                        n === roundCount
+                        ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/30"
+                        : n <= roundCount
+                        ? "bg-blue-500/10 border-blue-500/40 text-blue-500"
+                        : "bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600"
+                    }`}>
+                    {n}
+                    </button>
+                ))}
+                </div>
+                </div>
+                </div>
+
+                <div className="flex flex-col gap-5">
+                <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col flex-1">
+                <div className="flex items-center gap-3 px-5 py-4 border-b border-(--brd) bg-(--bg)/50">
+                <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
+                <Users size={14} />
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">Команди</span>
+                <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full">Опціонально</span>
+                </div>
+                <div className="p-5 flex flex-col gap-3 flex-1 justify-center">
+                <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Максимум команд <span className="normal-case font-bold opacity-60">(0 = без ліміту)</span></p>
+                <div className="flex items-center justify-center gap-3">
+                <button type="button"
+                onClick={() => setMaxTeams(Math.max(0, maxTeams - 1))}
+                disabled={fieldsDisabled}
+                className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0 disabled:opacity-50">−</button>
+                <input
+                type="number" min={0}
+                value={maxTeams === 0 ? "" : maxTeams}
+                onChange={e => {
+                    const v = parseInt(e.target.value, 10);
+                    setMaxTeams(isNaN(v) || v < 0 ? 0 : v);
+                }}
+                placeholder="∞"
+                disabled={fieldsDisabled}
+                className="w-16 text-center text-2xl font-black bg-transparent outline-none text-(--t1) placeholder:text-(--t2)/60 border-b-2 border-(--brd) focus:border-blue-500 transition-colors tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:opacity-50"
+                />
+                <button type="button"
+                onClick={() => setMaxTeams(maxTeams + 1)}
+                disabled={fieldsDisabled}
+                className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0 disabled:opacity-50">+</button>
+                </div>
+                <div className="flex gap-1.5 flex-wrap justify-center">
+                {[0, 8, 16, 32, 64].map(n => (
+                    <button key={n} type="button"
+                    onClick={() => !fieldsDisabled && setMaxTeams(n)}
+                    disabled={fieldsDisabled}
+                    className={`text-[10px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50 ${
+                        maxTeams === n
+                        ? "bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/30"
+                        : "bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600"
+                    }`}>
+                    {n === 0 ? "Без ліміту" : n}
+                    </button>
+                ))}
+                </div>
+                </div>
+                </div>
+                </div>
+                </section>
+
+                {/* BLOCK 4: Статус */}
+                <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden" style={{ animationDelay: "160ms" }}>
+                <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd) bg-(--bg)/50">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
+                <Zap size={16} />
+                </div>
+                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">4. Статус турніру</span>
+                </div>
+                <div className="p-6 sm:p-8">
+                <div className="flex flex-wrap gap-2">
+                {(["upcoming", "registration", "ongoing", "finished"] as const).map(s => (
+                    <button key={s} type="button" onClick={() => setStatus(s)}
+                    className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95 ${
+                        status === s
+                        ? "bg-blue-600 text-white border-blue-600 shadow-md"
+                        : "bg-(--bg) text-(--t2) border-(--brd) hover:border-blue-600/40"
+                    }`}>
+                    {s === "upcoming" ? "⏳ Скоро"
+                        : s === "registration" ? "📋 Реєстрація"
+                        : s === "ongoing" ? "⚡ Тривають"
+                        : "✅ Завершено"}
+                        </button>
+                ))}
+                </div>
+                {isOngoing && !canEditLimited && (
+                    <p className="mt-3 text-[10px] font-bold text-amber-500">⚠️ Зміна статусу недоступна після перших 24 год</p>
+                )}
+                </div>
+                </section>
+
+                {/* Errors & Success */}
+                {error && (
+                    <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl">
+                    <AlertCircle size={16} className="text-red-500 flex-shrink-0" />
+                    <p className="text-sm font-bold text-red-500">{error}</p>
+                    </div>
+                )}
+                {success && (
+                    <div className="flex items-center gap-3 p-4 bg-green-500/10 border border-green-500/30 rounded-2xl">
+                    <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
+                    <p className="text-sm font-bold text-green-500">{success}</p>
+                    </div>
+                )}
+
+                {/* Actions */}
+                <div className="cdIn flex flex-col sm:flex-row gap-3 pb-8" style={{ animationDelay: "200ms" }}>
+                <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                {saving
+                    ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Збереження...</>
+                    : <><Save size={15} /> Зберегти зміни</>
+                }
+                </button>
+                <button
+                type="button"
+                onClick={() => router.push(`/tournaments/${id}`)}
+                disabled={saving}
+                className="flex-1 px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60"
+                >
+                Скасувати
+                </button>
+                </div>
+
+                </div>
+                {/* end LEFT COLUMN */}
+
+                {/* ── RIGHT COLUMN: RoundSettingsPanel ── */}
+                <div className={`w-full xl:sticky xl:top-6 xl:flex-1 xl:min-w-0 ${fieldsDisabled ? "opacity-40 pointer-events-none select-none" : ""}`}>
+                {fieldsDisabled && (
+                    <div className="mb-3 px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-[10px] font-bold text-amber-500 uppercase tracking-widest text-center">
+                    ⚠️ Редагування раундів недоступне під час турніру
+                    </div>
+                )}
+                <RoundSettingsPanel
+                roundCount={roundCount}
+                selectedRound={selectedRoundTab}
+                onSelectRound={setSelectedRoundTab}
+                onRoundsChange={setRoundsData}
+                initialData={initialRoundsData}
+                />
+                </div>
+
+                </div>
+                {/* end TWO-COLUMN LAYOUT */}
+
+                </form>
+                </div>
+                </main>
+                </div>
+        );
 }

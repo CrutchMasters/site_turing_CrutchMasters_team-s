@@ -157,15 +157,19 @@ export default function RegisterPage() {
       const accessToken = verifyData.session.access_token;
       const refreshToken = verifyData.session.refresh_token;
 
-      // 2. Бэкенд создаёт запись в account (account.id = auth UUID)
+      // 2. Бэкенд создаёт запись в account (account.id = auth UUID из JWT)
+      // Передаём токен в Authorization — бэкенд достанет UUID из него.
+      // Пароль не передаём: он не нужен и не должен ходить лишний раз по сети.
       const res = await fetch(`${API_URL}/api/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({
           username: formData.username,
           login:    formData.login,
           email:    formData.email,
-          password: formData.password,
         }),
       });
 

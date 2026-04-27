@@ -21,6 +21,7 @@ export interface RoundData {
 }
 
 interface FileItem {
+    file: File; // реальний File обʼєкт для завантаження
     name: string;
     size: number;
     type: string;
@@ -146,7 +147,7 @@ function FilesField({ files, onChange }: { files: FileItem[]; onChange: (f: File
     const inputRef = useRef<HTMLInputElement>(null);
 
     const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const picked = Array.from(e.target.files ?? []).map(f => ({ name: f.name, size: f.size, type: f.type }));
+        const picked = Array.from(e.target.files ?? []).map(f => ({ file: f, name: f.name, size: f.size, type: f.type }));
         onChange([...files, ...picked]);
         if (inputRef.current) inputRef.current.value = '';
     };

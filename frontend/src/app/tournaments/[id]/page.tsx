@@ -1,3 +1,4 @@
+// src/app/tournaments/[id]/page.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -30,6 +31,7 @@ interface Team {
     name: string;
     city_school_org?: string;
     captain_id?: string;
+    members_ids?: string[];  // Bug 7 fix
 }
 
 interface Tournament {
@@ -40,6 +42,7 @@ interface Tournament {
     rounds?: number;
     status: string;
     start_at?: string;
+    end_at?: string;
     registration_from?: string;
     registration_to?: string;
     teams: Team[];
@@ -75,7 +78,7 @@ export default function TournamentPage() {
         try {
             const { data: tourData, error: tourErr } = await supabase
             .from("tournaments")
-            .select("id, name, rules, max_teams, rounds, status, start_at, registration_from, registration_to")
+            .select("id, name, rules, max_teams, rounds, status, start_at, end_at, registration_from, registration_to")
             .eq("id", id)
             .single();
             if (tourErr) throw tourErr;
@@ -83,7 +86,7 @@ export default function TournamentPage() {
             // Fetch registered teams via teams.tournament_id
             const { data: teamsData, error: teamsErr } = await supabase
             .from("teams")
-            .select("id, name, city_school_org, captain_id")
+            .select("id, name, city_school_org, captain_id, members_ids")
             .eq("tournament_id", id);
             if (teamsErr) throw teamsErr;
 
@@ -103,11 +106,15 @@ export default function TournamentPage() {
         }
     };
 
+    // FIX (високий): замість автоматичного вибору першої eligible команди —
+    // показуємо модалку з вибором команди
+    const [teamPickerOpen, setTeamPickerOpen] = useState(false);
+    const [eligibleTeams, setEligibleTeams] = useState<{ id: string; name: string }[]>([]);
+
     const handleRegister = async () => {
         if (!user || !tournament) return;
         setRegisterError(null);
 
-        // Find captain's team that is not yet registered in any tournament
         const { data: captainTeams, error: teamErr } = await supabase
         .from("teams")
         .select("id, name, tournament_id")
@@ -118,16 +125,25 @@ export default function TournamentPage() {
             return;
         }
 
-        const eligible = captainTeams.find(t => !t.tournament_id) ?? null;
-        if (!eligible) {
+        const eligible = captainTeams.filter(t => !t.tournament_id);
+        if (eligible.length === 0) {
             setRegisterError("Всі ваші команди вже зареєстровані в турнірах");
             return;
         }
 
-        setRegistering(true);
+        // FIX: якщо команда одна — реєструємо одразу; якщо кілька — даємо вибір
+        if (eligible.length === 1) {
+            await doRegister(eligible[0].id);
+        } else {
+            setEligibleTeams(eligible);
+            setTeamPickerOpen(true);
+        }
+    };
 
+    const doRegister = async (teamId: string) => {
+        setTeamPickerOpen(false);
+        setRegistering(true);
         try {
-            // Use backend API — it has service_role key that bypasses RLS
             const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
             const res = await fetch(`${API_URL}/api/tournaments/register`, {
                 method: "POST",
@@ -136,7 +152,7 @@ export default function TournamentPage() {
                     Authorization: `Bearer ${token}`,
                 },
                 body: JSON.stringify({
-                    team_id: eligible.id,
+                    team_id: teamId,
                     tournament_id: id,
                 }),
             });
@@ -148,7 +164,6 @@ export default function TournamentPage() {
                 return;
             }
 
-            // Refresh tournament to show new team in list
             await fetchTournament();
         } catch (e: any) {
             setRegisterError("Помилка з'єднання з сервером: " + e.message);
@@ -198,8 +213,13 @@ export default function TournamentPage() {
     const teamCount = tournament.teams?.length ?? 0;
     const isFull = !!tournament.max_teams && teamCount >= tournament.max_teams;
     const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+    // FIX: статус з БД — не вираховуємо локально
     const isRegistrationOpen = tournament.status === "registration";
-    const myTeamInTournament = tournament.teams?.find(t => t.captain_id === user?.id);
+    const isFinished = tournament.status === "finished";
+    // БАГ 7 fix: перевіряємо і captain_id, і members_ids — учасники теж бачать статус
+    const myTeamInTournament = tournament.teams?.find(
+        t => t.captain_id === user?.id || (t.members_ids as string[] | undefined)?.includes(user?.id ?? "")
+    );
 
     return (
         <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1)">
@@ -288,6 +308,33 @@ export default function TournamentPage() {
             </div>
         )}
 
+        {/* Team picker modal — FIX (високий): вибір команди при реєстрації */}
+        {teamPickerOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-(--card) border border-(--brd) rounded-3xl shadow-2xl p-6 w-full max-w-sm">
+            <h3 className="text-sm font-black uppercase tracking-widest text-(--t1) mb-1">Оберіть команду</h3>
+            <p className="text-xs text-(--t2) mb-4">У вас кілька команд без турніру. Оберіть, яку зареєструвати:</p>
+            <div className="flex flex-col gap-2 mb-4">
+            {eligibleTeams.map(t => (
+                <button
+                key={t.id}
+                onClick={() => doRegister(t.id)}
+                className="w-full text-left px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) hover:border-blue-500 hover:bg-blue-500/5 text-sm font-bold text-(--t1) transition-all"
+                >
+                {t.name}
+                </button>
+            ))}
+            </div>
+            <button
+            onClick={() => setTeamPickerOpen(false)}
+            className="w-full px-4 py-2 rounded-2xl border border-(--brd) text-xs font-black uppercase text-(--t2) hover:bg-(--bg) transition-all"
+            >
+            Скасувати
+            </button>
+            </div>
+            </div>
+        )}
+
         {/* Error */}
         {registerError && (
             <div className="mb-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-500 text-sm font-bold">
@@ -373,23 +420,30 @@ export default function TournamentPage() {
                 let statusBorder = "border-(--brd)";
                 let dotColor = "bg-gray-400";
 
-                if (round.status === "finished" || (end && now > end)) {
+                // FIX: пріоритет статусу з БД (оновлюється шедулером)
+                // Дати — лише як fallback якщо status відсутній
+                const dbStatus = round.status;
+                const isFinished = dbStatus === "finished" || (!dbStatus && end && now > end);
+                const isActive   = dbStatus === "active"   || (!dbStatus && start && end && now >= start && now <= end);
+                const isPending  = dbStatus === "pending"  || (!dbStatus && start && now < start);
+
+                if (isFinished) {
                     statusLabel = "Завершено";
                     statusColor = "text-(--t2)";
                     dotColor = "bg-gray-400";
-                } else if (round.status === "active" || (start && end && now >= start && now <= end)) {
+                } else if (isActive) {
                     statusLabel = "Активний";
                     statusColor = "text-green-500";
                     statusBg = "bg-green-500/5";
                     statusBorder = "border-green-500/20";
                     dotColor = "bg-green-500";
-                } else if (start && now < start) {
+                } else if (isPending) {
                     statusLabel = "Очікується";
                     statusColor = "text-amber-500";
                     dotColor = "bg-amber-400";
                 }
 
-                const isLocked = round.status === "finished" || (end !== null && now > end);
+                const isLocked = isFinished;
 
                 return (
                     <div

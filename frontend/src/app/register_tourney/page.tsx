@@ -125,75 +125,47 @@ export default function RegisterTourney() {
   const handleConfirmYes = () => { if (timerRef.current) clearInterval(timerRef.current); setAccessState('denied'); };
   const handleConfirmNo  = () => { if (timerRef.current) clearInterval(timerRef.current); router.push('/login'); };
 
+  // FIX (середній): компенсуємо timezone offset щоб локальний час зберігався як UTC.
+  // new Date("2026-05-01T18:00:00") інтерпретується як LOCAL time браузером,
+  // але .toISOString() повертає UTC — без компенсації час зміщується на UTC offset.
   const toTimestamp = (date: string, time: string): string | null => {
     if (!date) return null;
-    return new Date(`${date}T${time || '00:00'}:00`).toISOString();
+    // new Date('YYYY-MM-DDTHH:mm:ss') парсить як локальний час,
+    // .toISOString() сам конвертує в UTC — жодна ручна компенсація не потрібна.
+    // Попередній код робив подвійний зсув (додавав offset замість віднімати).
+    const localStr = `${date}T${time || '00:00'}:00`;
+    return new Date(localStr).toISOString();
   };
 
-  // Завантажує файл у Supabase Storage через raw fetch (обхід багу SDK з Content-Type)
-  // Bucket round-files приватний — повертає signed URL на 10 років
+  const API_URL =
+  typeof window !== 'undefined' && window.location.hostname === 'localhost'
+  ? 'http://localhost:8000'
+  : 'https://site-turing-crutchmasters-team-s.onrender.com';
+
+  // БАГ 6 fix: завантажуємо файли раундів через бекенд (service_role),
+  // а не напряму через anon key — інакше приватний bucket поверне 403.
+  // Повертає signed URL (10 років), який зберігаємо в attachments.
   const uploadFile = async (file: File, roundNumber: number): Promise<string> => {
-    const ext = file.name.split('.').pop() ?? 'bin';
-    const storagePath = `rounds/round-${roundNumber}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const token =
+    (typeof window !== 'undefined' && localStorage.getItem('access_token')) || '';
+    if (!token) throw new Error('Не вдалося отримати токен авторизації. Спробуйте увійти знову.');
 
-    // Читаємо сесійний токен зі storageKey який використовує createBrowserClient
-    let accessToken: string | null = null;
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      accessToken = session?.access_token ?? null;
-    } catch {}
+    const form = new FormData();
+    form.append('round_number', String(roundNumber));
+    form.append('file', file);
 
-    if (!accessToken && typeof window !== 'undefined') {
-      // Fallback: шукаємо токен у localStorage за всіма можливими ключами
-      for (const key of Object.keys(localStorage)) {
-        if (key === 'sb-session' || (key.startsWith('sb-') && key.endsWith('-auth-token'))) {
-          try {
-            const raw = localStorage.getItem(key) ?? '';
-            const parsed = JSON.parse(raw);
-            const token = parsed?.access_token ?? parsed?.session?.access_token;
-            if (token) { accessToken = token; break; }
-          } catch {}
-        }
-      }
+    const res = await fetch(`${API_URL}/api/upload/round-file`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(`Помилка завантаження файлу "${file.name}": ${err.detail ?? res.statusText}`);
     }
-
-    if (!accessToken) {
-      throw new Error('Не вдалося отримати токен авторизації. Спробуйте увійти знову.');
-    }
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-    // Читаємо файл як ArrayBuffer — гарантує що тіло запиту є бінарними даними
-    const arrayBuffer = await file.arrayBuffer();
-
-    const uploadRes = await fetch(
-      `${supabaseUrl}/storage/v1/object/round-files/${storagePath}`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'apikey': anonKey,
-          'Content-Type': file.type || 'application/octet-stream',
-          'x-upsert': 'false',
-        },
-        body: arrayBuffer,
-      }
-    );
-
-    if (!uploadRes.ok) {
-      const err = await uploadRes.json().catch(() => ({}));
-      throw new Error(`Помилка завантаження файлу "${file.name}": ${err.message ?? uploadRes.statusText}`);
-    }
-
-    // Bucket приватний — генеруємо signed URL (10 років = 315360000 сек)
-    const { data: signedData, error: signedError } = await supabase.storage
-    .from('round-files')
-    .createSignedUrl(storagePath, 315360000);
-    if (signedError || !signedData?.signedUrl)
-      throw new Error(`Не вдалося отримати URL для файлу "${file.name}"`);
-
-    return signedData.signedUrl;
+    const data = await res.json();
+    // Бекенд повертає signed_url (довготривалий, service_role)
+    return data.signed_url as string;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -255,22 +227,60 @@ export default function RegisterTourney() {
         })
       );
 
-      const { data: tournamentId, error: rpcError } = await supabase.rpc('create_tournament', {
+      // Явно передаємо p_rounds_data: null — Postgres вибере 8-параметрову версію
+      // (без цього — "ambiguous overload" між 7- та 8-параметровою функцією)
+      // Раунди вставляємо окремо нижче через supabase.from("rounds").insert(...)
+      // FIX: передаємо p_end_at (кінець турніру) і p_created_by (fallback якщо auth.uid() null)
+      const { data: tournamentId, error: rpcError } = await supabase.rpc("create_tournament", {
         p_name:              tourneyName.trim(),
                                                                          p_rules:             description.trim() || null,
                                                                          p_start_at:          toTimestamp(startDate, startTime),
+                                                                         p_end_at:            toTimestamp(endDate, endTime) || null,
                                                                          p_registration_from: toTimestamp(regStartDate, regStartTime),
                                                                          p_registration_to:   toTimestamp(regEndDate, regEndTime),
                                                                          p_max_teams:         teamCount > 0 ? teamCount : null,
                                                                          p_rounds:            roundCount,
-                                                                         p_rounds_data:       roundsPayload,
+                                                                         p_rounds_data:       null,
+                                                                         p_created_by:        user?.id ?? null,
       });
       if (rpcError) throw new Error(rpcError.message || rpcError.details || JSON.stringify(rpcError));
+      if (!tournamentId) throw new Error('Турнір створено, але ID не повернуто');
+
+      // Вставляємо раунди через бекенд (service_role) — anon key не має прав на INSERT в rounds (RLS 401)
+      // БАГ 8 fix: перевіряємо ліміт constraint (1-8) перед відправкою
+      if (roundsPayload.length > 8) {
+        throw new Error('Максимальна кількість раундів — 8');
+      }
+      const token = (typeof window !== 'undefined' && localStorage.getItem('access_token')) || '';
+      const roundsRes = await fetch(`${API_URL}/api/tournaments/${tournamentId}/rounds`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ rounds: roundsPayload }),
+      });
+      if (!roundsRes.ok) {
+        const err = await roundsRes.json().catch(() => ({}));
+        const errMsg: string = err.detail ?? JSON.stringify(err);
+        if (errMsg.includes('rounds_number_check') || errMsg.includes('number_check')) {
+          throw new Error('Номер раунду має бути від 1 до 8. Перевірте кількість раундів.');
+        }
+        throw new Error(`Турнір створено, але раунди не збережено: ${errMsg}`);
+      }
 
       router.push('/dashboard');
     } catch (err: any) {
       console.error('Помилка створення турніру:', err?.message ?? err);
-      setSubmitError(err?.message || 'Виникла помилка. Спробуйте ще раз.');
+      // БАГ 8 fix: зрозуміле повідомлення про constraint раундів
+      const msg: string = err?.message ?? '';
+      if (msg.includes('rounds_number_check') || msg.includes('number_check')) {
+        setSubmitError('Номер раунду має бути від 1 до 8. Перевірте кількість раундів.');
+      } else if (msg.includes('Максимальна кількість раундів')) {
+        setSubmitError(msg);
+      } else {
+        setSubmitError(msg || 'Виникла помилка. Спробуйте ще раз.');
+      }
     } finally {
       setIsSubmitting(false);
     }

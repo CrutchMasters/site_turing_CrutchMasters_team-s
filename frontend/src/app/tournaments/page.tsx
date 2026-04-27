@@ -25,6 +25,7 @@ interface Tournament {
     max_teams?: number;
     rounds?: number;
     status: TournamentStatus;
+    end_at?: string;
     team_count: number;
 }
 
@@ -275,7 +276,7 @@ export default function TournamentsPage() {
         try {
             const { data: tData, error: tErr } = await supabase
                 .from("tournaments")
-                .select("id, name, rules, start_at, registration_from, registration_to, max_teams, rounds")
+                .select("id, name, rules, start_at, end_at, registration_from, registration_to, max_teams, rounds, status")
                 .order("start_at", { ascending: true });
             if (tErr) throw tErr;
 

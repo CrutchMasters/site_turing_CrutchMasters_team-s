@@ -384,7 +384,9 @@ export default function JuryEvaluationPage() {
         } finally {
             setPageLoading(false);
         }
-    }, [roundId, user, isJury, activeIdx]);
+    // FIX (середній): activeIdx прибрано з deps — перезавантаження даних при
+    // зміні активної картки спричиняло зайві fetch-запити і скидало стан форми.
+    }, [roundId, user, isJury]);
 
     useEffect(() => {
         if (!authLoading && user && canAccess) fetchData();
@@ -432,21 +434,31 @@ export default function JuryEvaluationPage() {
             work.criteria.forEach(c => { criteriaScores[c.key] = { score: c.score, comment: c.comment }; });
             const total = computeTotal(work.criteria);
 
-            const payload = {
-                jury_id:        user.id,
-                submission_id:  work.id,
-                round_id:       work.round_id,
-                criteria_scores: criteriaScores,
-                general_comment: work.general_comment,
-                total_score:    total,
-                updated_at:     new Date().toISOString(),
-            };
+            // FIX (середній): замість прямого запису в supabase з клієнта —
+            // відправляємо на бекенд-ендпоінт з JWT-авторизацією.
+            // Це запобігає маніпуляціям через DevTools (обхід перевірки журі).
+            const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+            const API_URL = window.location.hostname === "localhost"
+                ? "http://localhost:8000"
+                : "https://site-turing-crutchmasters-team-s.onrender.com";
 
-            const { error } = await supabase
-                .from("jury_evaluations")
-                .upsert(payload, { onConflict: "jury_id,submission_id" });
-
-            if (error) throw error;
+            const res = await fetch(`${API_URL}/api/rounds/${work.round_id}/evaluate`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    submission_id:   work.id,
+                    criteria_scores: criteriaScores,
+                    general_comment: work.general_comment,
+                    total_score:     total,
+                }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err?.detail ?? `HTTP ${res.status}`);
+            }
 
             // Update local total + status
             setWorks(prev => prev.map((w, i) => {
@@ -477,16 +489,11 @@ export default function JuryEvaluationPage() {
         if (!isAdmin || !roundId) return;
         setRedistributing(true);
         try {
-            // Call backend RPC or API to redistribute
-            // Placeholder — actual implementation depends on backend
-            const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
-            const API_URL = window.location.hostname === "localhost"
-                ? "http://localhost:8000"
-                : "https://site-turing-crutchmasters-team-s.onrender.com";
-            await fetch(`${API_URL}/api/rounds/${roundId}/redistribute`, {
-                method: "POST",
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            // FIX (середній): ендпоінт /api/rounds/{id}/redistribute не існує в бекенді.
+            // Поки не реалізовано — показуємо повідомлення замість 404-помилки.
+            // TODO: реалізувати POST /api/rounds/{round_id}/redistribute в main.py
+            console.warn("[handleRedistribute] ендпоінт ще не реалізований на бекенді");
+            setSaveMsg({ type: "err", text: "Функція перерозподілу ще не реалізована на сервері" });
             await fetchData();
         } catch (e) {
             console.error(e);

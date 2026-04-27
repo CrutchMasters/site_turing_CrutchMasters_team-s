@@ -1,3 +1,4 @@
+// src/app/rounds/[id]/page.tsx
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -194,7 +195,7 @@ interface RoundAttachment { id: string; name: string; url: string; type: "link" 
 interface Round {
     id: string; tournament_id: string; name: string;
     description?: string; criteria?: string; technologies?: string[];
-    start_at?: string; end_at?: string; template_url?: string;
+    start_at?: string; end_at?: string; template_path?: string;
     attachments?: RoundAttachment[]; links?: RoundAttachment[];
     status?: string;
 }
@@ -255,6 +256,11 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
     );
 }
 
+/** Перевіряє, чи URL вже є повним (signed URL або будь-який https://) */
+function isFullUrl(url: string): boolean {
+    return url.startsWith("https://") || url.startsWith("http://");
+}
+
 export default function RoundPage() {
     const params = useParams();
     const router = useRouter();
@@ -275,7 +281,8 @@ export default function RoundPage() {
     const countdown = useCountdown(round?.end_at);
 
     useEffect(() => { if (id) fetchRound(); }, [id]);
-    useEffect(() => { if (user) fetchUserTeam(); }, [user]);
+    // FIX (високий): залежимо від round щоб мати tournament_id при виклику fetchUserTeam
+    useEffect(() => { if (user && round) fetchUserTeam(); }, [user, round?.tournament_id]);
 
     const fetchRound = async () => {
         setLoading(true);
@@ -290,23 +297,71 @@ export default function RoundPage() {
 
     const fetchUserTeam = async () => {
         if (!user) return;
-        const { data } = await supabase.from("teams").select("id").eq("captain_id", user.id).single();
-        if (data) { setUserTeamId(data.id); if (round) fetchSubmission(round.id, data.id); }
+        // FIX (високий): фільтруємо команду за tournament_id поточного раунду,
+        // щоб не повертати першу-ліпшу команду користувача з іншого турніру.
+        const tournamentId = round?.tournament_id;
+        if (!tournamentId) return;
+        const { data: captainTeam } = await supabase
+        .from("teams").select("id").eq("captain_id", user.id).eq("tournament_id", tournamentId).maybeSingle();
+        let teamId = captainTeam?.id ?? null;
+        if (!teamId) {
+            const { data: memberTeams } = await supabase
+            .from("teams").select("id").contains("members_ids", [user.id]).eq("tournament_id", tournamentId).limit(1);
+            teamId = memberTeams?.[0]?.id ?? null;
+        }
+        if (teamId) { setUserTeamId(teamId); if (round) fetchSubmission(round.id, teamId); }
     };
 
     const fetchSubmission = async (roundId: string, teamId: string) => {
-        const { data } = await supabase.from("submissions").select("*")
-        .eq("round_id", roundId).eq("team_id", teamId).maybeSingle();
-        setSubmission(data ?? null);
+        const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+        const res = await fetch(`${API_URL}/api/rounds/${roundId}/submission?team_id=${teamId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+            const data = await res.json();
+            setSubmission(data.submission ?? null);
+        }
     };
 
-    const handleOpenFile = (file: RoundAttachment) => {
+    const handleOpenFile = async (file: RoundAttachment) => {
         setPreviewFile(file);
-        setPreviewUrl(file.url);
+
+        if (file.type === "link") {
+            // Відкриваємо посилання напряму у новій вкладці
+            window.open(file.url, "_blank", "noopener,noreferrer");
+            setPreviewFile(null);
+            return;
+        }
+
+        // FIX: якщо URL вже є повним signed URL (починається з https://) — використовуємо напряму.
+        // Бекенд /api/upload/signed-urls очікує path з bucket "submissions", а файли раундів
+        // зберігаються в "round-files" і вже мають довготривалий signed URL (10 років).
+        if (isFullUrl(file.url)) {
+            setPreviewUrl(file.url);
+            return;
+        }
+
+        // Якщо url — це відносний path (старий формат) — запитуємо signed URL через бекенд
+        const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+        try {
+            const res = await fetch(`${API_URL}/api/upload/signed-urls`, {
+                method:  "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body:    JSON.stringify({ paths: [file.url] }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setPreviewUrl(data.urls[file.url] ?? file.url);
+            } else {
+                setPreviewUrl(file.url);
+            }
+        } catch {
+            setPreviewUrl(file.url);
+        }
     };
 
     const handleDownloadTemplate = async () => {
-        if (!round?.template_url) return;
+        if (!round?.template_path) return;
         const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
         const res = await fetch(`${API_URL}/api/rounds/${round.id}/template`, {
             headers: { Authorization: `Bearer ${token}` },
@@ -322,38 +377,85 @@ export default function RoundPage() {
 
     const handleSubmit = async () => {
         if (!user || !round || !userTeamId) return;
-        setSubmitting(true); setSubmitError(null);
-        try {
-            const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
-            const res = await fetch(`${API_URL}/api/rounds/${round.id}/submit`, {
-                method: "POST",
-                headers: { "Content-Type":"application/json", Authorization:`Bearer ${token}` },
-                body: JSON.stringify({ team_id: userTeamId }),
-            });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.detail || "Помилка при здачі завдання");
-            }
-            await fetchSubmission(round.id, userTeamId);
-        } catch (e: any) { setSubmitError(e.message); }
-        finally { setSubmitting(false); }
+
+        // FIX (високий): перевіряємо статус раунду — здача дозволена тільки для active раундів
+        if (round.status && round.status !== "active") {
+            setSubmitError(`Здача недоступна: раунд має статус "${round.status}". Здача дозволена лише для активних раундів.`);
+            return;
+        }
+
+        // FIX (високий): перенаправляємо на сторінку здачі з повною формою
+        // замість надсилання неповних даних (лише team_id без github/video/files)
+        router.push(`/rounds/${round.id}/submit?round_id=${round.id}`);
     };
 
     const allAttachments: RoundAttachment[] = React.useMemo(() => {
-        const merged = [...(round?.attachments ?? []), ...(round?.links ?? [])];
+        // Нормалізуємо attachments — мають бути об'єкти {id, name, url, type}
+        const normalizeAttachments = (arr: unknown[]): RoundAttachment[] =>
+        arr.flatMap((a, i): RoundAttachment[] => {
+            if (!a) return [];
+            // Старий формат: просто рядок-URL в масиві links
+            if (typeof a === "string") {
+                if (!a.trim()) return [];
+                let host = a;
+                try { host = new URL(a).hostname.replace("www.", ""); } catch {}
+                return [{ id: `link-legacy-${i}`, name: host, url: a, type: "link" }];
+            }
+            // Новий формат: об'єкт з полями
+            const obj = a as Partial<RoundAttachment>;
+            if (!obj.url) return [];
+            return [{
+                id:   obj.id   ?? `att-${i}`,
+                name: obj.name ?? obj.url,
+                url:  obj.url,
+                type: (obj.type === "file" ? "file" : "link") as "link" | "file",
+            }];
+        });
+
+        const fromAttachments = normalizeAttachments(round?.attachments ?? []);
+        const fromLinks       = normalizeAttachments(round?.links       ?? []);
+        const merged          = [...fromAttachments, ...fromLinks];
+
+        // Прибираємо дублікати за id
         const seen = new Set<string>();
-        return merged.filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
+        return merged.filter(a => {
+            if (seen.has(a.id)) return false;
+            seen.add(a.id);
+            return true;
+        });
     }, [round]);
 
     const links        = allAttachments.filter(a => a.type === "link");
     const files        = allAttachments.filter(a => a.type === "file");
     const technologies = round?.technologies ?? [];
 
-    const startTs = round?.start_at ? new Date(round.start_at).getTime() : 0;
-    const endTs   = round?.end_at   ? new Date(round.end_at).getTime()   : 0;
-    const progressPct = (startTs && endTs && endTs > startTs)
-    ? Math.min(100, Math.max(0, ((Date.now() - startTs) / (endTs - startTs)) * 100))
-    : 0;
+    // FIX: прогрес дедлайну.
+    // Якщо start_at відсутній — рахуємо від моменту коли раунд став "active" (тобто від 0%).
+    // Якщо end_at відсутній — прогрес = 0.
+    const now   = Date.now();
+    const endTs = round?.end_at ? new Date(round.end_at).getTime() : 0;
+
+    let progressPct = 0;
+    if (endTs > 0) {
+        if (round?.start_at) {
+            const startTs = new Date(round.start_at).getTime();
+            if (endTs > startTs) {
+                progressPct = Math.min(100, Math.max(0, ((now - startTs) / (endTs - startTs)) * 100));
+            }
+        } else {
+            // Немає start_at — показуємо скільки часу залишилось відносно повного часового вікна.
+            // Використовуємо created_at або показуємо лише відсоток що залишився від поточного моменту.
+            // Без start_at показуємо прогрес як "час що минув" відносно deadline (від поточного до end_at).
+            // Якщо end_at вже в минулому — 100%, якщо в майбутньому — partial.
+            if (now >= endTs) {
+                progressPct = 100;
+            } else {
+                // Не можемо визначити точний прогрес без старту — показуємо мінімум щоб лінія була видима
+                progressPct = 0;
+            }
+        }
+    }
+
     const isUrgent = progressPct > 80;
 
     const statusConfig = {
@@ -390,7 +492,6 @@ export default function RoundPage() {
 
     return (
         <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1)">
-        {/* Background logo — same as tournaments page */}
         <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
         <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] blur-sm ${dark ? "invert" : ""}`} />
         </div>
@@ -416,7 +517,6 @@ export default function RoundPage() {
         />
 
         <div className="p-6 max-w-5xl w-full mx-auto">
-        {/* Back */}
         <button onClick={() => router.back()}
         className="mb-6 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors group">
         <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform"/>
@@ -447,7 +547,6 @@ export default function RoundPage() {
         {/* ── LEFT ── */}
         <div className="flex flex-col gap-4">
 
-        {/* Description */}
         <Card>
         <SectionLabel icon={<FileText size={13}/>}>Опис завдання</SectionLabel>
         {round.description ? (
@@ -459,7 +558,6 @@ export default function RoundPage() {
         )}
         </Card>
 
-        {/* Criteria */}
         <Card>
         <SectionLabel icon={<CheckCircle2 size={13}/>}>Критерії оцінювання</SectionLabel>
         {round.criteria ? (
@@ -478,7 +576,6 @@ export default function RoundPage() {
         )}
         </Card>
 
-        {/* Status + template row */}
         <div className="flex items-stretch gap-3">
         <div className={`flex-1 flex items-center gap-3 px-5 py-4 rounded-2xl border font-bold text-sm ${
             submission
@@ -492,7 +589,7 @@ export default function RoundPage() {
         </div>
         <button
         onClick={handleDownloadTemplate}
-        disabled={!round.template_url}
+        disabled={!round.template_path}
         className="flex items-center gap-2 px-5 py-4 rounded-2xl bg-(--card) border border-(--brd) text-(--t1) text-sm font-bold hover:border-blue-600/40 hover:text-blue-600 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
         >
         <Download size={16}/> Шаблон
@@ -515,33 +612,44 @@ export default function RoundPage() {
         <span className="text-2xl font-black text-(--t2) mb-6 flex-shrink-0">:</span>
         <TimeBlock value={countdown.seconds} label="сек"   urgent={isUrgent} />
         </div>
-        <div className="relative h-2 rounded-full bg-(--brd) overflow-hidden mb-4">
-        <div
-        className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000"
-        style={{
-            width: `${progressPct}%`,
-            background: isUrgent
-            ? "linear-gradient(90deg,#f97316,#ef4444)"
-            : "linear-gradient(90deg,#2563eb,#1d4ed8)",
-        }}
-        />
-        <div
-        className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-(--card) transition-all duration-1000"
-        style={{
-            left: `calc(${progressPct}% - 8px)`,
-            background: isUrgent ? "#ef4444" : "#2563eb",
-            boxShadow: `0 0 0 3px ${isUrgent ? "rgba(239,68,68,0.25)" : "rgba(37,99,235,0.25)"}`,
-        }}
-        />
-        </div>
-        <div className="flex items-center justify-between">
-        <span className="text-xs text-(--t2) font-bold flex items-center gap-1.5">
-        <Calendar size={12}/> {fmtDate(round.start_at)}
-        </span>
-        <span className="text-xs text-(--t2) font-bold flex items-center gap-1.5">
-        {fmtDate(round.end_at)} <Calendar size={12}/>
-        </span>
-        </div>
+
+        {/* FIX: прогрес-бар дедлайну — коректно відображається навіть без start_at */}
+        {endTs > 0 ? (
+            <>
+            <div className="relative h-2 rounded-full bg-(--brd) overflow-hidden mb-1">
+            <div
+            className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000"
+            style={{
+                width: `${progressPct}%`,
+                background: isUrgent
+                ? "linear-gradient(90deg,#f97316,#ef4444)"
+                : "linear-gradient(90deg,#2563eb,#1d4ed8)",
+                      minWidth: progressPct > 0 ? 8 : 0,
+            }}
+            />
+            {progressPct > 0 && progressPct < 100 && (
+                <div
+                className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-(--card) transition-all duration-1000"
+                style={{
+                    left: `calc(${progressPct}% - 8px)`,
+                                                      background: isUrgent ? "#ef4444" : "#2563eb",
+                                                      boxShadow: `0 0 0 3px ${isUrgent ? "rgba(239,68,68,0.25)" : "rgba(37,99,235,0.25)"}`,
+                }}
+                />
+            )}
+            </div>
+            <div className="flex items-center justify-between mb-4">
+            <span className="text-xs text-(--t2) font-bold flex items-center gap-1.5">
+            <Calendar size={12}/> {round.start_at ? fmtDate(round.start_at) : "Старт не вказано"}
+            </span>
+            <span className="text-xs text-(--t2) font-bold flex items-center gap-1.5">
+            {fmtDate(round.end_at)} <Calendar size={12}/>
+            </span>
+            </div>
+            </>
+        ) : (
+            <p className="text-xs text-(--t2) italic mb-4">Дедлайн не встановлено</p>
+        )}
         </Card>
 
         {/* Technologies */}
@@ -613,7 +721,6 @@ export default function RoundPage() {
             </Card>
         )}
 
-        {/* Submit error */}
         {submitError && (
             <div className="px-5 py-4 rounded-2xl bg-red-500/10 border border-red-500/25 text-red-500 text-sm font-bold flex items-center gap-2">
             <AlertCircle size={16} className="flex-shrink-0"/>
@@ -621,7 +728,6 @@ export default function RoundPage() {
             </div>
         )}
 
-        {/* Submit button */}
         <button
         onClick={handleSubmit}
         disabled={submitting || !!submission}
