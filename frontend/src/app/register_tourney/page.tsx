@@ -193,10 +193,15 @@ export default function RegisterTourney() {
 
           // 2. Файли → завантажуємо в Storage → тип "file"
           const fileAttachments: { id: string; name: string; url: string; type: 'file' }[] = [];
-          // Guard: filter only real browser File instances to prevent "arrayBuffer is not a function"
-          const rawFiles: File[] = ((rd as any)?.files ?? []).filter(
-            (f: unknown) => f instanceof File
-          );
+          // Guard: розпаковуємо FileItem { file: File, name, size, type } або голий File
+          const rawFiles: File[] = ((rd as any)?.files ?? [])
+          .map((f: unknown): File | null => {
+            if (f instanceof File) return f;
+            if (f && typeof f === 'object' && (f as any).file instanceof File)
+              return (f as any).file as File;
+            return null;
+          })
+          .filter((f: File | null): f is File => f !== null);
           for (let fi = 0; fi < rawFiles.length; fi++) {
             const file = rawFiles[fi];
             const publicUrl = await uploadFile(file, n);

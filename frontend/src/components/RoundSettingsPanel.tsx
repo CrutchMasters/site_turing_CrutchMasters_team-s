@@ -20,7 +20,7 @@ export interface RoundData {
     files: FileItem[];
 }
 
-interface FileItem {
+export interface FileItem {
     file: File; // реальний File обʼєкт для завантаження
     name: string;
     size: number;
@@ -39,6 +39,13 @@ interface Props {
 const inp = "w-full px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none transition-all";
 const label10 = "block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1.5";
 const addBtn = "flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-blue-500 hover:text-blue-400 transition-colors mt-2 active:scale-95";
+
+const defaultRound = (): RoundData => ({
+    name: '', description: '',
+    startDate: '', startTime: '',
+    deadlineDate: '', deadlineTime: '',
+    requirements: [], criteria: [], links: [], files: [],
+});
 
 // ── DateTimeField ──────────────────────────────────────────────────────────
 function DateTimeField({
@@ -147,7 +154,12 @@ function FilesField({ files, onChange }: { files: FileItem[]; onChange: (f: File
     const inputRef = useRef<HTMLInputElement>(null);
 
     const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const picked = Array.from(e.target.files ?? []).map(f => ({ file: f, name: f.name, size: f.size, type: f.type }));
+        const picked = Array.from(e.target.files ?? []).map(f => ({
+            file: f,       // ✅ сохраняем File внутри FileItem
+            name: f.name,
+            size: f.size,
+            type: f.type,
+        }));
         onChange([...files, ...picked]);
         if (inputRef.current) inputRef.current.value = '';
     };
@@ -157,8 +169,13 @@ function FilesField({ files, onChange }: { files: FileItem[]; onChange: (f: File
         const fmt = (bytes: number) =>
         bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
-        const icon = (type: string) =>
-        type.startsWith('image/') ? '🖼️' : type === 'application/pdf' ? '📄' : type.includes('zip') ? '📦' : '📎';
+        const icon = (f: FileItem & { existing?: boolean }) => {
+            if ((f as any).existing) return '☁️';
+            if (f.type.startsWith('image/')) return '🖼️';
+            if (f.type === 'application/pdf') return '📄';
+            if (f.type.includes('zip')) return '📦';
+            return '📎';
+        };
 
         return (
             <div className="flex flex-col gap-2">
@@ -167,10 +184,10 @@ function FilesField({ files, onChange }: { files: FileItem[]; onChange: (f: File
                 <div className="border border-(--brd) rounded-2xl overflow-hidden bg-(--bg) divide-y divide-(--brd)">
                 {files.map((f, i) => (
                     <div key={i} className="flex items-center gap-3 px-3 py-2.5 group hover:bg-(--card)/50 transition-colors">
-                    <span className="text-base">{icon(f.type)}</span>
+                    <span className="text-base">{icon(f as any)}</span>
                     <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-(--t1) truncate">{f.name}</p>
-                    <p className="text-[10px] text-(--t2)">{fmt(f.size)}</p>
+                    <p className="text-[10px] text-(--t2)">{(f as any).existing ? 'Збережено в хмарі' : fmt(f.size)}</p>
                     </div>
                     <button
                     type="button"
@@ -275,10 +292,9 @@ export default function RoundSettingsPanel({ roundCount, selectedRound, onSelect
         if (!initialData || seeded) return;
         const hasAny = Object.keys(initialData).length > 0;
         if (!hasAny) return;
-        const defaults: RoundData = { name: '', description: '', startDate: '', startTime: '', deadlineDate: '', deadlineTime: '', requirements: [], criteria: [], links: [], files: [] };
         const seededRounds: Record<number, RoundData> = {};
         for (const [key, val] of Object.entries(initialData)) {
-            seededRounds[Number(key)] = { ...defaults, ...val };
+            seededRounds[Number(key)] = { ...defaultRound(), ...val };
         }
         setRounds(seededRounds);
         setSeeded(true);
@@ -286,25 +302,25 @@ export default function RoundSettingsPanel({ roundCount, selectedRound, onSelect
 
     useEffect(() => { onRoundsChange?.(rounds); }, [rounds]);
 
-    const getRound = (n: number): RoundData => rounds[n] ?? {
-        name: '', description: '',
-        startDate: '', startTime: '',
-        deadlineDate: '', deadlineTime: '',
-        requirements: [], criteria: [], links: [], files: [],
-    };
+    const getRound = (n: number): RoundData => rounds[n] ?? defaultRound();
 
+    // ✅ ИСПРАВЛЕНИЕ: используем prev внутри setRounds чтобы избежать stale closure.
+    // Предыдущая версия обращалась к getRound(n) снаружи, что захватывало
+    // устаревший rounds из замыкания и затирало последние изменения.
     const update = useCallback(<K extends keyof RoundData>(n: number, key: K, val: RoundData[K]) => {
-        setRounds(prev => ({
-            ...prev,
-            [n]: { ...getRound(n), ...prev[n], [key]: val },
-        }));
-    }, [rounds]);
+        setRounds(prev => {
+            const current = prev[n] ?? defaultRound();
+            return {
+                ...prev,
+                [n]: { ...current, [key]: val },
+            };
+        });
+    }, []); // ✅ пустой массив зависимостей — update теперь стабилен
 
     const rd = getRound(selectedRound);
     const hasData = (n: number) => !!(rounds[n]?.name || rounds[n]?.description);
 
     const handleSave = () => {
-        // Replace with actual save logic
         console.log('Saving round', selectedRound, rd);
     };
 
