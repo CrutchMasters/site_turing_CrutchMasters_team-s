@@ -394,7 +394,7 @@ export default function TournamentsPage() {
                                             {t.tournaments?.title ?? "Турніри"}
                                         </h2>
                                         <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest">
-                                            {loading ? (t.common?.loading ?? "Завантаження...") : `${total} ${t.tournaments?.total ?? "турнірів"}`}
+                                            {loading ? (t.common?.loading ?? "Завантаження...") : `${total} турнірів`}
                                         </p>
                                     </div>
                                 </div>
