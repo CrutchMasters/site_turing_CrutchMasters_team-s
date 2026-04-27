@@ -83,7 +83,7 @@ def decode_jwt_payload(token: str) -> dict:
                 token,
                 public_key,
                 algorithms=["ES256"],
-                options={"verify_exp": True},
+                options={"verify_exp": True, "verify_aud": False},
             )
             return payload
         except HTTPException:
@@ -99,7 +99,7 @@ def decode_jwt_payload(token: str) -> dict:
             if stale_key:
                 print("[JWT] Using stale cached JWKS key", flush=True)
                 try:
-                    return pyjwt.decode(token, stale_key[0], algorithms=["ES256"], options={"verify_exp": True})
+                    return pyjwt.decode(token, stale_key[0], algorithms=["ES256"], options={"verify_exp": True, "verify_aud": False})
                 except pyjwt.ExpiredSignatureError:
                     raise HTTPException(status_code=401, detail="Token expired")
                 except Exception as e2:
@@ -118,7 +118,7 @@ def decode_jwt_payload(token: str) -> dict:
             token,
             jwt_secret,
             algorithms=["HS256"],
-            options={"verify_exp": True},
+            options={"verify_exp": True, "verify_aud": False},
         )
         return payload
     except pyjwt.ExpiredSignatureError:
@@ -231,14 +231,52 @@ def update_tournament_statuses():
         print(f"[SCHEDULER] Помилка оновлення статусів: {e}", flush=True)
 
 
+def update_round_statuses():
+    if not supabase:
+        return
+    try:
+        now = datetime.now(timezone.utc)
+
+        res = supabase.table("rounds").select(
+            "id, status, start_at, end_at"
+        ).execute()
+        rounds = res.data or []
+
+        for r in rounds:
+            current  = r.get("status") or "pending"
+            start_at = _parse_dt(r.get("start_at"))
+            end_at   = _parse_dt(r.get("end_at"))
+
+            if end_at and now >= end_at:
+                new_status = "finished"
+            elif start_at and now >= start_at:
+                new_status = "active"
+            elif end_at and (not start_at or now >= start_at):
+                new_status = "active"
+            else:
+                new_status = "pending"
+
+            if new_status != current:
+                try:
+                    supabase.table("rounds").update({"status": new_status}).eq("id", r["id"]).execute()
+                    print(f"[SCHEDULER] Раунд {r['id']}: {current} → {new_status}", flush=True)
+                except Exception as upd_err:
+                    print(f"[SCHEDULER] Не вдалося оновити раунд {r['id']}: {upd_err}", flush=True)
+
+    except Exception as e:
+        print(f"[SCHEDULER] Помилка оновлення статусів раундів: {e}", flush=True)
+
+
 _scheduler = BackgroundScheduler(timezone="UTC")
-_scheduler.add_job(update_tournament_statuses, "interval", seconds=60, id="tournament_status_updater")
+_scheduler.add_job(update_tournament_statuses, "interval", seconds=15, id="tournament_status_updater")
+_scheduler.add_job(update_round_statuses,      "interval", seconds=15, id="round_status_updater")
 
 @app.on_event("startup")
 def start_scheduler():
     _scheduler.start()
     update_tournament_statuses()  # Одразу при старті
-    print("[SCHEDULER] Запущено оновлення статусів турнірів (кожні 60 сек)", flush=True)
+    update_round_statuses()       # Одразу при старті
+    print("[SCHEDULER] Запущено оновлення статусів турнірів та раундів (кожні 15 сек)", flush=True)
 
 @app.on_event("shutdown")
 def stop_scheduler():
@@ -281,6 +319,7 @@ class TournamentUpdate(BaseModel):
     name:              str | None = None
     rules:             str | None = None
     start_at:          str | None = None
+    end_at:            str | None = None   # FIX: було відсутнє — кінець турніру не зберігався
     registration_from: str | None = None
     registration_to:   str | None = None
     max_teams:         int | None = None

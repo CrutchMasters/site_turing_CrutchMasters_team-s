@@ -42,6 +42,7 @@ interface Tournament {
     rounds?: number;
     status: string;
     start_at?: string;
+    end_at?: string;
     registration_from?: string;
     registration_to?: string;
     teams: Team[];
@@ -77,7 +78,7 @@ export default function TournamentPage() {
         try {
             const { data: tourData, error: tourErr } = await supabase
             .from("tournaments")
-            .select("id, name, rules, max_teams, rounds, status, start_at, registration_from, registration_to")
+            .select("id, name, rules, max_teams, rounds, status, start_at, end_at, registration_from, registration_to")
             .eq("id", id)
             .single();
             if (tourErr) throw tourErr;
@@ -212,7 +213,9 @@ export default function TournamentPage() {
     const teamCount = tournament.teams?.length ?? 0;
     const isFull = !!tournament.max_teams && teamCount >= tournament.max_teams;
     const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+    // FIX: статус з БД — не вираховуємо локально
     const isRegistrationOpen = tournament.status === "registration";
+    const isFinished = tournament.status === "finished";
     // БАГ 7 fix: перевіряємо і captain_id, і members_ids — учасники теж бачать статус
     const myTeamInTournament = tournament.teams?.find(
         t => t.captain_id === user?.id || (t.members_ids as string[] | undefined)?.includes(user?.id ?? "")
@@ -417,23 +420,30 @@ export default function TournamentPage() {
                 let statusBorder = "border-(--brd)";
                 let dotColor = "bg-gray-400";
 
-                if (round.status === "finished" || (end && now > end)) {
+                // FIX: пріоритет статусу з БД (оновлюється шедулером)
+                // Дати — лише як fallback якщо status відсутній
+                const dbStatus = round.status;
+                const isFinished = dbStatus === "finished" || (!dbStatus && end && now > end);
+                const isActive   = dbStatus === "active"   || (!dbStatus && start && end && now >= start && now <= end);
+                const isPending  = dbStatus === "pending"  || (!dbStatus && start && now < start);
+
+                if (isFinished) {
                     statusLabel = "Завершено";
                     statusColor = "text-(--t2)";
                     dotColor = "bg-gray-400";
-                } else if (round.status === "active" || (start && end && now >= start && now <= end)) {
+                } else if (isActive) {
                     statusLabel = "Активний";
                     statusColor = "text-green-500";
                     statusBg = "bg-green-500/5";
                     statusBorder = "border-green-500/20";
                     dotColor = "bg-green-500";
-                } else if (start && now < start) {
+                } else if (isPending) {
                     statusLabel = "Очікується";
                     statusColor = "text-amber-500";
                     dotColor = "bg-amber-400";
                 }
 
-                const isLocked = round.status === "finished" || (end !== null && now > end);
+                const isLocked = isFinished;
 
                 return (
                     <div
