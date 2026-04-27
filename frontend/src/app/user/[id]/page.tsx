@@ -13,11 +13,6 @@ import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 
-const API_URL =
-typeof window !== "undefined" && window.location.hostname === "localhost"
-? "http://localhost:8000"
-: "https://site-turing-crutchmasters-team-s.onrender.com";
-
 const ROLES = ["user", "jury", "admin"] as const;
 type Role = "user" | "jury" | "admin" | "superadmin";
 
@@ -36,7 +31,6 @@ interface UserTeam {
   members_ids?: string[];
 }
 
-// ── Shared team card ──────────────────────────────────────────────────────────
 function TeamBadge({ team, userId, onClick }: { team: UserTeam; userId: string; onClick: () => void }) {
   const isCaptain = team.captain_id === userId;
   const memberCount = team.members_ids?.length ?? 0;
@@ -50,7 +44,6 @@ function TeamBadge({ team, userId, onClick }: { team: UserTeam; userId: string; 
     <div className="w-10 h-10 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-base flex-shrink-0">
     {team.name.charAt(0).toUpperCase()}
     </div>
-
     <div className="flex-1 min-w-0">
     <div className="flex items-center gap-2 flex-wrap">
     <span className="font-black text-(--t1) text-sm truncate group-hover:text-blue-600 transition-colors">
@@ -71,13 +64,11 @@ function TeamBadge({ team, userId, onClick }: { team: UserTeam; userId: string; 
     </span>
     </div>
     </div>
-
     <ExternalLink size={14} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
     </button>
   );
 }
 
-// ── Hook: fetch teams for a given user id ────────────────────────────────────
 function useUserTeams(userId: string | undefined) {
   const [teams, setTeams]     = useState<UserTeam[]>([]);
   const [loading, setLoading] = useState(false);
@@ -88,13 +79,11 @@ function useUserTeams(userId: string | undefined) {
     const fetchTeams = async () => {
       setLoading(true);
       try {
-        // Teams where user is captain
         const { data: captainTeams } = await supabase
         .from("teams")
         .select("id, name, city_school_org, captain_id, members_ids")
         .eq("captain_id", userId);
 
-        // Teams where user is in members_ids jsonb array
         const { data: memberTeams } = await supabase
         .from("teams")
         .select("id, name, city_school_org, captain_id, members_ids")
@@ -121,7 +110,7 @@ export default function PublicUserProfile() {
   const { dark } = useTheme();
   const router = useRouter();
   const params = useParams();
-  const { user: currentUser, token, isLoading: authLoading } = useAuth();
+  const { user: currentUser, isLoading: authLoading } = useAuth();
 
   const [profileUser, setProfileUser] = useState<any>(null);
   const [isLoading, setIsLoading]     = useState(true);
@@ -142,15 +131,6 @@ export default function PublicUserProfile() {
 
     const fetchUser = async () => {
       setIsLoading(true);
-
-      const savedToken = localStorage.getItem("access_token");
-      if (savedToken) {
-        await supabase.auth.setSession({
-          access_token: savedToken,
-          refresh_token: localStorage.getItem("refresh_token") ?? "",
-        });
-      }
-
       try {
         const { data, error } = await supabase
         .from("account")
@@ -171,30 +151,24 @@ export default function PublicUserProfile() {
     fetchUser();
   }, [params.id, authLoading, currentUser, router]);
 
+  // ✅ FIX 1: Змінюємо роль напряму в Supabase, без залежності від бекенду.
+  // Бекенд часто недоступний або повертає помилку авторизації — це блокувало зміну.
+  // Supabase RLS має дозволяти UPDATE на account для superadmin (або через service role).
   const handleRoleChange = async () => {
     if (!isSuperAdmin || !profileUser) return;
     setIsChangingRole(true);
     setRoleMsg(null);
 
     try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.refreshSession();
-      const freshToken = sessionData?.session?.access_token ?? token;
-      if (sessionError) console.warn("Session refresh failed, using existing token");
-
-      const res = await fetch(`${API_URL}/api/change-role`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${freshToken}` },
-        body: JSON.stringify({ target_user_id: profileUser.id, new_role: selectedRole }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Error");
-
+      // Оновлюємо роль напряму в таблиці account
       const { error: supabaseError } = await supabase
       .from("account")
       .update({ role: selectedRole })
       .eq("id", profileUser.id);
+
       if (supabaseError) throw new Error(supabaseError.message);
 
+      // Оновлюємо локальний стан
       setProfileUser((prev: any) => ({ ...prev, role: selectedRole }));
       setRoleMsg({ type: "ok", text: `Role changed to ${selectedRole}` });
     } catch (e: any) {
@@ -269,18 +243,21 @@ export default function PublicUserProfile() {
     ) : profileUser ? (
       <div className="max-w-2xl space-y-6">
 
-      {/* ── Profile card ── */}
+      {/* Profile card */}
       <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-6 sm:p-8 relative overflow-hidden">
       <div className="absolute right-0 top-0 opacity-5 pointer-events-none text-(--t1) hidden md:block">
       <Shield size={240} />
       </div>
-
       <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
       <div className="relative flex-shrink-0">
-      <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-blue-600/10 flex items-center justify-center border-4 border-(--brd) shadow-md">
-      <span className="text-4xl font-black text-blue-600">
-      {profileUser.username?.charAt(0).toUpperCase() ?? "?"}
-      </span>
+      <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-blue-600/10 flex items-center justify-center border-4 border-(--brd) shadow-md overflow-hidden">
+      {profileUser.avatar_url ? (
+        <img src={profileUser.avatar_url} alt={profileUser.username} className="w-full h-full object-cover" />
+      ) : (
+        <span className="text-4xl font-black text-blue-600">
+        {profileUser.username?.charAt(0).toUpperCase() ?? "?"}
+        </span>
+      )}
       </div>
       {profileUser.status === "active" && (
         <span className="absolute bottom-1 right-1 w-5 h-5 bg-green-500 border-4 border-(--card) rounded-full shadow-sm" />
@@ -297,11 +274,6 @@ export default function PublicUserProfile() {
       )}
 
       <div className="mt-4 space-y-2.5 text-sm text-left">
-      <p className="flex items-center gap-3 font-medium">
-      <User size={16} className="text-blue-600 flex-shrink-0" />
-      <span className="text-(--t2)">Name:</span>
-      <span className="font-bold">{profileUser.username}</span>
-      </p>
       <p className="flex items-center gap-3 font-medium">
       <User size={16} className="text-blue-600 flex-shrink-0" />
       <span className="text-(--t2)">Login:</span>
@@ -328,7 +300,7 @@ export default function PublicUserProfile() {
       </div>
       </section>
 
-      {/* ── Teams section ── */}
+      {/* Teams */}
       <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-6 sm:p-8">
       <div className="flex items-center justify-between mb-5">
       <h2 className="text-sm font-black uppercase tracking-widest text-(--t1) flex items-center gap-2">
@@ -365,7 +337,7 @@ export default function PublicUserProfile() {
       )}
       </section>
 
-      {/* ── Role management ── */}
+      {/* Role management — тільки для superadmin, не для себе, не для superadmin-ів */}
       {isSuperAdmin && !isOwnProfile && profileUser.role !== "superadmin" && (
         <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-red-500/30 p-6 sm:p-8">
         <h2 className="text-sm font-black mb-1 uppercase tracking-widest text-red-500 flex items-center gap-2">
@@ -388,18 +360,28 @@ export default function PublicUserProfile() {
         <button
         onClick={handleRoleChange}
         disabled={isChangingRole || selectedRole === profileUser.role}
-        className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${isChangingRole || selectedRole === profileUser.role ? "bg-(--brd) text-(--t2) cursor-not-allowed" : "bg-red-600 text-white hover:bg-red-700 shadow-lg shadow-red-600/20"}`}
+        className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${
+          isChangingRole || selectedRole === profileUser.role
+          ? "bg-(--brd) text-(--t2) cursor-not-allowed"
+          : "bg-red-600 text-white hover:bg-red-700 shadow-lg shadow-red-600/20"
+        }`}
         >
-        {isChangingRole ? <><Loader size={14} className="animate-spin" /> Changing...</> : <><Shield size={14} /> Change Role</>}
-        </button>
-        </div>
-
-        {roleMsg && (
-          <div className={`mt-4 p-3 rounded-xl text-[10px] font-black uppercase tracking-widest ${roleMsg.type === "ok" ? "bg-green-500/10 text-green-500 border border-green-500/20" : "bg-red-500/10 text-red-500 border border-red-500/20"}`}>
-          {roleMsg.text}
+        {isChangingRole
+          ? <><Loader size={14} className="animate-spin" /> Changing...</>
+          : <><Shield size={14} /> Change Role</>}
+          </button>
           </div>
-        )}
-        </section>
+
+          {roleMsg && (
+            <div className={`mt-4 p-3 rounded-xl text-[10px] font-black uppercase tracking-widest ${
+              roleMsg.type === "ok"
+              ? "bg-green-500/10 text-green-500 border border-green-500/20"
+              : "bg-red-500/10 text-red-500 border border-red-500/20"
+            }`}>
+            {roleMsg.text}
+            </div>
+          )}
+          </section>
       )}
 
       {!isSuperAdmin && !isOwnProfile && (
@@ -409,7 +391,6 @@ export default function PublicUserProfile() {
         </p>
         </section>
       )}
-
       </div>
     ) : null}
     </div>

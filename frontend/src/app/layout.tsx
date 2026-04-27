@@ -5,6 +5,7 @@ import "./globals.css";
 import { LanguageProvider } from "@/context/LanguageContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { SidebarProvider } from "@/context/SidebarContext";
+import AppShellWrapper from "@/components/AppShellWrapper";
 
 const barlow = Barlow({
   subsets: ["latin"],
@@ -55,7 +56,7 @@ export default function RootLayout({
     <AuthProvider>
     <LanguageProvider>
     <SidebarProvider>
-    {children}
+    <AppShellWrapper>{children}</AppShellWrapper>
     </SidebarProvider>
     </LanguageProvider>
     </AuthProvider>

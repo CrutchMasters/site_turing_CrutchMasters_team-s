@@ -7,8 +7,9 @@ import {
   User, Mail, Shield, ChevronRight, UserCircle, ArrowLeft, Loader,
   Users, Crown, ExternalLink, Lock, Eye, EyeOff, KeyRound,
   CheckCircle, AlertCircle, RefreshCw, Pencil, X, Save,
-  Bell, Check, CheckCheck, UserPlus, Trophy, Medal,
+  Bell, Check, CheckCheck, UserPlus, Trophy,
 } from "lucide-react";
+import AvatarEditorModal from "@/components/AvatarEditorModal";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -20,7 +21,6 @@ typeof window !== "undefined" && window.location.hostname === "localhost"
 ? "http://localhost:8000"
 : "https://site-turing-crutchmasters-team-s.onrender.com";
 
-const ROLES = ["user", "jury", "admin"] as const;
 type Role = "user" | "jury" | "admin" | "superadmin";
 
 const roleBadgeColor: Record<Role, string> = {
@@ -63,11 +63,9 @@ interface Tournament {
   id: string;
   name: string;
   status?: string;
-  start_date?: string;
-  end_date?: string;
-  game?: string;
-  team_name?: string;
-  place?: number | null;
+  start_at?: string;
+  registration_from?: string;
+  registration_to?: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -89,18 +87,19 @@ function timeAgo(iso: string): string {
 }
 
 const typeIcon: Record<string, React.ReactNode> = {
-  team_invitation:    <UserPlus size={14} className="text-blue-500" />,
-  invitation_accepted:<Check    size={14} className="text-green-500" />,
-  invitation_declined:<X        size={14} className="text-red-500" />,
+  team_invitation:     <UserPlus size={14} className="text-blue-500" />,
+  invitation_accepted: <Check    size={14} className="text-green-500" />,
+  invitation_declined: <X        size={14} className="text-red-500" />,
 };
 
 const typeBorder: Record<string, string> = {
-  team_invitation:    "border-l-blue-500",
-  invitation_accepted:"border-l-green-500",
-  invitation_declined:"border-l-red-500",
+  team_invitation:     "border-l-blue-500",
+  invitation_accepted: "border-l-green-500",
+  invitation_declined: "border-l-red-500",
 };
 
 const tourStatusStyle: Record<string, string> = {
+  registration: "text-purple-500 bg-purple-500/10 border-purple-500/20",
   active:   "text-green-500 bg-green-500/10 border-green-500/20",
   ongoing:  "text-green-500 bg-green-500/10 border-green-500/20",
   upcoming: "text-blue-500 bg-blue-500/10 border-blue-500/20",
@@ -108,6 +107,7 @@ const tourStatusStyle: Record<string, string> = {
 };
 
 const tourStatusLabel: Record<string, string> = {
+  registration: "Реєстрація",
   active: "Активний", ongoing: "Активний",
   upcoming: "Очікується", finished: "Завершено",
 };
@@ -143,7 +143,6 @@ function useUserTeams(userId: string | undefined) {
 
 function CodeInput({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
-  // Build fixed array of 6 slots, each is a single digit char or ""
   const slots: string[] = Array.from({ length: 6 }, (_, i) => {
     const ch = value[i];
     return ch && /\d/.test(ch) ? ch : "";
@@ -159,11 +158,9 @@ function CodeInput({ value, onChange, disabled }: { value: string; onChange: (v:
     const handleKeyDown = (i: number, e: React.KeyboardEvent) => {
       if (e.key === "Backspace") {
         if (slots[i]) {
-          // clear current cell
           const next = slots.map((c, idx) => (idx === i ? "" : c)).join("");
           onChange(next);
         } else if (i > 0) {
-          // move back and clear previous
           inputs.current[i - 1]?.focus();
           const next = slots.map((c, idx) => (idx === i - 1 ? "" : c)).join("");
           onChange(next);
@@ -224,7 +221,6 @@ function EditProfileSection({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Password
   const [pwStep, setPwStep] = useState<PwStep>("idle");
   const [code, setCode] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -305,6 +301,7 @@ function EditProfileSection({
   function resetPw() { setPwStep("idle"); setCode(""); setNewPw(""); setConfirmPw(""); setPwError(null); }
 
   const inputClass = "w-full px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all";
+  const codeIsValid = /^\d{6}$/.test(code);
 
   return (
     <div className="space-y-5">
@@ -386,9 +383,9 @@ function EditProfileSection({
         </div>
       )}
       <div className="flex flex-col sm:flex-row gap-2">
-      <button onClick={verifyCode} disabled={!/^\d{6}$/.test(code)}
+      <button onClick={verifyCode} disabled={!codeIsValid}
       className={`flex-1 flex items-center justify-center gap-2 font-black text-xs uppercase tracking-widest rounded-xl px-5 py-3 active:scale-95 transition-all shadow-lg ${
-        /^\d{6}$/.test(code)
+        codeIsValid
         ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-600/20"
         : "bg-(--brd) text-(--t2) cursor-not-allowed opacity-50 shadow-none"
       }`}>
@@ -507,7 +504,7 @@ function EditProfileSection({
   );
 }
 
-// ── Notification card (compact for sidebar) ───────────────────────────────────
+// ── Notification card ─────────────────────────────────────────────────────────
 
 function NotificationCard({
   notif, idx, responded, responding,
@@ -601,34 +598,39 @@ export default function ProfilePage() {
   const router = useRouter();
   const { user: currentUser, token, isLoading: authLoading } = useAuth();
 
-  const [profileUser, setProfileUser] = useState<any>(null);
-  const [isLoading, setIsLoading]     = useState(true);
-  const [error, setError]             = useState<string | null>(null);
-  const [isEditing, setIsEditing]     = useState(false);
-
-  const [selectedRole, setSelectedRole]     = useState<Role>("user");
-  const [isChangingRole, setIsChangingRole] = useState(false);
-  const [roleMsg, setRoleMsg]               = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [profileUser, setProfileUser]   = useState<any>(null);
+  const [isLoading, setIsLoading]       = useState(true);
+  const [error, setError]               = useState<string | null>(null);
+  const [isEditing, setIsEditing]       = useState(false);
+  const [showAvatarEditor, setShowAvatarEditor] = useState(false);
 
   const isSuperAdmin = currentUser?.role === "superadmin";
+  const isOwnProfile = currentUser?.id === profileUser?.id;
   const { teams: userTeams, loading: teamsLoading } = useUserTeams(currentUser?.id);
 
-  // Notifications state
-  const [notifications, setNotifications]   = useState<Notification[]>([]);
-  const [notifLoading, setNotifLoading]     = useState(true);
-  const [responding, setResponding]         = useState<Record<string, "accept" | "decline" | null>>({});
-  const [responded, setResponded]           = useState<Record<string, "accepted" | "declined">>({});
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifLoading, setNotifLoading]   = useState(true);
+  const [responding, setResponding]       = useState<Record<string, "accept" | "decline" | null>>({});
+  const [responded, setResponded]         = useState<Record<string, "accepted" | "declined">>({});
 
-  // Tournaments state
-  const [tournaments, setTournaments]       = useState<Tournament[]>([]);
-  const [tourLoading, setTourLoading]       = useState(true);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [tourLoading, setTourLoading] = useState(true);
+
+  const allReady = !isLoading && !teamsLoading && !tourLoading && !notifLoading;
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (allReady) {
+      const t = setTimeout(() => setVisible(true), 50);
+      return () => clearTimeout(t);
+    }
+  }, [allReady]);
 
   const authHeader = useCallback((): Record<string, string> => {
     const t = (typeof window !== "undefined" && localStorage.getItem("access_token")) || token || "";
     return { "Content-Type": "application/json", Authorization: `Bearer ${t}` };
   }, [token]);
 
-  // Fetch notifications
   const fetchNotifications = useCallback(async () => {
     setNotifLoading(true);
     try {
@@ -639,7 +641,6 @@ export default function ProfilePage() {
     finally { setNotifLoading(false); }
   }, [authHeader]);
 
-  // Fetch tournaments
   const fetchTournaments = useCallback(async () => {
     setTourLoading(true);
     try {
@@ -647,9 +648,7 @@ export default function ProfilePage() {
       if (res.ok) {
         const data = await res.json();
         setTournaments(data.tournaments ?? []);
-      } else {
-        setTournaments([]);
-      }
+      } else { setTournaments([]); }
     } catch { setTournaments([]); }
     finally { setTourLoading(false); }
   }, [authHeader]);
@@ -668,7 +667,6 @@ export default function ProfilePage() {
         .single();
         if (error) throw error;
         setProfileUser(data);
-        setSelectedRole((data.role as Role) ?? "user");
       } catch {
         setError("Користувача не знайдено");
       } finally {
@@ -681,7 +679,6 @@ export default function ProfilePage() {
     fetchTournaments();
   }, [authLoading, currentUser, router, fetchNotifications, fetchTournaments]);
 
-  // Notification actions
   const markAllRead = async () => {
     await fetch(`${API_URL}/api/notifications/mark-read`, {
       method: "POST", headers: authHeader(), body: JSON.stringify({ all: true }),
@@ -716,59 +713,7 @@ export default function ProfilePage() {
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const handleRoleChange = async () => {
-    if (!isSuperAdmin || !profileUser) return;
-    setIsChangingRole(true); setRoleMsg(null);
-    try {
-      const freshToken = (typeof window !== "undefined" && localStorage.getItem("access_token")) || token;
-      if (!freshToken) throw new Error("Токен авторизації не знайдено. Увійдіть знову.");
-      const expiry = (() => {
-        try { const p = JSON.parse(atob(freshToken.split(".")[1])); return (p.exp ?? 0) * 1000; } catch { return 0; }
-      })();
-      if (expiry < Date.now()) throw new Error("Сесія закінчилась. Увійдіть знову.");
-      const res = await fetch(`${API_URL}/api/change-role`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${freshToken}` },
-        body: JSON.stringify({ target_user_id: profileUser.id, new_role: selectedRole }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? `Помилка сервера: ${res.status}`);
-      setProfileUser((prev: any) => ({ ...prev, role: selectedRole }));
-      setRoleMsg({ type: "ok", text: `Роль змінено на ${selectedRole}` });
-    } catch (e: any) {
-      setRoleMsg({ type: "err", text: e.message });
-    } finally {
-      setIsChangingRole(false);
-    }
-  };
-
   // ── Layout ─────────────────────────────────────────────────────────────────
-
-  const Layout = ({ children }: { children: React.ReactNode }) => (
-    <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
-    <style jsx global>{`
-      @keyframes fadeUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:none} }
-      .fade-up   { animation: fadeUp 380ms cubic-bezier(.22,1,.36,1) both }
-      .fade-up-1 { animation: fadeUp 380ms cubic-bezier(.22,1,.36,1) 60ms both }
-      .fade-up-2 { animation: fadeUp 380ms cubic-bezier(.22,1,.36,1) 120ms both }
-      .fade-up-3 { animation: fadeUp 380ms cubic-bezier(.22,1,.36,1) 180ms both }
-      .fuIn      { animation: fadeUp 300ms cubic-bezier(.22,1,.36,1) both }
-      `}</style>
-      <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
-      <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
-      </div>
-      {isMobileSidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
-      )}
-      <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
-      <Sidebar />
-      </div>
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-      <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Профіль" icon={<UserCircle size={18} className="text-blue-600" />} />
-      {children}
-      </main>
-      </div>
-  );
 
   if (authLoading) return (
     <div className="min-h-screen bg-(--bg) flex items-center justify-center">
@@ -776,336 +721,413 @@ export default function ProfilePage() {
     </div>
   );
 
-  if (isLoading) return (
-    <Layout>
-    <div className="flex-1 flex items-center justify-center">
-    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-    </div>
-    </Layout>
-  );
-
   if (!currentUser) return null;
 
   return (
-    <Layout>
-    <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10">
+    <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
+    <style dangerouslySetInnerHTML={{__html: `
+      @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:none} }
+      .fade-up, .fade-up-1, .fade-up-2, .fade-up-3, .fuIn { opacity: 0; }
+      .page-ready .fade-up   { animation: fadeUp 400ms ease 0ms both }
+      .page-ready .fade-up-1 { animation: fadeUp 400ms ease 100ms both }
+      .page-ready .fade-up-2 { animation: fadeUp 400ms ease 200ms both }
+      .page-ready .fade-up-3 { animation: fadeUp 400ms ease 300ms both }
+      .page-ready .fuIn      { animation: fadeUp 300ms ease 50ms both }
+      `}} />
 
-    {/* Breadcrumb */}
-    <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2)">
-    <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
-    <ChevronRight size={10} />
-    <span className="text-(--t1)">Профіль</span>
-    </nav>
-
-    <button onClick={() => router.back()} className="mb-5 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
-    <ArrowLeft size={14} /> Назад
-    </button>
-
-    {error ? (
-      <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) p-12 text-center">
-      <p className="text-lg font-black text-(--t1) mb-2">{error}</p>
-      <p className="text-(--t2) text-sm">Користувача не знайдено</p>
-      </div>
-    ) : profileUser ? (
-
-      /* ── Two-column layout ── */
-      <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
-
-      {/* ══ LEFT COLUMN ══════════════════════════════════════════════ */}
-      <div className="flex flex-col gap-5 w-full xl:flex-1 min-w-0">
-
-      {/* Profile card */}
-      <section className="fade-up bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-5 sm:p-7 relative overflow-hidden">
-      <div className="absolute right-0 top-0 opacity-5 pointer-events-none text-(--t1) hidden md:block">
-      <Shield size={220} />
+      <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
+      <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
 
-      {isEditing ? (
-        <EditProfileSection
-        profileUser={profileUser}
-        onSave={(updated) => { setProfileUser((prev: any) => ({ ...prev, ...updated })); setIsEditing(false); }}
-        onCancel={() => setIsEditing(false)}
-        />
-      ) : (
-        <>
-        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-        {/* Avatar */}
-        <div className="relative flex-shrink-0">
-        <div className="w-22 h-22 rounded-full bg-blue-600/10 flex items-center justify-center border-4 border-(--brd) shadow-md" style={{ width: 88, height: 88 }}>
-        {profileUser.avatar_url
-          ? <img src={profileUser.avatar_url} alt="avatar" className="w-full h-full object-cover rounded-full" />
-          : <span className="text-3xl font-black text-blue-600">{profileUser.username?.charAt(0).toUpperCase() ?? "?"}</span>
-        }
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+      )}
+      <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+      <Sidebar />
+      </div>
+
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Профіль" icon={<UserCircle size={18} className="text-blue-600" />} />
+      <div className={`flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10 ${allReady ? "page-ready" : ""}`}>
+
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2)">
+      <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
+      <ChevronRight size={10} />
+      <span className="text-(--t1)">Профіль</span>
+      </nav>
+
+      <button onClick={() => router.back()} className="mb-5 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
+      <ArrowLeft size={14} /> Назад
+      </button>
+
+      {/* Loading overlay */}
+      {!allReady && !error && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+        <div className="flex flex-col items-center gap-3">
+        <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 opacity-70">Завантаження...</p>
         </div>
-        {profileUser.status === "active" && (
-          <span className="absolute bottom-1 right-1 w-4 h-4 bg-green-500 border-4 border-(--card) rounded-full shadow-sm" />
+        </div>
+      )}
+
+      {error ? (
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10">
+        <p className="text-lg font-black text-(--t1) mb-2">{error}</p>
+        <p className="text-(--t2) text-sm">Користувача не знайдено</p>
+        </div>
+      ) : (
+        <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
+
+        {/* ══ LEFT COLUMN ══════════════════════════════════════════════ */}
+        <div className="flex flex-col gap-5 w-full xl:flex-1 min-w-0">
+
+        {/* Profile card */}
+        <section className="fade-up bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-5 sm:p-7 relative overflow-hidden">
+        <div className="absolute right-0 top-0 opacity-5 pointer-events-none text-(--t1) hidden md:block">
+        <Shield size={220} />
+        </div>
+
+        {isLoading ? (
+          /* ── Skeleton ── */
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 animate-pulse">
+          <div className="w-[88px] h-[88px] rounded-full flex-shrink-0" style={{background:"var(--brd)"}} />
+          <div className="flex-1 space-y-3 w-full">
+          <div className="flex items-center justify-between">
+          <div className="h-6 w-36 rounded-xl" style={{background:"var(--brd)"}} />
+          <div className="h-8 w-24 rounded-xl" style={{background:"var(--brd)"}} />
+          </div>
+          <div className="flex gap-2">
+          <div className="h-5 w-20 rounded-lg" style={{background:"var(--brd)"}} />
+          <div className="h-5 w-16 rounded-lg" style={{background:"var(--brd)"}} />
+          </div>
+          <div className="space-y-2 pt-1">
+          <div className="h-4 w-48 rounded-lg" style={{background:"var(--brd)"}} />
+          <div className="h-4 w-44 rounded-lg" style={{background:"var(--brd)"}} />
+          <div className="h-4 w-52 rounded-lg" style={{background:"var(--brd)"}} />
+          <div className="h-4 w-32 rounded-lg" style={{background:"var(--brd)"}} />
+          </div>
+          <div className="pt-2 border-t border-(--brd)">
+          <div className="h-3 w-64 rounded-lg" style={{background:"var(--brd)"}} />
+          </div>
+          <div className="pt-2 border-t border-(--brd)">
+          <div className="h-3 w-64 rounded-lg" style={{background:"var(--brd)"}} />
+          </div>
+          </div>
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row items-center sm:items-stretch gap-6">
+
+          {/* ── Avatar ── */}
+          <div className="flex flex-col items-center justify-center flex-shrink-0">
+          <div className="relative group">
+          <div
+          className="rounded-full bg-blue-600/10 flex items-center justify-center border-4 border-(--brd) shadow-md overflow-hidden"
+          style={{ width: 120, height: 120 }}
+          >
+          {profileUser?.avatar_url ? (
+            <img
+            src={profileUser.avatar_url}
+            alt="avatar"
+            className="w-full h-full object-cover"
+            />
+          ) : (
+            <span className="text-4xl font-black text-blue-600">
+            {profileUser?.username?.charAt(0).toUpperCase() ?? "?"}
+            </span>
+          )}
+          </div>
+
+          {profileUser?.status === "active" && (
+            <span className="absolute bottom-1.5 right-1.5 w-4 h-4 bg-green-500 border-4 border-(--card) rounded-full shadow-sm" />
+          )}
+
+          {isOwnProfile && (
+            <button
+            onClick={() => setShowAvatarEditor(true)}
+            className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ width: 120, height: 120 }}
+            >
+            <Pencil size={18} className="text-white" />
+            </button>
+          )}
+          </div>
+          </div>
+
+          {/* ── Info ── */}
+          <div className="flex-1 flex flex-col justify-center space-y-2.5 z-10 w-full text-left">
+
+          {/* Title row */}
+          <div className="flex flex-row items-center justify-between gap-2">
+          <h1 className="text-xl font-black text-(--t1) uppercase tracking-tight">{profileUser?.username}</h1>
+          {isOwnProfile && (
+            <button onClick={() => setIsEditing(true)}
+            className="flex items-center gap-1.5 border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2 hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all">
+            <Pencil size={11} /> Редагувати
+            </button>
+          )}
+          </div>
+
+          {/* Badges */}
+          <div className="flex items-center gap-2 flex-wrap">
+          {isOwnProfile && (
+            <span className="text-[9px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg">
+            Ваш профіль
+            </span>
+          )}
+          <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-lg border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>
+          {profileUser?.role ?? "user"}
+          </span>
+          </div>
+
+          {/* Fields */}
+          <div className="space-y-2 text-sm">
+          <p className="flex items-center gap-2.5 font-medium">
+          <User size={14} className="text-blue-600 flex-shrink-0" />
+          <span className="text-(--t2) text-xs w-10 flex-shrink-0">Ім'я:</span>
+          <span className="font-bold text-sm">{profileUser?.username}</span>
+          </p>
+          <p className="flex items-center gap-2.5 font-medium">
+          <User size={14} className="text-blue-600 flex-shrink-0" />
+          <span className="text-(--t2) text-xs w-10 flex-shrink-0">Логін:</span>
+          <span className="font-bold text-sm">{profileUser?.login}</span>
+          </p>
+          <p className="flex items-center gap-2.5 font-medium">
+          <Mail size={14} className="text-blue-600 flex-shrink-0" />
+          <span className="text-(--t2) text-xs w-10 flex-shrink-0">Email:</span>
+          <span className="font-bold text-sm break-all">{profileUser?.email}</span>
+          </p>
+          <p className="flex items-center gap-2.5 font-medium">
+          <Shield size={14} className="text-blue-600 flex-shrink-0" />
+          <span className="text-(--t2) text-xs w-10 flex-shrink-0">Роль:</span>
+          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>
+          {profileUser?.role ?? "user"}
+          </span>
+          </p>
+          </div>
+
+          {/* ID */}
+          <div className="pt-2.5 border-t border-(--brd) text-[9px] font-bold uppercase tracking-widest text-(--t2)">
+          ID: {profileUser?.id}
+          </div>
+
+          </div>
+          </div>
+        )}
+        </section>
+
+        {/* Teams */}
+        <section className="fade-up-1 bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
+        <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
+        <div className="w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0">
+        <Users size={14} />
+        </div>
+        <div>
+        <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Команди</p>
+        {!teamsLoading && userTeams.length > 0 && (
+          <p className="text-[10px] font-bold text-(--t2) mt-0.5">{userTeams.length} команд</p>
+        )}
+        </div>
+        </div>
+        <div className="p-5 sm:p-7">
+        {teamsLoading ? (
+          <div className="space-y-2">
+          {[1,2].map(i => (
+            <div key={i} className="h-[60px] rounded-2xl animate-pulse" style={{background:"var(--brd)"}} />
+          ))}
+          </div>
+        ) : userTeams.length === 0 ? (
+          <div className="text-center py-5">
+          <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2">
+          <Users className="w-5 h-5 text-(--t2) opacity-40" />
+          </div>
+          <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Не перебуває в жодній команді</p>
+          <button onClick={() => router.push("/register_team")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">
+          Створити команду →
+          </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+          {userTeams.map(team => {
+            const isCaptain = team.captain_id === profileUser.id;
+            const memberCount = team.members_ids?.length ?? 0;
+            return (
+              <button key={team.id} type="button" onClick={() => router.push("/teams/" + team.id)}
+              className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group text-left">
+              <div className="w-9 h-9 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-sm flex-shrink-0">
+              {team.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-black text-(--t1) text-sm truncate group-hover:text-blue-600 transition-colors">{team.name}</span>
+              {isCaptain && (
+                <span className="text-[8px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1">
+                <Crown size={7} /> Капітан
+                </span>
+              )}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+              {team.city_school_org && <span className="text-[10px] font-bold text-(--t2) truncate">{team.city_school_org}</span>}
+              <span className="text-[10px] font-bold text-(--t2) flex items-center gap-1 flex-shrink-0">
+              <Users size={8} /> {memberCount} уч.
+              </span>
+              </div>
+              </div>
+              <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            );
+          })}
+          </div>
+        )}
+        </div>
+        </section>
+
+        {/* Tournaments */}
+        <section className="fade-up-2 bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
+        <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
+        <div className="w-7 h-7 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0">
+        <Trophy size={14} />
+        </div>
+        <div>
+        <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Турніри</p>
+        {!tourLoading && tournaments.length > 0 && (
+          <p className="text-[10px] font-bold text-(--t2) mt-0.5">{tournaments.length} турнірів</p>
+        )}
+        </div>
+        </div>
+        <div className="p-5 sm:p-7">
+        {tourLoading ? (
+          <div className="space-y-2">
+          {[1,2].map(i => (
+            <div key={i} className="h-[60px] rounded-2xl animate-pulse" style={{background:"var(--brd)"}} />
+          ))}
+          </div>
+        ) : tournaments.length === 0 ? (
+          <div className="text-center py-5">
+          <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2">
+          <Trophy className="w-5 h-5 text-(--t2) opacity-40" />
+          </div>
+          <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Не бере участь у турнірах</p>
+          <button onClick={() => router.push("/tournaments")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-amber-500 hover:underline">
+          Переглянути турніри →
+          </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+          {tournaments.map((t, i) => {
+            const st = t.status ?? "upcoming";
+            const stStyle = tourStatusStyle[st] ?? tourStatusStyle.upcoming;
+            const stLabel = tourStatusLabel[st] ?? st;
+            return (
+              <button key={t.id} type="button" onClick={() => router.push("/tournaments/" + t.id)}
+              className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group text-left"
+              style={{ animationDelay: `${i * 40}ms` }}>
+              <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 flex-shrink-0">
+              <Trophy size={15} />
+              </div>
+              <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-black text-(--t1) text-sm truncate group-hover:text-amber-500 transition-colors">{t.name}</span>
+              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${tourStatusStyle[t.status ?? "upcoming"] ?? tourStatusStyle.upcoming}`}>
+              {tourStatusLabel[t.status ?? "upcoming"] ?? t.status}
+              </span>
+              </div>
+              {t.start_at && (
+                <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">
+                Початок: {new Date(t.start_at).toLocaleDateString("uk-UA")}
+                </p>
+              )}
+              </div>
+              <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            );
+          })}
+          </div>
+        )}
+        </div>
+        </section>
+
+        </div>
+
+        {/* ══ RIGHT COLUMN — Notifications ═════════════════════════════ */}
+        <div className="flex flex-col gap-5 w-full xl:w-[380px] flex-shrink-0">
+        <section className="fade-up bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
+        <div className="flex items-center justify-between gap-2 px-5 sm:px-6 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
+        <div className="flex items-center gap-2.5">
+        <div className="relative w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0">
+        <Bell size={14} />
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black flex items-center justify-center">
+          {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
+        </div>
+        <div>
+        <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Сповіщення</p>
+        {!notifLoading && (
+          <p className="text-[10px] font-bold text-(--t2) mt-0.5">
+          {unreadCount > 0 ? `${unreadCount} непрочитаних` : "Все прочитано"}
+          </p>
+        )}
+        </div>
+        </div>
+        {unreadCount > 0 && (
+          <button onClick={markAllRead}
+          className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 border border-(--brd) bg-(--bg) rounded-xl px-3 py-1.5 transition-all hover:border-blue-600/40 active:scale-95">
+          <CheckCheck size={12} /> Всі
+          </button>
         )}
         </div>
 
-        <div className="flex-1 space-y-2.5 z-10 w-full text-left">
-        <div className="flex flex-row items-center justify-between gap-2">
-        <h1 className="text-xl font-black text-(--t1) uppercase tracking-tight">{profileUser.username}</h1>
-        <button onClick={() => setIsEditing(true)}
-        className="flex items-center gap-1.5 border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2 hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all">
-        <Pencil size={11} /> Редагувати
-        </button>
+        <div className="p-4 sm:p-5 max-h-[calc(100vh-220px)] overflow-y-auto">
+        {notifLoading ? (
+          <div className="space-y-2.5">
+          {[1,2,3].map(i => (
+            <div key={i} className="h-[72px] rounded-xl animate-pulse" style={{background:"var(--brd)"}} />
+          ))}
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="flex flex-col items-center py-12 text-center">
+          <Bell className="w-10 h-10 text-(--t2) mb-3 opacity-25" />
+          <p className="text-sm font-black text-(--t1) mb-1">Немає сповіщень</p>
+          <p className="text-(--t2) text-xs font-medium">Тут з'являться запрошення до команд</p>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+          {notifications.map((notif, i) => (
+            <NotificationCard
+            key={notif.id}
+            notif={notif}
+            idx={i}
+            responded={responded[notif.id]}
+            responding={responding[notif.id] ?? null}
+            onAccept={() => respondInvitation(notif, true)}
+            onDecline={() => respondInvitation(notif, false)}
+            onMarkRead={() => markRead(notif.id)}
+            onGoTeam={(teamId) => router.push("/teams/" + teamId)}
+            />
+          ))}
+          </div>
+        )}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[9px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg">
-        Ваш профіль
-        </span>
-        <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-lg border ${roleBadgeColor[profileUser.role as Role] ?? roleBadgeColor.user}`}>
-        {profileUser.role ?? "user"}
-        </span>
+        </section>
         </div>
 
-        <div className="mt-2 space-y-2 text-sm">
-        <p className="flex items-center gap-2.5 font-medium">
-        <User size={14} className="text-blue-600 flex-shrink-0" />
-        <span className="text-(--t2) text-xs">Ім'я:</span>
-        <span className="font-bold text-sm">{profileUser.username}</span>
-        </p>
-        <p className="flex items-center gap-2.5 font-medium">
-        <User size={14} className="text-blue-600 flex-shrink-0" />
-        <span className="text-(--t2) text-xs">Логін:</span>
-        <span className="font-bold text-sm">{profileUser.login}</span>
-        </p>
-        <p className="flex items-center gap-2.5 font-medium">
-        <Mail size={14} className="text-blue-600 flex-shrink-0" />
-        <span className="text-(--t2) text-xs">Email:</span>
-        <span className="font-bold text-sm break-all">{profileUser.email}</span>
-        </p>
-        <p className="flex items-center gap-2.5 font-medium">
-        <Shield size={14} className="text-blue-600 flex-shrink-0" />
-        <span className="text-(--t2) text-xs">Роль:</span>
-        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${roleBadgeColor[profileUser.role as Role] ?? roleBadgeColor.user}`}>
-        {profileUser.role ?? "user"}
-        </span>
-        </p>
-        </div>
-
-        <div className="pt-2.5 border-t border-(--brd) text-[9px] font-bold uppercase tracking-widest text-(--t2)">
-        ID: {profileUser.id}
-        </div>
-        </div>
-        </div>
-        </>
-      )}
-      </section>
-
-      {/* Teams */}
-      <section className="fade-up-1 bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
-      <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/40">
-      <div className="w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0">
-      <Users size={14} />
-      </div>
-      <div>
-      <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Команди</p>
-      {!teamsLoading && userTeams.length > 0 && (
-        <p className="text-[10px] font-bold text-(--t2) mt-0.5">{userTeams.length} команд</p>
-      )}
-      </div>
-      </div>
-      <div className="p-5 sm:p-7">
-      {teamsLoading ? (
-        <div className="flex items-center gap-2 text-(--t2) py-2">
-        <Loader size={13} className="animate-spin" />
-        <span className="text-[11px] font-bold uppercase tracking-wider">Завантаження...</span>
-        </div>
-      ) : userTeams.length === 0 ? (
-        <div className="text-center py-5">
-        <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2">
-        <Users className="w-5 h-5 text-(--t2) opacity-40" />
-        </div>
-        <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Не перебуває в жодній команді</p>
-        <button onClick={() => router.push("/register_team")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">
-        Створити команду →
-        </button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-        {userTeams.map(team => {
-          const isCaptain = team.captain_id === profileUser.id;
-          const memberCount = team.members_ids?.length ?? 0;
-          return (
-            <button key={team.id} type="button" onClick={() => router.push(`/teams/${team.id}`)}
-            className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group text-left">
-            <div className="w-9 h-9 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-sm flex-shrink-0">
-            {team.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-black text-(--t1) text-sm truncate group-hover:text-blue-600 transition-colors">{team.name}</span>
-            {isCaptain && (
-              <span className="text-[8px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1">
-              <Crown size={7} /> Капітан
-              </span>
-            )}
-            </div>
-            <div className="flex items-center gap-2 mt-0.5">
-            {team.city_school_org && <span className="text-[10px] font-bold text-(--t2) truncate">{team.city_school_org}</span>}
-            <span className="text-[10px] font-bold text-(--t2) flex items-center gap-1 flex-shrink-0">
-            <Users size={8} /> {memberCount} уч.
-            </span>
-            </div>
-            </div>
-            <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </button>
-          );
-        })}
         </div>
       )}
       </div>
-      </section>
+      </main>
 
-      {/* Tournaments */}
-      <section className="fade-up-2 bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
-      <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/40">
-      <div className="w-7 h-7 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0">
-      <Trophy size={14} />
-      </div>
-      <div>
-      <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Турніри</p>
-      {!tourLoading && tournaments.length > 0 && (
-        <p className="text-[10px] font-bold text-(--t2) mt-0.5">{tournaments.length} турнірів</p>
+      {/* ── Avatar Editor Modal ── */}
+      {showAvatarEditor && profileUser && (
+        <AvatarEditorModal
+        userId={profileUser.id}
+        supabase={supabase}
+        onSave={(url) => setProfileUser((prev: any) => ({ ...prev, avatar_url: url }))}
+        onClose={() => setShowAvatarEditor(false)}
+        />
       )}
       </div>
-      </div>
-      <div className="p-5 sm:p-7">
-      {tourLoading ? (
-        <div className="flex items-center gap-2 text-(--t2) py-2">
-        <Loader size={13} className="animate-spin" />
-        <span className="text-[11px] font-bold uppercase tracking-wider">Завантаження...</span>
-        </div>
-      ) : tournaments.length === 0 ? (
-        <div className="text-center py-5">
-        <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2">
-        <Trophy className="w-5 h-5 text-(--t2) opacity-40" />
-        </div>
-        <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Не бере участь у турнірах</p>
-        <button onClick={() => router.push("/tournaments")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-amber-500 hover:underline">
-        Переглянути турніри →
-        </button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-        {tournaments.map((t, i) => {
-          const st = t.status ?? "upcoming";
-          const stStyle = tourStatusStyle[st] ?? tourStatusStyle.upcoming;
-          const stLabel = tourStatusLabel[st] ?? st;
-          return (
-            <button key={t.id} type="button" onClick={() => router.push(`/tournaments/${t.id}`)}
-            className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group text-left"
-            style={{ animationDelay: `${i * 40}ms` }}>
-            <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 font-black text-sm flex-shrink-0">
-            {t.place === 1 ? "🥇" : t.place === 2 ? "🥈" : t.place === 3 ? "🥉" : <Trophy size={15} />}
-            </div>
-            <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-black text-(--t1) text-sm truncate group-hover:text-amber-500 transition-colors">{t.name}</span>
-            <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${stStyle}`}>
-            {stLabel}
-            </span>
-            </div>
-            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            {t.game && <span className="text-[10px] font-bold text-(--t2) truncate">{t.game}</span>}
-            {t.team_name && (
-              <span className="text-[10px] font-bold text-(--t2) flex items-center gap-1">
-              <Users size={8} /> {t.team_name}
-              </span>
-            )}
-            {t.place && (
-              <span className="text-[10px] font-black text-amber-500 flex items-center gap-1">
-              <Medal size={8} /> {t.place} місце
-              </span>
-            )}
-            </div>
-            {(t.start_date || t.end_date) && (
-              <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">
-              {t.start_date && new Date(t.start_date).toLocaleDateString("uk-UA")}
-              {t.start_date && t.end_date && " — "}
-              {t.end_date && new Date(t.end_date).toLocaleDateString("uk-UA")}
-              </p>
-            )}
-            </div>
-            <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </button>
-          );
-        })}
-        </div>
-      )}
-      </div>
-      </section>
-
-      </div>
-
-      {/* ══ RIGHT COLUMN — Notifications ═════════════════════════════ */}
-      <div className="flex flex-col gap-5 w-full xl:w-[380px] flex-shrink-0">
-      <section className="fade-up bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
-      <div className="flex items-center justify-between gap-2 px-5 sm:px-6 py-3.5 border-b border-(--brd) bg-(--bg)/40">
-      <div className="flex items-center gap-2.5">
-      <div className="relative w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0">
-      <Bell size={14} />
-      {unreadCount > 0 && (
-        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black flex items-center justify-center">
-        {unreadCount > 9 ? "9+" : unreadCount}
-        </span>
-      )}
-      </div>
-      <div>
-      <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Сповіщення</p>
-      {!notifLoading && (
-        <p className="text-[10px] font-bold text-(--t2) mt-0.5">
-        {unreadCount > 0 ? `${unreadCount} непрочитаних` : "Все прочитано"}
-        </p>
-      )}
-      </div>
-      </div>
-      {unreadCount > 0 && (
-        <button onClick={markAllRead}
-        className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 border border-(--brd) bg-(--bg) rounded-xl px-3 py-1.5 transition-all hover:border-blue-600/40 active:scale-95">
-        <CheckCheck size={12} /> Всі
-        </button>
-      )}
-      </div>
-
-      <div className="p-4 sm:p-5 max-h-[calc(100vh-220px)] overflow-y-auto">
-      {notifLoading ? (
-        <div className="flex flex-col items-center gap-3 py-12">
-        <Loader className="w-6 h-6 text-blue-600 animate-spin" />
-        <p className="text-[10px] font-black uppercase tracking-widest text-(--t2)">Завантаження...</p>
-        </div>
-      ) : notifications.length === 0 ? (
-        <div className="flex flex-col items-center py-12 text-center">
-        <Bell className="w-10 h-10 text-(--t2) mb-3 opacity-25" />
-        <p className="text-sm font-black text-(--t1) mb-1">Немає сповіщень</p>
-        <p className="text-(--t2) text-xs font-medium">Тут з'являться запрошення до команд</p>
-        </div>
-      ) : (
-        <div className="space-y-2.5">
-        {notifications.map((notif, i) => (
-          <NotificationCard
-          key={notif.id}
-          notif={notif}
-          idx={i}
-          responded={responded[notif.id]}
-          responding={responding[notif.id] ?? null}
-          onAccept={() => respondInvitation(notif, true)}
-          onDecline={() => respondInvitation(notif, false)}
-          onMarkRead={() => markRead(notif.id)}
-          onGoTeam={(teamId) => router.push(`/teams/${teamId}`)}
-          />
-        ))}
-        </div>
-      )}
-      </div>
-      </section>
-      </div>
-
-      </div>
-    ) : null}
-    </div>
-    </Layout>
   );
 }

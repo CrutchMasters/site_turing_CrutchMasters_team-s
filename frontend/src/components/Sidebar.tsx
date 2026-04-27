@@ -1,3 +1,4 @@
+//frontend/scr/components/sidebar.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -75,7 +76,7 @@ export default function Sidebar({}: SidebarProps) {
     .catch(() => setBackendMessage("unavailable"));
   }, []);
 
-  // Fetch latest 3 notifications when panel opens
+  // Fetch notifications when panel opens
   useEffect(() => {
     if (!isNotificationsPanelOpen) return;
     setNotifLoading(true);
@@ -137,10 +138,12 @@ export default function Sidebar({}: SidebarProps) {
       const date = new Date(iso);
       const now = new Date();
       const diff = Math.floor((now.getTime() - date.getTime()) / 1000);
-      if (diff < 60) return `${diff}с тому`;
-      if (diff < 3600) return `${Math.floor(diff / 60)}хв тому`;
-      if (diff < 86400) return `${Math.floor(diff / 3600)}год тому`;
-      return date.toLocaleDateString("uk-UA", { day: "numeric", month: "short" });
+      const localeMap: Record<string, string> = { ua: "uk-UA", ru: "ru-RU", en: "en-US" };
+      const loc = localeMap[locale] ?? "uk-UA";
+      if (diff < 60) return locale === "ru" ? `${diff}с назад` : locale === "en" ? `${diff}s ago` : `${diff}с тому`;
+      if (diff < 3600) return locale === "ru" ? `${Math.floor(diff/60)}мин назад` : locale === "en" ? `${Math.floor(diff/60)}m ago` : `${Math.floor(diff/60)}хв тому`;
+      if (diff < 86400) return locale === "ru" ? `${Math.floor(diff/3600)}ч назад` : locale === "en" ? `${Math.floor(diff/3600)}h ago` : `${Math.floor(diff/3600)}год тому`;
+      return date.toLocaleDateString(loc, { day: "numeric", month: "short" });
     } catch {
       return "";
     }
@@ -150,25 +153,21 @@ export default function Sidebar({}: SidebarProps) {
     <aside
     style={{
       willChange: "width",
-      transition: "width 280ms cubic-bezier(.22,1,.36,1)"
+      transition: "width 280ms cubic-bezier(.22,1,.36,1)",
     }}
     className={`relative flex-shrink-0 h-screen sticky top-0 bg-(--card) border-r border-(--brd) flex flex-col overflow-hidden ${
       collapsed ? "w-[72px]" : "w-72"
     }`}
     >
     <style>{`
-      .lbl-anim {
-        animation: fadeLabel 200ms ease forwards;
+      .lbl {
         white-space: nowrap;
+        overflow: hidden;
       }
       .nav-icon {
         min-width: 18px;
         display: flex;
         justify-content: center;
-      }
-      @keyframes fadeLabel {
-        from { opacity: 0; transform: translateX(-4px); }
-        to   { opacity: 1; transform: translateX(0); }
       }
       .sd-anim {
         animation: slideDown 200ms ease forwards;
@@ -189,7 +188,7 @@ export default function Sidebar({}: SidebarProps) {
       {/* Header */}
       <div className={`flex items-center border-b border-(--brd) flex-shrink-0 ${collapsed ? "justify-center px-4 py-[18px]" : "justify-between px-5 py-[18px]"}`}>
       {!collapsed && (
-        <button onClick={() => go("/")} className="lbl-anim font-black text-xs uppercase tracking-[0.22em] text-(--t2) hover:text-blue-600 transition-colors whitespace-nowrap">
+        <button onClick={() => go("/")} className="lbl font-black text-xs uppercase tracking-[0.22em] text-(--t2) hover:text-blue-600 transition-colors whitespace-nowrap">
         Code Future
         </button>
       )}
@@ -223,14 +222,14 @@ export default function Sidebar({}: SidebarProps) {
         }
         </div>
         {!collapsed && (
-          <div className="overflow-hidden lbl-anim">
+          <div className="overflow-hidden lbl">
           <p className="text-sm font-bold text-(--t1) truncate leading-tight">{user?.username}</p>
           <p className="text-[10px] uppercase tracking-widest font-bold text-(--t2)">{user?.role}</p>
           </div>
         )}
         </button>
 
-        {/* Notifications — directly under avatar */}
+        {/* Notifications */}
         <div className="border-b border-(--brd) flex-shrink-0 px-3 py-1">
         <button
         onClick={handleNotificationsClick}
@@ -250,10 +249,9 @@ export default function Sidebar({}: SidebarProps) {
           )}
           </div>
           </div>
-
           {!collapsed && (
             <>
-            <span className="flex-1 text-sm font-bold lbl-anim">{t.sidebar.notifications}</span>
+            <span className="flex-1 text-sm font-bold lbl">{t.sidebar.notifications}</span>
             <ChevronDown
             size={13}
             className={`transition-transform flex-shrink-0 ${isNotificationsPanelOpen ? "rotate-180" : ""}`}
@@ -326,7 +324,7 @@ export default function Sidebar({}: SidebarProps) {
               </div>
             )}
             <button
-            onClick={() => go("/notifications")}
+            onClick={() => go("/profile")}
             className="w-full py-2.5 mx-0 text-[10px] font-black uppercase tracking-widest text-blue-500 hover:bg-blue-500/10 transition-colors border-t border-(--brd) rounded-b-2xl"
             >
             {t.sidebar.notifMore}
@@ -340,26 +338,20 @@ export default function Sidebar({}: SidebarProps) {
           <NavItem icon={<UserCircle size={18} />}      label={t.sidebar.profile}   active={pathname === "/profile"}   collapsed={collapsed} onClick={() => go("/profile")} />
           <NavItem icon={<LayoutDashboard size={18} />} label={t.sidebar.mainPage}  active={pathname === "/dashboard"} collapsed={collapsed} onClick={() => go("/dashboard")} />
           <NavItem icon={<Search size={18} />}          label={t.sidebar.search}    active={pathname === "/search"}    collapsed={collapsed} onClick={() => go("/search")} />
-
-          {/* ── Tournaments ── */}
           <NavItem
           icon={<Trophy size={18} />}
-          label="Турніри"
+          label={t.sidebar.tournaments}
           active={pathname === "/tournaments" || pathname?.startsWith("/tournaments/")}
           collapsed={collapsed}
           onClick={() => go("/tournaments")}
           />
-
-          {/* Teams */}
           <NavItem
           icon={<Users size={18} />}
-          label="Команди"
+          label={t.sidebar.teams}
           active={pathname === "/teams" || pathname?.startsWith("/teams/")}
           collapsed={collapsed}
           onClick={() => go("/teams")}
           />
-
-          {/* Settings */}
           <NavItem
           icon={<Settings size={18} />}
           label={t.sidebar.settings}
@@ -371,7 +363,6 @@ export default function Sidebar({}: SidebarProps) {
 
           {isSettingsPanelOpen && !collapsed && (
             <div className="sd-anim mx-1 bg-(--bg) border border-(--brd) rounded-2xl p-4 space-y-4">
-            {/* Theme */}
             <div className="flex flex-col gap-2">
             <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">{t.settings.theme}</span>
             <button onClick={toggle} className="flex items-center justify-between px-3 py-2 rounded-xl bg-(--card) hover:bg-(--brd) transition border border-(--brd)">
@@ -381,7 +372,6 @@ export default function Sidebar({}: SidebarProps) {
             </div>
             </button>
             </div>
-            {/* Language */}
             <div className="flex flex-col gap-2">
             <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">{t.settings.lang}</span>
             <div className="flex bg-(--card) p-1 rounded-xl gap-1 border border-(--brd)">
@@ -393,7 +383,6 @@ export default function Sidebar({}: SidebarProps) {
             ))}
             </div>
             </div>
-            {/* Backend status */}
             <div className="pt-2 border-t border-(--brd)">
             <span className="text-[10px] font-black text-(--t2) uppercase tracking-tighter block mb-0.5">{t.settings.status}:</span>
             <span className="text-[10px] font-bold text-(--t1) break-all">{backendMessage}</span>
@@ -410,7 +399,7 @@ export default function Sidebar({}: SidebarProps) {
           className={`flex items-center gap-3 rounded-xl text-sm font-bold transition-colors text-(--t2) hover:text-red-500 hover:bg-red-500/5 w-full ${collapsed ? "justify-center p-3" : "px-4 py-2.5"}`}
           >
           <LogOut size={18} className="flex-shrink-0" />
-          {!collapsed && <span className="lbl-anim">{t.sidebar.logout}</span>}
+          {!collapsed && <span className="lbl">{t.sidebar.logout}</span>}
           </button>
           </div>
           </aside>
@@ -431,7 +420,7 @@ function NavItem({ icon, label, active, collapsed, onClick, suffix }: any) {
       {icon}
       </div>
       {!collapsed && (
-        <span className="flex-1 text-left lbl-anim overflow-hidden">
+        <span className="flex-1 text-left lbl overflow-hidden">
         {label}
         </span>
       )}

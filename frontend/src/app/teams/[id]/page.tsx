@@ -33,6 +33,16 @@ interface Team {
     telegram_url?: string;
     discord_url?: string;
     created_at?: string;
+    tournament_id?: string;
+}
+
+interface Tournament {
+    id: string;
+    name: string;
+    status?: string;
+    start_at?: string;
+    registration_from?: string;
+    registration_to?: string;
 }
 
 const gradients = [
@@ -79,6 +89,7 @@ export default function TeamProfilePage() {
     const [members, setMembers]     = useState<TeamMember[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError]         = useState<string | null>(null);
+    const [tournament, setTournament] = useState<Tournament | null>(null);
 
     const teamId = params.id as string;
 
@@ -97,12 +108,22 @@ export default function TeamProfilePage() {
                     // Fetch team
                     const { data: teamData, error: teamErr } = await supabase
                     .from("teams")
-                    .select("id, name, city_school_org, captain_id, members_ids, telegram_url, discord_url, created_at")
+                    .select("id, name, city_school_org, captain_id, members_ids, telegram_url, discord_url, created_at, tournament_id")
                     .eq("id", teamId)
                     .single();
 
                     if (teamErr || !teamData) throw new Error("Team not found");
                     setTeam(teamData);
+
+                    // Fetch tournament if team is registered
+                    if (teamData.tournament_id) {
+                        const { data: tourData } = await supabase
+                        .from("tournaments")
+                        .select("id, name, status, start_at, registration_from, registration_to")
+                        .eq("id", teamData.tournament_id)
+                        .single();
+                        if (tourData) setTournament(tourData);
+                    }
 
                     // Collect all user IDs to fetch (captain + members)
                     const allIds: string[] = [];
@@ -188,7 +209,7 @@ export default function TeamProfilePage() {
                 icon={<Users size={18} className="text-blue-600" />}
                 />
 
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 relative z-10">
 
                 {/* Breadcrumb */}
                 <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
@@ -319,6 +340,57 @@ export default function TeamProfilePage() {
                             <ExternalLink size={11} className="opacity-60" />
                             </a>
                         )}
+                        </div>
+                        </section>
+                    )}
+
+
+                    {/* Tournament */}
+                    {tournament && (
+                        <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-amber-500/20 shadow-sm overflow-hidden" style={{ animationDelay: "75ms" }}>
+                        <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-amber-500/5">
+                        <Shield size={14} className="text-amber-500" />
+                        <h2 className="text-xs font-black uppercase tracking-widest text-amber-500">Турнір</h2>
+                        </div>
+                        <div className="p-6 sm:p-8">
+                        <button
+                        onClick={() => router.push(`/tournaments/${tournament.id}`)}
+                        className="w-full flex items-center gap-4 group text-left"
+                        >
+                        <div className="w-11 h-11 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 flex-shrink-0">
+                        <Shield size={18} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="font-black text-(--t1) text-sm truncate group-hover:text-amber-500 transition-colors">
+                        {tournament.name}
+                        </span>
+                        {tournament.status && (
+                            <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${
+                                tournament.status === "active" || tournament.status === "ongoing"
+                                ? "text-green-500 bg-green-500/10 border-green-500/20"
+                                : tournament.status === "registration"
+                                ? "text-purple-500 bg-purple-500/10 border-purple-500/20"
+                                : tournament.status === "upcoming"
+                                ? "text-blue-500 bg-blue-500/10 border-blue-500/20"
+                                : "text-(--t2) bg-(--bg) border-(--brd)"
+                            }`}>
+                            {tournament.status === "active" || tournament.status === "ongoing" ? "Активний"
+                                : tournament.status === "registration" ? "Реєстрація"
+                                : tournament.status === "upcoming" ? "Очікується"
+                                : tournament.status === "finished" ? "Завершено"
+                                : tournament.status}
+                                </span>
+                        )}
+                        </div>
+                        {tournament.start_at && (
+                            <p className="text-[10px] font-bold text-(--t2)">
+                            Початок: {new Date(tournament.start_at).toLocaleDateString("uk-UA", { day: "2-digit", month: "long", year: "numeric" })}
+                            </p>
+                        )}
+                        </div>
+                        <ExternalLink size={14} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </button>
                         </div>
                         </section>
                     )}
