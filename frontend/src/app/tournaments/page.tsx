@@ -22,6 +22,7 @@ interface Tournament {
     max_teams?: number;
     rounds?: number;
     status: TournamentStatus;
+    end_at?: string;
     team_count: number;
 }
 
@@ -78,7 +79,7 @@ export default function TournamentsPage() {
                 // Запрос 1: все турниры
                 const { data: tournamentsData, error: tErr } = await supabase
                 .from("tournaments")
-                .select("id, name, rules, start_at, registration_from, registration_to, max_teams, rounds")
+                .select("id, name, rules, start_at, end_at, registration_from, registration_to, max_teams, rounds, status")
                 .order("start_at", { ascending: true });
 
                 if (tErr) throw tErr;
@@ -110,7 +111,9 @@ export default function TournamentsPage() {
                     max_teams: item.max_teams,
                     rounds: item.rounds,
                     team_count: countMap[item.id] ?? 0,
-                    status: item.status ?? computeStatus(item),
+                    // FIX: беремо status напряму з БД — його оновлює шедулер бекенду
+                    status: (item.status as TournamentStatus) ?? computeStatus(item),
+                                                                                         end_at: item.end_at,
                 }));
 
                 setTournaments(mapped);
@@ -184,11 +187,11 @@ export default function TournamentsPage() {
                 }`}
                 >
                 {f === "all" ? t.tournaments.filterAll
-                  : f === "upcoming" ? t.tournaments.filterUpcoming
-                  : f === "registration" ? t.tournaments.filterRegistration
-                  : f === "ongoing" ? t.tournaments.filterOngoing
-                  : t.tournaments.filterFinished}
-                </button>
+                    : f === "upcoming" ? t.tournaments.filterUpcoming
+                    : f === "registration" ? t.tournaments.filterRegistration
+                    : f === "ongoing" ? t.tournaments.filterOngoing
+                    : t.tournaments.filterFinished}
+                    </button>
             ))}
             </div>
 
@@ -227,10 +230,10 @@ export default function TournamentsPage() {
                     ? tournament.max_teams - tournament.team_count
                     : null;
                     const statusLabel =
-                        tournament.status === "upcoming"     ? t.tournaments.statusUpcoming :
-                        tournament.status === "registration" ? t.tournaments.statusRegistration :
-                        tournament.status === "ongoing"      ? t.tournaments.statusOngoing :
-                        t.tournaments.statusFinished;
+                    tournament.status === "upcoming"     ? t.tournaments.statusUpcoming :
+                    tournament.status === "registration" ? t.tournaments.statusRegistration :
+                    tournament.status === "ongoing"      ? t.tournaments.statusOngoing :
+                    t.tournaments.statusFinished;
                     const statusColor = STATUS_COLORS[tournament.status];
 
                     return (

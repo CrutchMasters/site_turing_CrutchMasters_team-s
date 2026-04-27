@@ -130,11 +130,11 @@ export default function RegisterTourney() {
   // але .toISOString() повертає UTC — без компенсації час зміщується на UTC offset.
   const toTimestamp = (date: string, time: string): string | null => {
     if (!date) return null;
+    // new Date('YYYY-MM-DDTHH:mm:ss') парсить як локальний час,
+    // .toISOString() сам конвертує в UTC — жодна ручна компенсація не потрібна.
+    // Попередній код робив подвійний зсув (додавав offset замість віднімати).
     const localStr = `${date}T${time || '00:00'}:00`;
-    const localDate = new Date(localStr);
-    // Компенсуємо різницю між локальним часом і UTC
-    const offsetMs = localDate.getTimezoneOffset() * 60 * 1000;
-    return new Date(localDate.getTime() + offsetMs).toISOString();
+    return new Date(localStr).toISOString();
   };
 
   const API_URL =

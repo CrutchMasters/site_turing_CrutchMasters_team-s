@@ -390,9 +390,39 @@ export default function RoundPage() {
     };
 
     const allAttachments: RoundAttachment[] = React.useMemo(() => {
-        const merged = [...(round?.attachments ?? []), ...(round?.links ?? [])];
+        // Нормалізуємо attachments — мають бути об'єкти {id, name, url, type}
+        const normalizeAttachments = (arr: unknown[]): RoundAttachment[] =>
+        arr.flatMap((a, i): RoundAttachment[] => {
+            if (!a) return [];
+            // Старий формат: просто рядок-URL в масиві links
+            if (typeof a === "string") {
+                if (!a.trim()) return [];
+                let host = a;
+                try { host = new URL(a).hostname.replace("www.", ""); } catch {}
+                return [{ id: `link-legacy-${i}`, name: host, url: a, type: "link" }];
+            }
+            // Новий формат: об'єкт з полями
+            const obj = a as Partial<RoundAttachment>;
+            if (!obj.url) return [];
+            return [{
+                id:   obj.id   ?? `att-${i}`,
+                name: obj.name ?? obj.url,
+                url:  obj.url,
+                type: (obj.type === "file" ? "file" : "link") as "link" | "file",
+            }];
+        });
+
+        const fromAttachments = normalizeAttachments(round?.attachments ?? []);
+        const fromLinks       = normalizeAttachments(round?.links       ?? []);
+        const merged          = [...fromAttachments, ...fromLinks];
+
+        // Прибираємо дублікати за id
         const seen = new Set<string>();
-        return merged.filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
+        return merged.filter(a => {
+            if (seen.has(a.id)) return false;
+            seen.add(a.id);
+            return true;
+        });
     }, [round]);
 
     const links        = allAttachments.filter(a => a.type === "link");
