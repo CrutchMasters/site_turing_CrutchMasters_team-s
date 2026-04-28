@@ -104,26 +104,24 @@ export default function TeamsPage() {
         }, [user]);
 
         // Fetch my teams (captain)
-        useEffect(() => {
+        const fetchMyTeams = async () => {
             if (!user) return;
-            const fetchMyTeams = async () => {
-                setLoadingMy(true);
-                try {
-                    const { data, error } = await supabase
-                    .from("teams")
-                    .select("id, name, city_school_org, captain_id, members_ids, telegram_url, discord_url, created_at")
-                    .eq("captain_id", user.id)
-                    .order("created_at", { ascending: false });
-                    if (error) throw error;
-                    setMyTeams(data ?? []);
-                } catch (e) {
-                    console.error("Failed to fetch my teams:", e);
-                } finally {
-                    setLoadingMy(false);
-                }
-            };
-            fetchMyTeams();
-        }, [user]);
+            setLoadingMy(true);
+            try {
+                const { data, error } = await supabase
+                .from("teams")
+                .select("id, name, city_school_org, captain_id, members_ids, telegram_url, discord_url, created_at")
+                .eq("captain_id", user.id)
+                .order("created_at", { ascending: false });
+                if (error) throw error;
+                setMyTeams(data ?? []);
+            } catch (e) {
+                console.error("Failed to fetch my teams:", e);
+            } finally {
+                setLoadingMy(false);
+            }
+        };
+        useEffect(() => { fetchMyTeams(); }, [user]);
 
         // Filter search
         useEffect(() => {
@@ -144,12 +142,17 @@ export default function TeamsPage() {
             setIsDeleting(true);
             setDeleteError("");
             try {
-                const { error } = await supabase.from("teams").delete().eq("id", deleteTarget.id);
+                const { error } = await supabase.rpc("delete_team", {
+                    p_team_id: deleteTarget.id,
+                });
+
                 if (error) throw error;
-                setMyTeams(prev => prev.filter(t => t.id !== deleteTarget.id));
+
+                await fetchMyTeams();
                 setAllTeams(prev => prev.filter(t => t.id !== deleteTarget.id));
                 setDeleteTarget(null);
             } catch (e: any) {
+                console.error("[DELETE] caught:", e);
                 setDeleteError(e.message ?? "Помилка видалення");
             } finally {
                 setIsDeleting(false);
