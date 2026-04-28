@@ -74,6 +74,28 @@ function PortalDropdown({
   );
 }
 
+// ── User avatar with fallback to initials ────────────────────────────────────
+function UserAvatar({ user, variant = "md" }: { user: SearchedUser; variant?: "sm" | "md" }) {
+  const [imgError, setImgError] = useState(false);
+  const initial = (user.username || user.login || "?").charAt(0).toUpperCase();
+  const sizeClass = variant === "sm" ? "w-6 h-6 text-[10px]" : "w-8 h-8 text-sm";
+  if (user.avatar_url && !imgError) {
+    return (
+      <img
+        src={user.avatar_url}
+        alt={user.username}
+        onError={() => setImgError(true)}
+        className={`${sizeClass} rounded-full object-cover flex-shrink-0 border border-blue-600/25`}
+      />
+    );
+  }
+  return (
+    <div className={`${sizeClass} rounded-full bg-blue-600 flex items-center justify-center text-white font-black flex-shrink-0`}>
+      {initial}
+    </div>
+  );
+}
+
 // ── User search field with dropdown ──────────────────────────────────────────
 function UserSearchDropdown({
   label,
@@ -150,9 +172,7 @@ function UserSearchDropdown({
       <div className="flex flex-col gap-1.5">
       <label className="text-[10px] font-black text-(--t2) uppercase tracking-[0.15em] ml-1">{label}</label>
       <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-(--bg) border border-blue-600/40">
-      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-black text-sm flex-shrink-0">
-      {letter(selected)}
-      </div>
+      <UserAvatar key={selected.avatar_url ?? selected.id} user={selected} variant="md" />
       <div className="flex-1 min-w-0">
       <p className="font-black text-(--t1) text-sm truncate">{selected.username}</p>
       <p className="text-[10px] text-(--t2) font-bold">@{selected.login}</p>
@@ -221,9 +241,7 @@ function UserSearchDropdown({
           borderTop: i > 0 ? "1px solid var(--brd)" : "none",
         }}
         >
-        <div className="w-8 h-8 rounded-full bg-blue-600/15 border border-blue-600/25 flex items-center justify-center text-blue-600 font-black text-sm flex-shrink-0">
-        {letter(u)}
-        </div>
+        <UserAvatar user={u} variant="md" />
         <div className="flex-1 min-w-0">
         <p className="text-sm font-black text-(--t1) truncate leading-tight">{u.username}</p>
         <p className="text-[10px] text-(--t2) font-bold">@{u.login}</p>
@@ -244,12 +262,9 @@ function UserSearchDropdown({
 
 // ── Member chip ───────────────────────────────────────────────────────────────
 function MemberChip({ user: u, onRemove }: { user: SearchedUser; onRemove: () => void }) {
-  const letter = (u.username || u.login || "?").charAt(0).toUpperCase();
   return (
     <div className="flex items-center gap-2 bg-(--bg) border border-(--brd) rounded-xl px-3 py-2 hover:border-red-400/40 transition-all">
-    <div className="w-6 h-6 rounded-full bg-blue-600/15 border border-blue-600/25 flex items-center justify-center text-blue-600 font-black text-[10px] flex-shrink-0">
-    {letter}
-    </div>
+    <UserAvatar user={u} variant="sm" />
     <span className="text-xs font-bold text-(--t1) max-w-[100px] truncate">{u.username}</span>
     <button type="button" onClick={onRemove} className="text-(--t2) hover:text-red-500 transition-colors ml-0.5">
     <X size={12} />
@@ -358,9 +373,13 @@ export default function RegisterTeamPage() {
   };
 
   useEffect(() => {
-    // Set captain to current user only if draft had no captain saved
-    if (user && !captain) {
+    if (!user) return;
+    if (!captain) {
+      // Вперше — встановлюємо капітана з поточного юзера
       setCaptain({ id: user.id, username: user.username, login: user.login, email: user.email, role: user.role, avatar_url: user.avatar_url });
+    } else if (captain.id === user.id && captain.avatar_url !== user.avatar_url) {
+      // Якщо капітан — це поточний юзер і avatar_url оновився (після refreshRole) — синхронізуємо
+      setCaptain(prev => prev ? { ...prev, avatar_url: user.avatar_url } : prev);
     }
   }, [user]);
 
