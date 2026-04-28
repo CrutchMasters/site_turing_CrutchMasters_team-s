@@ -5,6 +5,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
@@ -41,6 +42,7 @@ export default function EditTeamPage() {
     const params = useParams();
     const { dark } = useTheme();
     const { user, isLoading: authLoading } = useAuth();
+    const { t } = useLanguage();
 
     const teamId = params.id as string;
 
@@ -85,7 +87,7 @@ export default function EditTeamPage() {
                     .eq("id", teamId)
                     .single();
 
-                    if (teamErr || !teamData) throw new Error("Команду не знайдено");
+                    if (teamErr || !teamData) throw new Error(t.editTeam.errLoadTeam);
 
                     // Only captain can edit
                     if (teamData.captain_id !== user.id) {
@@ -123,7 +125,7 @@ export default function EditTeamPage() {
                         setMembers(memberList);
                     }
                 } catch (e: any) {
-                    setError(e.message ?? "Не вдалося завантажити команду");
+                    setError(e.message ?? t.editTeam.errLoadFailed);
                 } finally {
                     setIsLoading(false);
                 }
@@ -173,7 +175,7 @@ export default function EditTeamPage() {
                 setMembers(prev => [...prev, member]);
                 setSearchResults(prev => prev.filter(u => u.id !== member.id));
             } catch (e: any) {
-                setError(e.message ?? "Не вдалося додати учасника");
+                setError(e.message ?? t.editTeam.errAddMember);
             } finally {
                 setAddingId(null);
             }
@@ -193,7 +195,7 @@ export default function EditTeamPage() {
                 setMembers(prev => prev.filter(m => m.id !== member.id));
                 setConfirmRemove(null);
             } catch (e: any) {
-                setError(e.message ?? "Не вдалося видалити учасника");
+                setError(e.message ?? t.editTeam.errRemoveMember);
             } finally {
                 setRemovingId(null);
             }
@@ -217,7 +219,7 @@ export default function EditTeamPage() {
                 setSaveSuccess(true);
                 setTimeout(() => setSaveSuccess(false), 2500);
             } catch (e: any) {
-                setError(e.message ?? "Не вдалося зберегти зміни");
+                setError(e.message ?? t.editTeam.errSave);
             } finally {
                 setIsSaving(false);
             }
@@ -257,9 +259,9 @@ export default function EditTeamPage() {
                 <div className="w-12 h-12 rounded-full bg-red-500/10 border-2 border-red-500/20 flex items-center justify-center mx-auto mb-4">
                 <UserMinus size={20} className="text-red-500" />
                 </div>
-                <h2 className="text-base font-black text-(--t1) uppercase mb-1">Видалити учасника?</h2>
+                <h2 className="text-base font-black text-(--t1) uppercase mb-1">{t.editTeam.removeMemberTitle}</h2>
                 <p className="text-sm text-(--t2) mb-5">
-                Видалити <span className="font-black text-(--t1)">{confirmRemove.username}</span> з команди?
+                {t.editTeam.removeMemberConfirm.replace("{name}", confirmRemove.username)}
                 </p>
                 <div className="flex gap-3">
                 <button
@@ -267,7 +269,7 @@ export default function EditTeamPage() {
                 disabled={!!removingId}
                 className="flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) bg-(--bg) text-(--t2) hover:bg-(--card) transition-all active:scale-95"
                 >
-                Скасувати
+                {t.editTeam.cancelBtn}
                 </button>
                 <button
                 onClick={() => handleRemoveMember(confirmRemove)}
@@ -275,7 +277,7 @@ export default function EditTeamPage() {
                 className="flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest bg-red-600 text-white hover:bg-red-700 transition-all active:scale-95 flex items-center justify-center gap-2"
                 >
                 {removingId ? <Loader size={13} className="animate-spin" /> : <UserMinus size={13} />}
-                Видалити
+                {t.editTeam.removeMemberBtn}
                 </button>
                 </div>
                 </div>
@@ -297,7 +299,7 @@ export default function EditTeamPage() {
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
             <MobileHeader
             onOpenSidebar={() => setIsMobileSidebarOpen(true)}
-            title="Редагування команди"
+            title={t.editTeam.mobileTitle}
             icon={<Pencil size={18} className="text-blue-600" />}
             />
 
@@ -305,13 +307,13 @@ export default function EditTeamPage() {
 
             {/* Breadcrumb */}
             <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-            <button onClick={() => router.push("/dashboard")} className="hover:text-blue-600 transition-colors">Головна</button>
+            <button onClick={() => router.push("/dashboard")} className="hover:text-blue-600 transition-colors">{t.editTeam.breadcrumbHome}</button>
             <ChevronRight size={10} />
-            <button onClick={() => router.push("/my_teams")} className="hover:text-blue-600 transition-colors">Мої команди</button>
+            <button onClick={() => router.push("/teams")} className="hover:text-blue-600 transition-colors">{t.editTeam.breadcrumbTeams}</button>
             <ChevronRight size={10} />
             <button onClick={() => router.push(`/teams/${teamId}`)} className="hover:text-blue-600 transition-colors truncate max-w-[120px]">{team?.name}</button>
             <ChevronRight size={10} />
-            <span className="text-(--t1)">Редагування</span>
+            <span className="text-(--t1)">{t.editTeam.breadcrumbEdit}</span>
             </nav>
 
             {/* Page header */}
@@ -324,7 +326,7 @@ export default function EditTeamPage() {
             </button>
             <div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-(--t1) uppercase">
-            Редагування команди
+            {t.editTeam.pageTitle}
             </h1>
             <p className="text-(--t2) text-xs font-bold uppercase tracking-widest mt-0.5">
             {team?.name}
@@ -346,18 +348,18 @@ export default function EditTeamPage() {
             <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) shadow-sm overflow-hidden">
             <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd)">
             <Pencil size={14} className="text-blue-600" />
-            <h2 className="text-xs font-black uppercase tracking-widest text-(--t1)">Основна інформація</h2>
+            <h2 className="text-xs font-black uppercase tracking-widest text-(--t1)">{t.editTeam.basicInfo}</h2>
             </div>
             <div className="p-6 sm:p-8 space-y-4">
             <div>
             <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-2">
-            Назва команди <span className="text-red-500">*</span>
+            {t.editTeam.teamNameLabel} <span className="text-red-500">*</span>
             </label>
             <input
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="Введіть назву команди"
+            placeholder={t.editTeam.teamNamePlaceholder}
             className={inputClass}
             maxLength={64}
             />
@@ -368,13 +370,13 @@ export default function EditTeamPage() {
 
             <div>
             <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-2">
-            Місто / Школа / Організація
+            {t.editTeam.citySchoolOrg}
             </label>
             <input
             type="text"
             value={citySchoolOrg}
             onChange={e => setCitySchoolOrg(e.target.value)}
-            placeholder="Напр. Київ, Школа №42"
+            placeholder={t.editTeam.citySchoolOrgPlaceholder}
             className={inputClass}
             maxLength={128}
             />
@@ -420,11 +422,11 @@ export default function EditTeamPage() {
             }`}
             >
             {isSaving ? (
-                <><Loader size={14} className="animate-spin" /> Збереження...</>
+                <><Loader size={14} className="animate-spin" /> {t.editTeam.saving}</>
             ) : saveSuccess ? (
-                <><Check size={14} /> Збережено!</>
+                <><Check size={14} /> {t.editTeam.saved}</>
             ) : (
-                <><Save size={14} /> Зберегти зміни</>
+                <><Save size={14} /> {t.editTeam.saveBtn}</>
             )}
             </button>
             </div>
@@ -436,7 +438,7 @@ export default function EditTeamPage() {
                 <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-amber-500/20 shadow-sm overflow-hidden" style={{ animationDelay: "60ms" }}>
                 <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-amber-500/10 bg-amber-500/5">
                 <Crown size={14} className="text-amber-500" />
-                <h2 className="text-xs font-black uppercase tracking-widest text-amber-500">Капітан команди</h2>
+                <h2 className="text-xs font-black uppercase tracking-widest text-amber-500">{t.editTeam.captainSection}</h2>
                 </div>
                 <div className="p-6 sm:p-8">
                 <MemberRowDisplay member={captain} isCaptain />
@@ -449,7 +451,7 @@ export default function EditTeamPage() {
             <div className="flex items-center justify-between px-6 sm:px-8 py-4 border-b border-(--brd)">
             <div className="flex items-center gap-3">
             <Users size={14} className="text-blue-600" />
-            <h2 className="text-xs font-black uppercase tracking-widest text-(--t1)">Учасники</h2>
+            <h2 className="text-xs font-black uppercase tracking-widest text-(--t1)">{t.editTeam.membersSection}</h2>
             </div>
             <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg bg-(--bg) border border-(--brd) text-(--t2)">
             {members.length} / 10
@@ -460,7 +462,7 @@ export default function EditTeamPage() {
             <div className="divide-y divide-(--brd)">
             {members.length === 0 ? (
                 <div className="px-6 sm:px-8 py-10 text-center">
-                <p className="text-[11px] font-black uppercase tracking-widest text-(--t2)">Учасників ще немає</p>
+                <p className="text-[11px] font-black uppercase tracking-widest text-(--t2)">{t.editTeam.noMembers}</p>
                 </div>
             ) : (
                 members.map((m, i) => (
@@ -486,14 +488,14 @@ export default function EditTeamPage() {
             {members.length < 10 && (
                 <div className="px-6 sm:px-8 py-5 border-t border-(--brd) bg-(--bg)/40">
                 <p className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-3 flex items-center gap-2">
-                <UserPlus size={12} className="text-blue-600" /> Додати учасника
+                <UserPlus size={12} className="text-blue-600" /> {t.editTeam.addMember}
                 </p>
                 <div className="flex gap-2">
                 <div className="relative flex-1">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-(--t2) pointer-events-none w-4 h-4" />
                 <input
                 type="text"
-                placeholder="Пошук за ім'ям, логіном або email..."
+                placeholder={t.editTeam.searchMemberPlaceholder}
                 value={memberSearch}
                 onChange={e => setMemberSearch(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleSearch()}
@@ -536,7 +538,7 @@ export default function EditTeamPage() {
                         >
                         {addingId === person.id
                             ? <Loader size={12} className="animate-spin" />
-                            : <><UserPlus size={12} /> Додати</>
+                            : <><UserPlus size={12} /> {t.editTeam.addMemberBtn}</>
                         }
                         </button>
                         </div>
@@ -546,7 +548,7 @@ export default function EditTeamPage() {
 
                 {searchResults.length === 0 && memberSearch.trim() && !isSearching && (
                     <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest mt-3 text-center">
-                    Нікого не знайдено
+                    {t.editTeam.noSearchResults}
                     </p>
                 )}
                 </div>
@@ -559,7 +561,7 @@ export default function EditTeamPage() {
             onClick={() => router.push(`/teams/${teamId}`)}
             className="flex items-center gap-2 text-(--t2) font-black text-xs uppercase tracking-widest hover:text-blue-600 transition-colors"
             >
-            <ArrowLeft size={14} /> Повернутись до команди
+            <ArrowLeft size={14} /> {t.editTeam.backToTeam}
             </button>
             </div>
 
