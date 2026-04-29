@@ -236,7 +236,7 @@ export default function TeamsPage() {
 
                 <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
                 {/* Breadcrumb */}
-                <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
+                <nav className="max-w-6xl mx-auto flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
                 <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">
                 {t.nav.home}
                 </button>
@@ -245,12 +245,12 @@ export default function TeamsPage() {
                 </nav>
 
                 {/* Page title */}
-                <h1 className="text-2xl sm:text-3xl font-black text-(--t1) uppercase tracking-tight mb-8">
+                <h1 className="max-w-6xl mx-auto text-2xl sm:text-3xl font-black text-(--t1) uppercase tracking-tight mb-8">
                 {t.teams.title}
                 </h1>
 
                 {/* Two-column layout */}
-                <div className="max-w-6xl flex flex-col xl:flex-row gap-6 items-start">
+                <div className="max-w-6xl mx-auto flex flex-col xl:flex-row gap-6 items-start">
 
                 {/* ── LEFT: Search panel ── */}
                 <div className="flex-1 min-w-0 flex flex-col gap-4">
@@ -300,7 +300,7 @@ export default function TeamsPage() {
                     <p className="text-(--t2) text-sm">{searchQuery ? t.common.na : t.teams.notFoundHint}</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 justify-items-center md:justify-items-stretch">
                     {filtered.map((team, idx) => (
                         <SearchTeamCard
                         key={team.id}
@@ -442,7 +442,7 @@ function SearchTeamCard({
         )}
         {team.created_at && (
             <div className="ml-auto text-[8px] font-bold text-(--t2) uppercase flex-shrink-0">
-            {new Date(team.created_at).toLocaleDateString(localeMap[locale] ?? "uk-UA", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+            {new Date(team.created_at).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit", year: "2-digit" })}
             </div>
         )}
         </div>
