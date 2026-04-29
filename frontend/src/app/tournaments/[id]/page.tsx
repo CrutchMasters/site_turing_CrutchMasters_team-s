@@ -415,13 +415,11 @@ export default function TournamentPage() {
                 const end = round.end_at ? new Date(round.end_at).getTime() : null;
 
                 let statusLabel = "Очікується";
-                let statusColor = "text-(--t2)";
-                let statusBg = "bg-(--bg)";
-                let statusBorder = "border-(--brd)";
-                let dotColor = "bg-gray-400";
+                const statusColor = "text-(--t2)";
+                const statusBg = "bg-(--bg)";
+                const statusBorder = "border-(--brd)";
+                const dotColor = "bg-gray-400";
 
-                // FIX: пріоритет статусу з БД (оновлюється шедулером)
-                // Дати — лише як fallback якщо status відсутній
                 const dbStatus = round.status;
                 const isFinished = dbStatus === "finished" || (!dbStatus && end && now > end);
                 const isActive   = dbStatus === "active"   || (!dbStatus && start && end && now >= start && now <= end);
@@ -429,18 +427,10 @@ export default function TournamentPage() {
 
                 if (isFinished) {
                     statusLabel = "Завершено";
-                    statusColor = "text-(--t2)";
-                    dotColor = "bg-gray-400";
                 } else if (isActive) {
                     statusLabel = "Активний";
-                    statusColor = "text-green-500";
-                    statusBg = "bg-green-500/5";
-                    statusBorder = "border-green-500/20";
-                    dotColor = "bg-green-500";
                 } else if (isPending) {
                     statusLabel = "Очікується";
-                    statusColor = "text-amber-500";
-                    dotColor = "bg-amber-400";
                 }
 
                 const isLocked = isFinished;

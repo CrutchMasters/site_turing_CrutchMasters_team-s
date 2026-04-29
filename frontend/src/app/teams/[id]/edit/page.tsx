@@ -181,16 +181,19 @@ export default function EditTeamPage() {
             }
         };
 
-        const handleRemoveMember = async (member: TeamMember) => {
+        const handleRemoveMember = useCallback(async (member: TeamMember) => {
             if (!team) return;
             setRemovingId(member.id);
             try {
-                const newIds = (team.members_ids ?? []).filter(id => id !== member.id);
-                const { error } = await supabase
-                .from("teams")
-                .update({ members_ids: newIds })
-                .eq("id", team.id);
+                const { data, error } = await supabase
+                    .rpc("remove_team_member", {
+                        p_team_id: team.id,
+                        p_member_id: member.id,
+                    });
                 if (error) throw error;
+                if (data?.error) throw new Error(data.error);
+
+                const newIds: string[] = (data.members_ids ?? []);
                 setTeam(prev => prev ? { ...prev, members_ids: newIds } : prev);
                 setMembers(prev => prev.filter(m => m.id !== member.id));
                 setConfirmRemove(null);
@@ -199,7 +202,7 @@ export default function EditTeamPage() {
             } finally {
                 setRemovingId(null);
             }
-        };
+        }, [team, t]);
 
         const handleSave = async () => {
             if (!team || !name.trim()) return;

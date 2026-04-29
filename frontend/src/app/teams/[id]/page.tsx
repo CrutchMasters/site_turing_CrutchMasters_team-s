@@ -13,6 +13,7 @@ import {
     Shield, Star, Send, MessageSquare, Calendar,
     ExternalLink, Copy, Check,
 } from "lucide-react";
+import { useLanguage } from "@/context/LanguageContext";
 
 interface TeamMember {
     id: string;
@@ -84,6 +85,7 @@ export default function TeamProfilePage() {
     const { dark } = useTheme();
     const { user, isLoading: authLoading } = useAuth();
 
+    const { locale } = useLanguage();
     const [team, setTeam]           = useState<Team | null>(null);
     const [captain, setCaptain]     = useState<TeamMember | null>(null);
     const [members, setMembers]     = useState<TeamMember[]>([]);
@@ -261,7 +263,7 @@ export default function TeamProfilePage() {
                     <div className={`h-2 w-full bg-gradient-to-r ${gradient}`} />
 
                     <div className="p-6 sm:p-8">
-                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-left">
                     {/* Avatar */}
                     <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-2xl sm:rounded-3xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-black text-3xl sm:text-4xl flex-shrink-0 shadow-lg`}>
                     {initial}
@@ -296,7 +298,7 @@ export default function TeamProfilePage() {
                         <div className="flex items-center gap-1.5 text-(--t2)">
                         <Calendar size={14} />
                         <span className="text-[11px] font-black uppercase tracking-wider">
-                        {new Date(team.created_at).toLocaleDateString("uk-UA", { day: "2-digit", month: "long", year: "numeric" })}
+                        {new Date(team.created_at).toLocaleDateString(locale === "ua" ? "uk-UA" : locale === "ru" ? "ru-RU" : "en-GB", { day: "2-digit", month: "long", year: "numeric" })}
                         </span>
                         </div>
                     )}
@@ -305,7 +307,7 @@ export default function TeamProfilePage() {
                     </div>
 
                     {/* ID row */}
-                    <div className="mt-5 pt-4 border-t border-(--brd) flex items-center gap-2">
+                    <div className="mt-5 pt-4 border-t border-(--brd) flex items-center justify-center sm:justify-start gap-2">
                     <span className="text-[9px] font-black uppercase tracking-widest text-(--t2)">ID:</span>
                     <span className="text-[10px] font-bold text-(--t2) font-mono">{team.id}</span>
                     <CopyButton text={team.id} />
