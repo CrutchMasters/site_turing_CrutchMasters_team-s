@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   User, Mail, Shield, ChevronRight, UserCircle, ArrowLeft, Loader,
@@ -265,8 +266,8 @@ function CodeInput({ value, onChange, disabled }: { value: string; onChange: (v:
 // ── Edit Profile Section ──────────────────────────────────────────────────────
 type PwStep = "idle" | "sending" | "code" | "verifying" | "newpw" | "done";
 
-function EditProfileSection({ profileUser, onSave, onCancel }: {
-  profileUser: any; onSave: (updated: { username: string; login: string }) => void; onCancel: () => void;
+function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
+  profileUser: any; onSave: (updated: { username: string; login: string }) => void; onCancel: () => void; onModalChange?: (open: boolean) => void;
 }) {
   const [username, setUsername] = useState(profileUser.username ?? "");
   const [login, setLogin]       = useState(profileUser.login ?? "");
@@ -280,6 +281,7 @@ function EditProfileSection({ profileUser, onSave, onCancel }: {
   const [showConfirm, setShowConfirm] = useState(false);
   const [pwError, setPwError]   = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [showPwModal, setShowPwModal] = useState(false);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -306,7 +308,9 @@ function EditProfileSection({ profileUser, onSave, onCancel }: {
   async function sendCode() {
     setPwError(null); setPwStep("sending");
     try {
-      const { error } = await supabase.auth.signInWithOtp({ email: profileUser.email, options: { shouldCreateUser: false } });
+      const { error } = await supabase.auth.resetPasswordForEmail(profileUser.email, {
+        redirectTo: undefined,
+      });
       if (error) throw error;
       setPwStep("code"); setResendCooldown(60);
     } catch (e: any) { setPwError(e?.message ?? "Помилка відправки"); setPwStep("idle"); }
@@ -315,7 +319,7 @@ function EditProfileSection({ profileUser, onSave, onCancel }: {
     if (!/^\d{6}$/.test(code)) return setPwError("Введіть 6-значний код");
     setPwError(null); setPwStep("verifying");
     try {
-      const { error } = await supabase.auth.verifyOtp({ email: profileUser.email, token: code, type: "email" });
+      const { error } = await supabase.auth.verifyOtp({ email: profileUser.email, token: code, type: "recovery" });
       if (error) throw error;
       setPwStep("newpw");
     } catch { setPwError("Невірний або застарілий код."); setPwStep("code"); }
@@ -330,7 +334,7 @@ function EditProfileSection({ profileUser, onSave, onCancel }: {
       setPwStep("done"); setCode(""); setNewPw(""); setConfirmPw("");
     } catch (e: any) { setPwError(e?.message ?? "Помилка"); setPwStep("newpw"); }
   }
-  function resetPw() { setPwStep("idle"); setCode(""); setNewPw(""); setConfirmPw(""); setPwError(null); }
+  function resetPw() { setPwStep("idle"); setCode(""); setNewPw(""); setConfirmPw(""); setPwError(null); setShowPwModal(false); onModalChange?.(false); }
 
   const inputClass = "w-full px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all";
   const codeIsValid = /^\d{6}$/.test(code);
@@ -363,92 +367,254 @@ function EditProfileSection({ profileUser, onSave, onCancel }: {
     </div>
     </div>
     <div className="border-t border-(--brd)" />
-    <div className="space-y-3">
-    <h3 className="text-xs font-black uppercase tracking-widest text-(--t2) flex items-center gap-2"><KeyRound size={12} /> Зміна пароля</h3>
-    {pwStep === "idle" && (
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-      <p className="text-xs font-medium text-(--t2)">Код надійде на <span className="font-black text-(--t1)">{profileUser.email}</span></p>
-      <button onClick={sendCode} className="flex items-center gap-2 border border-(--brd) text-(--t2) font-black text-xs uppercase tracking-widest rounded-xl px-4 py-2.5 hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all whitespace-nowrap">
-      <KeyRound size={13} /> Змінити пароль
-      </button>
-      </div>
-    )}
-    {pwStep === "sending" && <div className="flex items-center gap-3 py-2 text-(--t2)"><Loader size={15} className="animate-spin text-blue-600" /><span className="text-sm font-bold">Надсилання...</span></div>}
-    {pwStep === "code" && (
-      <div className="space-y-4">
-      <div className="text-center">
-      <div className="w-12 h-12 rounded-2xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center mx-auto mb-3"><Mail size={20} className="text-blue-600" /></div>
-      <p className="font-black text-(--t1) text-sm mb-1">Перевірте пошту</p>
-      <p className="text-xs text-(--t2) font-medium">Код надіслано на <span className="font-black text-(--t1)">{profileUser.email}</span></p>
-      </div>
-      <CodeInput value={code} onChange={setCode} />
-      {pwError && <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-bold"><AlertCircle size={13} className="flex-shrink-0" /> {pwError}</div>}
-      <div className="flex flex-col sm:flex-row gap-2">
-      <button onClick={verifyCode} disabled={!codeIsValid}
-      className={`flex-1 flex items-center justify-center gap-2 font-black text-xs uppercase tracking-widest rounded-xl px-5 py-3 active:scale-95 transition-all shadow-lg ${codeIsValid ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-600/20" : "bg-(--brd) text-(--t2) cursor-not-allowed opacity-50 shadow-none"}`}>
-      <CheckCircle size={13} /> Підтвердити
-      </button>
-      <button onClick={() => { if (resendCooldown === 0) sendCode(); }} disabled={resendCooldown > 0}
-      className="flex items-center justify-center gap-2 border border-(--brd) text-(--t2) font-black text-xs uppercase tracking-widest rounded-xl px-4 py-3 hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all disabled:opacity-40">
-      <RefreshCw size={13} /> {resendCooldown > 0 ? `(${resendCooldown}с)` : "Ще раз"}
-      </button>
-      <button onClick={resetPw} className="text-xs font-black uppercase tracking-widest text-(--t2) hover:text-red-500 transition-colors px-2">Скасувати</button>
-      </div>
-      </div>
-    )}
-    {pwStep === "verifying" && <div className="flex items-center gap-3 py-2 text-(--t2)"><Loader size={15} className="animate-spin text-blue-600" /><span className="text-sm font-bold">Перевірка...</span></div>}
-    {pwStep === "newpw" && (
-      <div className="space-y-3">
-      <div className="flex items-center gap-2 p-3 rounded-xl bg-green-500/10 border border-green-500/20 text-green-600 text-xs font-bold"><CheckCircle size={13} className="flex-shrink-0" /> Код підтверджено! Встановіть новий пароль.</div>
-      <div className="flex flex-col gap-1.5">
-      <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Новий пароль</label>
-      <div className="relative">
-      <input type={showPw ? "text" : "password"} value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="Мінімум 8 символів..." className="w-full px-4 py-3 pr-11 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 outline-none transition-all" />
-      <button type="button" onClick={() => setShowPw(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-600 transition-colors">{showPw ? <EyeOff size={15} /> : <Eye size={15} />}</button>
-      </div>
-      {newPw && pwStrength !== null && (
-        <div className="space-y-1">
-        <div className="flex gap-1">{[1,2,3,4].map(i => <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-300 ${i<=pwStrength ? pwStrength<=1?"bg-red-500":pwStrength===2?"bg-amber-500":pwStrength===3?"bg-blue-500":"bg-green-500" : "bg-(--brd)"}`} />)}</div>
-        <p className="text-[10px] font-bold text-(--t2)">{pwStrength<=1?"Слабкий":pwStrength===2?"Середній":pwStrength===3?"Хороший":"Надійний"}</p>
+
+    {/* ── Change Password — trigger ── */}
+    <div className="rounded-2xl border border-(--brd) overflow-hidden" style={{ background: "var(--card)" }}>
+      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-(--brd)" style={{ background: "var(--card)" }}>
+        <div className="w-7 h-7 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center flex-shrink-0">
+          <KeyRound size={13} className="text-blue-600" />
         </div>
-      )}
+        <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Зміна пароля</p>
       </div>
-      <div className="flex flex-col gap-1.5">
-      <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Підтвердіть пароль</label>
-      <div className="relative">
-      <input type={showConfirm ? "text" : "password"} value={confirmPw} onChange={e => setConfirmPw(e.target.value)} placeholder="Повторіть пароль..." className={`w-full px-4 py-3 pr-11 rounded-xl border bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 outline-none transition-all ${confirmPw&&confirmPw!==newPw?"border-red-500 focus:ring-red-500/20":confirmPw&&confirmPw===newPw?"border-green-500 focus:ring-green-500/20":"border-(--brd) focus:ring-blue-500/30 focus:border-blue-600"}`} />
-      <button type="button" onClick={() => setShowConfirm(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-600 transition-colors">{showConfirm ? <EyeOff size={15} /> : <Eye size={15} />}</button>
-      {confirmPw && confirmPw === newPw && <CheckCircle size={14} className="absolute right-10 top-1/2 -translate-y-1/2 text-green-500" />}
+      <div className="p-5 space-y-3">
+        <p className="text-xs font-medium text-(--t2)">
+          Код підтвердження надійде на{" "}
+          <span className="font-black text-(--t1)">{profileUser.email}</span>
+        </p>
+        <button
+          onClick={() => { setPwStep("sending"); setShowPwModal(true); onModalChange?.(true); sendCode(); }}
+          className="group w-full relative flex items-center justify-center gap-2.5 overflow-hidden rounded-2xl px-4 py-3.5 font-black text-xs uppercase tracking-widest transition-all duration-300 active:scale-95 shadow-lg shadow-blue-600/20 border border-blue-500/30"
+          style={{ background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #3b82f6 100%)", color: "white" }}
+        >
+          {/* shimmer effect */}
+          <span className="absolute inset-0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12" />
+          <span className="relative flex items-center gap-2 drop-shadow">
+            <KeyRound size={14} />
+            <span className="tracking-[0.15em]">Змінити пароль</span>
+          </span>
+        </button>
       </div>
-      </div>
-      {pwError && <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-bold"><AlertCircle size={13} className="flex-shrink-0" /> {pwError}</div>}
-      <div className="flex gap-2">
-      <button onClick={setPassword} disabled={!newPw||!confirmPw||newPw!==confirmPw||newPw.length<8}
-      className={`flex-1 flex items-center justify-center gap-2 font-black text-xs uppercase tracking-widest rounded-xl px-5 py-3 active:scale-95 transition-all shadow-lg ${newPw&&confirmPw&&newPw===confirmPw&&newPw.length>=8?"bg-blue-600 text-white hover:bg-blue-700 shadow-blue-600/20":"bg-(--brd) text-(--t2) cursor-not-allowed opacity-50 shadow-none"}`}>
-      <Lock size={13} /> Встановити пароль
-      </button>
-      <button onClick={resetPw} className="text-xs font-black uppercase tracking-widest text-(--t2) hover:text-red-500 transition-colors px-2">Скасувати</button>
-      </div>
-      </div>
-    )}
-    {pwStep === "done" && (
-      <div className="space-y-3">
-      <div className="flex flex-col items-center text-center py-3 gap-2">
-      <div className="w-11 h-11 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center justify-center"><CheckCircle size={22} className="text-green-500" /></div>
-      <div><p className="font-black text-(--t1) text-sm">Пароль успішно змінено!</p><p className="text-xs text-(--t2) font-medium mt-0.5">Використовуйте новий пароль при наступному вході</p></div>
-      </div>
-      <button onClick={resetPw} className="w-full border border-(--brd) text-(--t2) font-black text-xs uppercase tracking-widest rounded-xl px-5 py-3 hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all">Закрити</button>
-      </div>
-    )}
     </div>
+
+    {/* ── Password Modal ── */}
+    {showPwModal && typeof document !== "undefined" && createPortal(
+      <>
+        <style>{`
+          @keyframes pwSlideUp { from { opacity:0; transform:translateY(20px) scale(0.95); } to { opacity:1; transform:translateY(0) scale(1); } }
+          .pw-modal-card { animation: pwSlideUp 0.5s cubic-bezier(0.22,1,0.36,1) forwards; }
+        `}</style>
+
+        {/* Full-screen overlay — covers EVERYTHING including sidebar */}
+        <div
+          className="fixed inset-0 z-[9998]"
+          style={{
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            background: "rgba(0,0,0,0.6)",
+          }}
+          onClick={resetPw}
+        />
+
+        {/* Centering wrapper */}
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
+        <div className="pw-modal-card pointer-events-auto w-full max-w-sm bg-(--card)/80 backdrop-blur-3xl rounded-[2.5rem] shadow-2xl border border-(--brd) flex flex-col items-center text-(--t1) overflow-hidden">
+
+          {/* Modal header */}
+          <div className="w-full flex items-center justify-between px-7 py-4 border-b border-(--brd)">
+            <div className="flex items-center gap-2.5">
+              <KeyRound size={14} className="text-blue-500" />
+              <span className="text-xs font-black uppercase tracking-widest text-(--t1)">Зміна пароля</span>
+            </div>
+            <button onClick={resetPw} className="w-7 h-7 rounded-xl border border-(--brd) bg-(--bg) flex items-center justify-center text-(--t2) hover:text-red-500 hover:border-red-500/40 transition-all active:scale-95">
+              <X size={13} />
+            </button>
+          </div>
+
+          <div className="w-full flex flex-col items-center p-10">
+
+          {/* Sending */}
+          {pwStep === "sending" && (
+            <div className="flex flex-col items-center gap-4 py-4">
+              <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600">
+                <Loader size={32} className="animate-spin" />
+              </div>
+              <p className="text-xs font-black uppercase tracking-widest text-(--t2)">Надсилання коду...</p>
+            </div>
+          )}
+
+          {/* Code input step */}
+          {pwStep === "code" && (
+            <>
+              <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600 mb-6">
+                <Mail size={32} />
+              </div>
+              <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">Verify</h2>
+              <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-8 leading-relaxed">
+                Введіть 6-значний код надісланий на<br />
+                <span className="text-(--t1) font-black">{profileUser.email}</span>
+              </p>
+
+              <input
+                type="text"
+                maxLength={6}
+                value={code}
+                onChange={e => { setCode(e.target.value.replace(/\D/g, "")); setPwError(null); }}
+                placeholder="000000"
+                className="w-full text-center text-4xl font-black tracking-[0.2em] py-5 rounded-2xl bg-(--bg)/50 focus:bg-(--card) focus:ring-2 focus:ring-blue-500 outline-none transition-all text-blue-600 mb-4 placeholder:text-(--t2)/30 border border-(--brd)"
+              />
+
+              {pwError && (
+                <div className="w-full mb-4 px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-[11px] font-bold text-center">
+                  {pwError}
+                </div>
+              )}
+
+              <button
+                onClick={verifyCode}
+                disabled={code.length !== 6}
+                className={`w-full py-5 rounded-[1.8rem] font-black uppercase shadow-lg transition-all active:scale-95 mb-4 text-sm tracking-wider ${
+                  code.length === 6
+                    ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20"
+                    : "bg-(--brd) text-(--t2) cursor-not-allowed"
+                }`}
+              >
+                Підтвердити
+              </button>
+
+              <div className="flex items-center justify-between w-full">
+                <button
+                  onClick={() => { if (resendCooldown === 0) sendCode(); }}
+                  disabled={resendCooldown > 0}
+                  className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-(--t2) hover:text-blue-600 transition-colors disabled:opacity-40"
+                >
+                  <RefreshCw size={10} />
+                  {resendCooldown > 0 ? `Повторно через ${resendCooldown}с` : "Надіслати ще раз"}
+                </button>
+                <button onClick={resetPw} className="text-[10px] font-black text-(--t2) hover:text-red-500 uppercase tracking-[0.2em] transition-all flex items-center gap-1.5">
+                  <span>←</span> Назад
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Verifying */}
+          {pwStep === "verifying" && (
+            <div className="flex flex-col items-center gap-4 py-4">
+              <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600">
+                <Loader size={32} className="animate-spin" />
+              </div>
+              <p className="text-xs font-black uppercase tracking-widest text-(--t2)">Перевірка...</p>
+            </div>
+          )}
+
+          {/* New password step */}
+          {pwStep === "newpw" && (
+            <>
+              <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center text-green-500 mb-6">
+                <Lock size={28} />
+              </div>
+              <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">Новий пароль</h2>
+              <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-6">Встановіть новий пароль для вашого акаунту</p>
+
+              <div className="w-full space-y-3">
+                <div className="relative">
+                  <input
+                    type={showPw ? "text" : "password"}
+                    value={newPw}
+                    onChange={e => setNewPw(e.target.value)}
+                    placeholder="Мінімум 8 символів..."
+                    className="w-full px-5 py-4 pr-12 rounded-2xl border border-(--brd) bg-(--bg)/50 focus:ring-2 focus:ring-blue-500 focus:bg-(--card) outline-none text-sm text-(--t1) transition-all"
+                  />
+                  <button type="button" onClick={() => setShowPw(p => !p)} className="absolute right-4 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-600 transition-colors">
+                    {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {newPw && pwStrength !== null && (
+                  <div className="space-y-1 px-1">
+                    <div className="flex gap-1">
+                      {[1,2,3,4].map(i => (
+                        <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+                          i <= pwStrength
+                            ? pwStrength <= 1 ? "bg-red-500" : pwStrength === 2 ? "bg-amber-500" : pwStrength === 3 ? "bg-blue-500" : "bg-green-500"
+                            : "bg-(--brd)"
+                        }`} />
+                      ))}
+                    </div>
+                    <p className="text-[10px] font-bold text-(--t2)">
+                      {pwStrength <= 1 ? "Слабкий" : pwStrength === 2 ? "Середній" : pwStrength === 3 ? "Хороший" : "Надійний"}
+                    </p>
+                  </div>
+                )}
+                <div className="relative">
+                  <input
+                    type={showConfirm ? "text" : "password"}
+                    value={confirmPw}
+                    onChange={e => setConfirmPw(e.target.value)}
+                    placeholder="Повторіть пароль..."
+                    className={`w-full px-5 py-4 pr-12 rounded-2xl border bg-(--bg)/50 focus:ring-2 focus:bg-(--card) outline-none text-sm text-(--t1) transition-all ${
+                      confirmPw && confirmPw !== newPw
+                        ? "border-red-500 focus:ring-red-500/30"
+                        : confirmPw && confirmPw === newPw
+                        ? "border-green-500 focus:ring-green-500/30"
+                        : "border-(--brd) focus:ring-blue-500"
+                    }`}
+                  />
+                  <button type="button" onClick={() => setShowConfirm(p => !p)} className="absolute right-4 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-600 transition-colors">
+                    {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                  {confirmPw && confirmPw === newPw && (
+                    <CheckCircle size={15} className="absolute right-12 top-1/2 -translate-y-1/2 text-green-500" />
+                  )}
+                </div>
+
+                {pwError && (
+                  <div className="px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-[11px] font-bold text-center">
+                    {pwError}
+                  </div>
+                )}
+
+                <button
+                  onClick={setPassword}
+                  disabled={!newPw || !confirmPw || newPw !== confirmPw || newPw.length < 8}
+                  className={`w-full py-5 rounded-[1.8rem] font-black uppercase shadow-lg transition-all active:scale-95 text-sm tracking-wider ${
+                    newPw && confirmPw && newPw === confirmPw && newPw.length >= 8
+                      ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20"
+                      : "bg-(--brd) text-(--t2) cursor-not-allowed"
+                  }`}
+                >
+                  Встановити пароль
+                </button>
+                <button onClick={resetPw} className="w-full text-[10px] font-black text-(--t2) hover:text-red-500 uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-1.5">
+                  <span>←</span> Скасувати
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Done */}
+          {pwStep === "done" && (
+            <>
+              <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center mb-6">
+                <CheckCircle size={32} className="text-green-500" />
+              </div>
+              <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">Готово!</h2>
+              <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-8">Пароль успішно змінено</p>
+              <button onClick={resetPw} className="w-full py-5 rounded-[1.8rem] bg-blue-600 text-white font-black uppercase shadow-lg hover:bg-blue-700 active:scale-95 transition-all text-sm tracking-wider shadow-blue-500/20">
+                Закрити
+              </button>
+            </>
+          )}
+
+          </div>{/* end inner content */}
+        </div>{/* end modal card */}
+        </div>{/* end centering wrapper */}
+      </>,
+      document.body
+    )}
     </div>
   );
 }
 
-// Needed for EditProfileSection
-function Mail({ size, className }: { size: number; className?: string }) {
-  return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>;
-}
 
 // ── Notification card (compact for profile) ───────────────────────────────────
 function NotificationCard({
@@ -630,6 +796,7 @@ export default function ProfilePage() {
   const [error, setError]               = useState<string | null>(null);
   const [isEditing, setIsEditing]       = useState(false);
   const [showAvatarEditor, setShowAvatarEditor] = useState(false);
+  const [isPwModalOpen, setIsPwModalOpen] = useState(false);
 
   const isJury = currentUser?.role === "jury";
   const { teams: userTeams, loading: teamsLoading } = useUserTeams(isJury ? undefined : currentUser?.id);
@@ -739,7 +906,7 @@ export default function ProfilePage() {
     <Sidebar />
     </div>
 
-    <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <main className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isPwModalOpen ? "blur-sm brightness-75" : ""}`}>
     <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Профіль" icon={<UserCircle size={18} className="text-blue-600" />} />
     <div className={`flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10 ${allReady ? "page-ready" : ""}`}>
 
@@ -823,6 +990,7 @@ export default function ProfilePage() {
         profileUser={profileUser}
         onSave={({ username, login }) => { setProfileUser((prev: any) => ({ ...prev, username, login })); setIsEditing(false); }}
         onCancel={() => setIsEditing(false)}
+        onModalChange={setIsPwModalOpen}
         />
         </div>
       )}
