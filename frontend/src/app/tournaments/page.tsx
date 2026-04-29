@@ -165,7 +165,7 @@ function TournamentCard({
     return (
         <button
             onClick={onClick}
-            className={`w-full text-left rounded-2xl border ${cfg.accentBorder} ${cfg.accentBg} p-4 sm:p-5 flex flex-col gap-3 hover:scale-[1.01] active:scale-[0.99] transition-all group shadow-sm`}
+            className="w-full text-left rounded-2xl border border-(--brd) bg-(--card) p-4 sm:p-5 flex flex-col gap-3 hover:scale-[1.01] hover:border-blue-600/40 active:scale-[0.99] transition-all group shadow-sm"
         >
             {/* Top row: dot + name + status badge */}
             <div className="flex items-center gap-2 min-w-0">
@@ -379,7 +379,7 @@ export default function TournamentsPage() {
                     </h1>
 
                     {/* ── Two-column layout ─────────────────────────────────────── */}
-                    <div className="flex flex-col xl:flex-row gap-6 items-start max-w-7xl">
+                    <div className="flex flex-col xl:flex-row gap-6 items-start max-w-7xl mx-auto">
 
                         {/* ════ LEFT: search + results ════ */}
                         <div className="flex-1 min-w-0 flex flex-col gap-5 fuIn" style={{ animationDelay: "80ms" }}>
@@ -409,15 +409,6 @@ export default function TournamentsPage() {
                                     </button>
                                 )}
                             </div>
-
-                            {/* Stats row — above search */}
-                            {!loading && (
-                                <div className="grid grid-cols-3 gap-3">
-                                    <StatCard label="Активних" value={active}  color="text-blue-500"  bg="bg-blue-500/5"  border="border-blue-500/20" />
-                                    <StatCard label="Реєстрація" value={openReg} color="text-green-500" bg="bg-green-500/5" border="border-green-500/20" />
-                                    <StatCard label="Всього"   value={total}  color="text-(--t1)"    bg="bg-(--card)"    border="border-(--brd)"    />
-                                </div>
-                            )}
 
                             {/* Search box */}
                             <div className="scIn bg-(--card) rounded-2xl sm:rounded-[2rem] shadow-xl border border-(--brd) p-4 sm:p-6"
