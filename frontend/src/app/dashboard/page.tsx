@@ -181,7 +181,7 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
   const handleLinkChange = (val: string) => {
     setLinkUrl(val);
     setPreview(p => ({ ...p, loading: !!val, error: false }));
-    clearTimeout(previewTimeout.current);
+    const previewTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     if (!val.trim()) {
       setPreview({ title: "", description: "", image: "", loading: false, error: false });
       return;
