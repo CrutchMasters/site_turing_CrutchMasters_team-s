@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
-import { supabase } from "@/lib/supabase";
+import { supabase, authedSupabase } from "@/lib/supabase";
 
 const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -181,7 +181,6 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
   const handleLinkChange = (val: string) => {
     setLinkUrl(val);
     setPreview(p => ({ ...p, loading: !!val, error: false }));
-    const previewTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     if (!val.trim()) {
       setPreview({ title: "", description: "", image: "", loading: false, error: false });
       return;
@@ -486,7 +485,7 @@ export default function DashboardPage() {
   const revealRefs = useRef<(HTMLElement | null)[]>([]);
   const router = useRouter();
   const { dark }        = useTheme();
-  const { user, isLoading } = useAuth();
+  const { user, token, isLoading } = useAuth();
   const { t }           = useT();
 
   const STATUS_CONFIG = {
@@ -559,13 +558,13 @@ export default function DashboardPage() {
     // ── CRUD handlers ──────────────────────────────────────────────────────────
     const handleSaveAnnouncement = async (payload: Partial<Announcement>) => {
       if (editAnnouncement) {
-        const { error } = await supabase
+        const { error } = await (await authedSupabase(token))
         .from("announcements")
         .update(payload)
         .eq("id", editAnnouncement.id);
         if (!error) await fetchAnnouncements();
       } else {
-        const { error } = await supabase
+        const { error } = await (await authedSupabase(token))
         .from("announcements")
         .insert({ ...payload, created_by: user?.id });
         if (!error) await fetchAnnouncements();
@@ -574,12 +573,12 @@ export default function DashboardPage() {
 
     const handleDeleteAnnouncement = async (id: string) => {
       if (!confirm("Видалити оголошення?")) return;
-      await supabase.from("announcements").delete().eq("id", id);
+      await (await authedSupabase(token)).from("announcements").delete().eq("id", id);
       setAnnouncements(prev => prev.filter(a => a.id !== id));
     };
 
     const handleTogglePin = async (a: Announcement) => {
-      const { error } = await supabase
+      const { error } = await (await authedSupabase(token))
       .from("announcements")
       .update({ is_pinned: !a.is_pinned })
       .eq("id", a.id);

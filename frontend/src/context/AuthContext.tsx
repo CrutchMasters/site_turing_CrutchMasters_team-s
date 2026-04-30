@@ -112,6 +112,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch { /* silent */ }
     }, []);
 
+    // ── Sync token state when supabase.ts performs a silent refresh ────────────
+    // authedSupabase() in supabase.ts may refresh the token independently (e.g.
+    // when the browser tab was sleeping and the scheduled timer didn't fire).
+    // It dispatches "token:refreshed" so we can keep React state in sync without
+    // a full page reload.
+    useEffect(() => {
+        const handleTokenRefreshed = (e: Event) => {
+            const { access_token } = (e as CustomEvent<{ access_token: string }>).detail;
+            setToken(access_token);
+            // Re-schedule the proactive timer from AuthContext as well,
+            // so both refresh paths stay aligned.
+            scheduleRefresh(access_token);
+        };
+
+        window.addEventListener("token:refreshed", handleTokenRefreshed);
+        return () => window.removeEventListener("token:refreshed", handleTokenRefreshed);
+    }, [scheduleRefresh]);
+
     useEffect(() => {
         let cancelled = false;
 
@@ -119,13 +137,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const savedToken = localStorage.getItem("access_token");
             const savedUser  = localStorage.getItem("user");
 
-            // Нет данных — гость
+            // No data — treat as guest
             if (!savedToken || !savedUser) {
                 if (!cancelled) setIsLoading(false);
                 return;
             }
 
-            // Парсим пользователя
+            // Parse saved user
             let parsedUser: User;
             try {
                 parsedUser = JSON.parse(savedUser);
@@ -135,20 +153,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 return;
             }
 
-            // Определяем активный токен:
-            // — если живой, используем его
-            // — если протух, пробуем рефреш
-            // ВАЖНО: setUser вызывается только после того как токен подтверждён
+            // Determine active token:
+            // — if still valid, use it
+            // — if expired, attempt a silent refresh
+            // IMPORTANT: setUser is only called after the token is confirmed valid
             let activeToken: string;
 
             if (getTokenExpiry(savedToken) > Date.now()) {
-                // Токен живой — всё ок
                 activeToken = savedToken;
             } else {
-                // Токен протух — пробуем тихо обновить
                 const refreshed = await doRefresh();
                 if (!refreshed) {
-                    // Рефреш тоже не удался — чистим и считаем гостем
                     clearStorage();
                     if (!cancelled) {
                         setUser(null);
@@ -160,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 activeToken = refreshed;
             }
 
-            // Токен подтверждён — теперь можно устанавливать пользователя
+            // Token confirmed — now it's safe to set user state
             if (!cancelled) {
                 setToken(activeToken);
                 setUser(parsedUser);
@@ -168,7 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setIsLoading(false);
             }
 
-            // Фоново синхронизируем роль из БД
+            // Sync role from DB in the background
             refreshRole(parsedUser);
         };
 
