@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import RoundSettingsPanel, { type RoundData } from "@/components/RoundSettingsPanel";
+import JuryInvitePanel from "@/components/JuryInvitePanel";
 import {
     Trophy, ChevronRight, Save, AlertCircle,
     CheckCircle, Clock, Layers, Zap, Users, CalendarDays,
@@ -772,7 +773,13 @@ export default function TournamentEditPage() {
                     </div>
                 )}
 
+                {/* ── Запрошення журі ── */}
+                <div className="cdIn" style={{ animationDelay: "180ms" }}>
+                    <JuryInvitePanel tournamentId={id as string} tournamentName={name} />
+                </div>
+
                 {/* Actions */}
+
                 <div className="cdIn flex flex-col sm:flex-row gap-3 pb-8" style={{ animationDelay: "200ms" }}>
                 <button
                 type="submit"
