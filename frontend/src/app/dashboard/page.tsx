@@ -176,7 +176,7 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
     }
   }, [initial]);
 
-  const previewTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const previewTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleLinkChange = (val: string) => {
     setLinkUrl(val);
