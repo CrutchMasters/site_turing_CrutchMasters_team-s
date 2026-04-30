@@ -96,6 +96,7 @@ export default function JuryInvitePanel({ tournamentId, tournamentName }: Props)
 
         {/* Header — toggle */}
         <button
+        type="button"
         onClick={() => setOpen(p => !p)}
         className="w-full flex items-center gap-3 px-6 sm:px-8 py-4 hover:bg-amber-500/5 transition-colors text-left"
         >
@@ -190,6 +191,7 @@ export default function JuryInvitePanel({ tournamentId, tournamentName }: Props)
                         </div>
                     ) : (
                         <button
+                        type="button"
                         onClick={() => sendInvite(c.id)}
                         disabled={sending[c.id]}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 font-black text-[10px] uppercase tracking-widest hover:bg-amber-500 hover:text-white transition-all active:scale-95 disabled:opacity-50"

@@ -9,7 +9,7 @@ import { useTheme } from "@/hooks/useTheme";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import {
-    Clock, Calendar, ChevronLeft, Download, Upload,
+    Clock, Calendar, ChevronLeft, Shield, Download, Upload,
     Link2, FileText, AlertCircle, CheckCircle2, Cpu, Loader2,
     X, ZoomIn, ZoomOut, RotateCw, ExternalLink, File, Film,
     Image as ImageIcon, Archive, FileCode, Paperclip, Flag, ClipboardCheck,
@@ -277,6 +277,7 @@ export default function RoundPage() {
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [userTeamId,  setUserTeamId]  = useState<string | null>(null);
+    const [isInvitedJury, setIsInvitedJury] = useState<boolean | null>(null);
     const [previewFile, setPreviewFile] = useState<RoundAttachment | null>(null);
     const [previewUrl,  setPreviewUrl]  = useState<string | null>(null);
 
@@ -292,6 +293,20 @@ export default function RoundPage() {
             const { data, error } = await supabase.from("rounds").select("*").eq("id", id).single();
             if (error) throw error;
             setRound(data);
+
+            if ((user?.role === "jury") && data?.tournament_id) {
+                const { data: inv } = await supabase
+                    .from("jury_tournament_invitations")
+                    .select("id")
+                    .eq("tournament_id", data.tournament_id)
+                    .eq("jury_id", user.id)
+                    .eq("status", "accepted")
+                    .single();
+                setIsInvitedJury(!!inv);
+} else {
+    setIsInvitedJury(false);
+}
+
             if (userTeamId) fetchSubmission(data.id, userTeamId);
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
@@ -733,13 +748,26 @@ export default function RoundPage() {
         )}
 
         {isJury ? (
-            /* ── Кнопка для журі — перехід до оцінювання ── */
+        isInvitedJury ? (
+            /* ── Запрошений журі — кнопка оцінювання ── */
             <button
             onClick={() => router.push(`/jury/rounds/${round.id}/evaluate`)}
             className="flex items-center justify-center gap-3 px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-[0.98] bg-violet-600 text-white hover:bg-violet-700 shadow-lg shadow-violet-600/20"
             >
             <ClipboardCheck size={18}/> Оцінити роботи
             </button>
+        ) : (
+            /* ── Незапрошений журі — інформаційна плашка ── */
+            <div className="flex flex-col items-center gap-2 px-6 py-5 rounded-2xl bg-violet-500/5 border border-violet-500/20 text-center">
+            <div className="w-9 h-9 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
+                <Shield size={16} className="text-violet-400" />
+            </div>
+            <p className="text-xs font-black text-violet-400 uppercase tracking-widest">Оцінювання недоступне</p>
+            <p className="text-[11px] font-medium text-(--t2) max-w-[260px] leading-relaxed">
+                Ви не залучені до оцінювання робіт учасників цього турніру
+            </p>
+            </div>
+        )
         ) : (
             /* ── Кнопка для учасника — здати або статус ── */
             <button

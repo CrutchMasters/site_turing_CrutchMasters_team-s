@@ -1756,7 +1756,7 @@ async def save_jury_evaluation(
     payload: JuryEvaluationPayload,
     authorization: str = Header(...),
 ):
-    """Зберегти або оновити оцінку журі для submission. Лише для членів журі."""
+    """Зберегти або оновити оцінку журі для submission. Лише для запрошених журі."""
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not initialized")
 
@@ -1765,6 +1765,24 @@ async def save_jury_evaluation(
 
     if caller.get("role") not in ("jury", "admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Тільки журі може виставляти оцінки")
+    
+    # Для журі — перевіряємо що він запрошений саме до цього турніру
+    if caller.get("role") in ("jury", "admin", "superadmin"):
+        round_ = fetch_one(
+            supabase.table("rounds").select("tournament_id").eq("id", round_id)
+        )
+        if not round_:
+            raise HTTPException(status_code=404, detail="Раунд не знайдено")
+
+        invited = supabase.table("jury_tournament_invitations") \
+            .select("id") \
+            .eq("tournament_id", round_["tournament_id"]) \
+            .eq("jury_id", caller["id"]) \
+            .eq("status", "accepted") \
+            .execute()
+
+        if not invited.data:
+            raise HTTPException(status_code=403, detail="Ви не запрошені до журі цього турніру")
 
     record = {
         "jury_id":        caller["id"],
