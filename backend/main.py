@@ -198,7 +198,7 @@ def update_tournament_statuses():
         for t in tournaments:
             current = t["status"]
             # Пропускаємо фінальні та незворотні статуси
-            if current in ("finished", "cancelled", "ongoing"):
+            if current in ("finished", "ongoing"):
                 continue
 
             reg_from  = _parse_dt(t.get("registration_from"))
@@ -588,11 +588,12 @@ class RegisterTeamForTournament(BaseModel):
     tournament_id: str
 
 class SubmitWork(BaseModel):
-    team_id: str
-    github_url: str | None = None
-    video_url:  str | None = None
-    demo_url:   str | None = None
+    team_id:     str
+    github_url:  str | None = None
+    youtube_url: str | None = None   # FIX: було video_url — не співпадало з фронтендом
+    live_url:    str | None = None   # FIX: було demo_url — не співпадало з фронтендом
     description: str | None = None
+    is_draft:    bool = False        # FIX: додано — зберігається в submissions.is_draft
     files: list[dict] = []  # [{"name": "file.zip", "path": "submissions/round/team/file.zip"}]
 
 
@@ -1562,20 +1563,43 @@ async def mark_notification_read(body: dict, authorization: str = Header(...)):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/api/rounds/{round_id}/submit")
-async def submit_work(round_id: str, payload: SubmitWork, authorization: str = Header(...)):
+async def submit_work(
+    round_id:      str,
+    authorization: str                   = Header(...),
+    payload:       str                   = Form(...),   # FIX: multipart — фронтенд шле FormData
+    files:         list[UploadFile]      = File([]),    # FIX: нові файли від фронтенду
+):
     """
     Здати або оновити роботу команди для раунду.
-    Використовує service_role — обходить RLS.
-    Доступно: капітан АБО учасник команди.
-    Поле files містить список {"name": str, "path": str} — шляхи в bucket.
+    Приймає multipart/form-data:
+      - payload: JSON-рядок з полями {team_id, round_id, github_url, youtube_url,
+                                      live_url, description, is_draft}
+      - files:   нові бінарні файли (0 або більше)
+    Автоматично визначає команду юзера якщо team_id порожній.
+    Завантажує нові файли в bucket 'submissions' і додає до file_paths.
     """
+    import json as _json, re as _re, time as _time
+
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not initialized")
 
     token  = authorization.replace("Bearer ", "").strip()
     caller = get_caller(token)
 
-    # Перевіряємо що раунд існує
+    # ── Парсимо payload з JSON-рядка ────────────────────────────────────────
+    try:
+        data = _json.loads(payload)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Невалідний payload JSON")
+
+    github_url  = data.get("github_url") or None
+    youtube_url = data.get("youtube_url") or None
+    live_url    = data.get("live_url") or None
+    description = data.get("description") or None
+    is_draft    = bool(data.get("is_draft", False))
+    team_id_req = data.get("team_id", "").strip()
+
+    # ── Перевіряємо раунд ────────────────────────────────────────────────────
     round_ = fetch_one(
         supabase.table("rounds")
             .select("id, tournament_id, end_at, status")
@@ -1584,60 +1608,122 @@ async def submit_work(round_id: str, payload: SubmitWork, authorization: str = H
     if not round_:
         raise HTTPException(status_code=404, detail="Раунд не знайдено")
 
-    # FIX (високий): перевіряємо статус раунду — здача тільки для active раундів
     round_status = round_.get("status")
-    if round_status and round_status != "active":
+    # Для чернетки дозволяємо pending/active; фінальна здача — тільки active
+    if not is_draft and round_status != "active":
         raise HTTPException(
             status_code=422,
             detail=f"Здача недоступна: раунд має статус '{round_status}'. Здача дозволена лише для активних раундів."
         )
 
-    # FIX (високий): перевіряємо дедлайн — здача після end_at заборонена
     end_at = _parse_dt(round_.get("end_at"))
-    if end_at and datetime.now(timezone.utc) > end_at:
+    if not is_draft and end_at and datetime.now(timezone.utc) > end_at:
         raise HTTPException(status_code=422, detail="Дедлайн раунду минув, здача не приймається")
 
-    # Перевіряємо що команда існує і caller є капітаном або учасником
-    team = fetch_one(
-        supabase.table("teams")
-            .select("id, name, captain_id, members_ids, tournament_id")
-            .eq("id", payload.team_id)
-    )
-    if not team:
-        raise HTTPException(status_code=404, detail="Команду не знайдено")
+    tournament_id = round_.get("tournament_id")
 
-    members = team.get("members_ids") or []
+    # ── Визначаємо команду ───────────────────────────────────────────────────
+    # Якщо team_id не передано або порожній — знаходимо команду юзера
+    # в турнірі цього раунду автоматично.
+    team = None
+    if team_id_req:
+        team = fetch_one(
+            supabase.table("teams")
+                .select("id, name, captain_id, members_ids, tournament_id")
+                .eq("id", team_id_req)
+        )
+
+    if not team:
+        # Шукаємо серед команд де юзер капітан або учасник і команда в цьому турнірі
+        cap_res = supabase.table("teams") \
+            .select("id, name, captain_id, members_ids, tournament_id") \
+            .eq("captain_id", caller["id"]) \
+            .eq("tournament_id", tournament_id) \
+            .limit(1).execute()
+        if cap_res.data:
+            team = cap_res.data[0]
+        else:
+            mem_res = supabase.table("teams") \
+                .select("id, name, captain_id, members_ids, tournament_id") \
+                .contains("members_ids", [caller["id"]]) \
+                .eq("tournament_id", tournament_id) \
+                .limit(1).execute()
+            if mem_res.data:
+                team = mem_res.data[0]
+
+    if not team:
+        raise HTTPException(status_code=404, detail="Команду не знайдено або ви не зареєстровані в цьому турнірі")
+
+    members    = team.get("members_ids") or []
     is_captain = team["captain_id"] == caller["id"]
     is_member  = caller["id"] in members
     if not is_captain and not is_member:
         raise HTTPException(status_code=403, detail="Ви не є членом цієї команди")
 
-    # Перевіряємо що команда зареєстрована в турнірі цього раунду
-    if team.get("tournament_id") != round_.get("tournament_id"):
+    if team.get("tournament_id") != tournament_id:
         raise HTTPException(status_code=403, detail="Ваша команда не зареєстрована в цьому турнірі")
 
+    team_id = team["id"]
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # Шукаємо існуючий сабміт
+    # ── Завантажуємо нові файли в bucket ────────────────────────────────────
+    new_file_entries: list[dict] = []
+    for f in files:
+        if not f.filename:
+            continue
+        safe_name = _re.sub(r"[^\w.\-]", "_", f.filename)
+        path = f"submissions/{round_id}/{team_id}/{int(_time.time() * 1000)}-{safe_name}"
+        content = await f.read()
+        try:
+            supabase.storage.from_("submissions").upload(
+                path=path,
+                file=content,
+                file_options={
+                    "content-type": f.content_type or "application/octet-stream",
+                    "upsert": "true",
+                },
+            )
+            new_file_entries.append({"name": f.filename, "path": path})
+            print(f"[SUBMIT] Завантажено файл {safe_name} → {path}", flush=True)
+        except Exception as upload_err:
+            print(f"[SUBMIT] Помилка завантаження {safe_name}: {upload_err}", flush=True)
+            raise HTTPException(status_code=500, detail=f"Помилка завантаження файлу {f.filename}: {upload_err}")
+
+    # ── Шукаємо існуючий сабміт і об'єднуємо file_paths ────────────────────
     existing = fetch_one(
         supabase.table("submissions")
-            .select("id")
+            .select("id, file_paths")
             .eq("round_id", round_id)
-            .eq("team_id", payload.team_id)
+            .eq("team_id", team_id)
     )
+
+    # Зберігаємо попередні файли + додаємо нові
+    existing_files: list[dict] = []
+    if existing:
+        raw = existing.get("file_paths") or []
+        if isinstance(raw, list):
+            existing_files = raw
+
+    merged_files = existing_files + new_file_entries
 
     record = {
         "round_id":      round_id,
-        "team_id":       payload.team_id,
-        "submitted_by":  caller["id"],          # Bug 5: заповнюємо submitted_by
-        "github_url":    payload.github_url,
-        "video_url":     payload.video_url,
-        "live_demo_url": payload.demo_url,      # Bug 3: правильна назва колонки
-        "description":   payload.description,
-        "file_path":     payload.files if payload.files else None,  # Bug 4: jsonb колонка file_path
-        "status":        "submitted",
-        "submitted_at":  now_iso,
+        "team_id":       team_id,
+        "submitted_by":  caller["id"],
+        "github_url":    github_url,
+        "video_url":     youtube_url,      # FIX: колонка в БД називається video_url
+        "live_demo_url": live_url,         # FIX: колонка в БД називається live_demo_url
+        "description":   description,
+        "file_paths":    merged_files,     # FIX: правильна jsonb-колонка (було file_path)
+        "is_draft":      is_draft,         # FIX: додано збереження чернетки
+        "updated_at":    now_iso,
     }
+
+    if not is_draft:
+        record["status"]       = "submitted"
+        record["submitted_at"] = now_iso
+    else:
+        record["status"] = "draft"
 
     if existing:
         result = supabase.table("submissions").update(record).eq("id", existing["id"]).execute()
@@ -1647,7 +1733,8 @@ async def submit_work(round_id: str, payload: SubmitWork, authorization: str = H
     if not result.data:
         raise HTTPException(status_code=500, detail="Не вдалося зберегти роботу")
 
-    print(f"[SUBMIT] Команда {team['name']} здала роботу на раунд {round_id}", flush=True)
+    action = "зберіг чернетку" if is_draft else "здав роботу"
+    print(f"[SUBMIT] Команда {team['name']} {action} на раунд {round_id}", flush=True)
     return {"success": True, "submission": result.data[0]}
 
 
@@ -1701,17 +1788,49 @@ async def save_jury_evaluation(
 
 
 @app.get("/api/rounds/{round_id}/submission")
-async def get_submission(round_id: str, team_id: str, authorization: str = Header(...)):
-    """Отримати здану роботу команди для раунду."""
+async def get_submission(round_id: str, authorization: str = Header(...), team_id: str | None = None):
+    """
+    Отримати здану роботу команди для раунду.
+    FIX: team_id тепер необов'язковий — якщо не переданий, визначається автоматично
+    по токену (команда юзера в турнірі цього раунду).
+    Збагачує file_paths підписаними URL для скачування (1 год).
+    """
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not initialized")
 
     token = authorization.replace("Bearer ", "").strip()
     caller = get_caller(token)
-
-    # FIX (середній): перевіряємо що caller є членом запитуваної команди,
-    # або адміном / журі — інакше учасники могли бачити роботи чужих команд.
     is_privileged = caller.get("role") in ("admin", "superadmin", "jury")
+
+    # ── Визначаємо team_id ───────────────────────────────────────────────────
+    if not team_id:
+        round_ = fetch_one(
+            supabase.table("rounds").select("tournament_id").eq("id", round_id)
+        )
+        if not round_:
+            raise HTTPException(status_code=404, detail="Раунд не знайдено")
+        tournament_id = round_["tournament_id"]
+
+        cap_res = supabase.table("teams") \
+            .select("id") \
+            .eq("captain_id", caller["id"]) \
+            .eq("tournament_id", tournament_id) \
+            .limit(1).execute()
+        if cap_res.data:
+            team_id = cap_res.data[0]["id"]
+        else:
+            mem_res = supabase.table("teams") \
+                .select("id") \
+                .contains("members_ids", [caller["id"]]) \
+                .eq("tournament_id", tournament_id) \
+                .limit(1).execute()
+            if mem_res.data:
+                team_id = mem_res.data[0]["id"]
+
+        if not team_id:
+            return {"submission": None}
+
+    # ── Перевіряємо доступ ───────────────────────────────────────────────────
     if not is_privileged:
         team = fetch_one(
             supabase.table("teams")
@@ -1730,7 +1849,115 @@ async def get_submission(round_id: str, team_id: str, authorization: str = Heade
             .eq("round_id", round_id)
             .eq("team_id", team_id)
     )
+
+    # ── Збагачуємо file_paths підписаними URL ────────────────────────────────
+    if sub:
+        raw_files = sub.get("file_paths") or []
+        enriched = []
+        for f in raw_files:
+            if isinstance(f, dict) and f.get("path"):
+                try:
+                    signed = supabase.storage.from_("submissions").create_signed_url(f["path"], 3600)
+                    url = signed.get("signedURL") or signed.get("signedUrl")
+                except Exception:
+                    url = None
+                enriched.append({"name": f.get("name", ""), "path": f["path"], "url": url})
+        sub["files"] = enriched
+
     return {"submission": sub}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FIX: НОВИЙ ендпоінт — видалення файлу з чернетки submission.
+# Фронтенд викликає DELETE /api/rounds/{round_id}/submission/file
+# з body: {"file_path": "submissions/round_id/team_id/filename"}
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.delete("/api/rounds/{round_id}/submission/file")
+async def delete_submission_file(round_id: str, body: dict, authorization: str = Header(...)):
+    """
+    Видалити окремий файл з чернетки здачі.
+    Видаляє файл з bucket 'submissions' і прибирає його з file_paths у БД.
+    Тільки власний учасник/капітан команди або адмін.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    file_path = (body.get("file_path") or "").strip()
+    if not file_path:
+        raise HTTPException(status_code=400, detail="Потрібен file_path")
+
+    # Знаходимо submission цього раунду де є цей файл
+    # Спочатку визначаємо team_id юзера в турнірі раунду
+    round_ = fetch_one(
+        supabase.table("rounds").select("tournament_id").eq("id", round_id)
+    )
+    if not round_:
+        raise HTTPException(status_code=404, detail="Раунд не знайдено")
+    tournament_id = round_["tournament_id"]
+
+    is_privileged = caller.get("role") in ("admin", "superadmin")
+
+    team_id = None
+    if not is_privileged:
+        cap_res = supabase.table("teams") \
+            .select("id") \
+            .eq("captain_id", caller["id"]) \
+            .eq("tournament_id", tournament_id) \
+            .limit(1).execute()
+        if cap_res.data:
+            team_id = cap_res.data[0]["id"]
+        else:
+            mem_res = supabase.table("teams") \
+                .select("id") \
+                .contains("members_ids", [caller["id"]]) \
+                .eq("tournament_id", tournament_id) \
+                .limit(1).execute()
+            if mem_res.data:
+                team_id = mem_res.data[0]["id"]
+        if not team_id:
+            raise HTTPException(status_code=403, detail="Ви не є учасником цього турніру")
+
+    # Знаходимо submission
+    query = supabase.table("submissions") \
+        .select("id, file_paths, status, is_draft, team_id") \
+        .eq("round_id", round_id)
+    if team_id:
+        query = query.eq("team_id", team_id)
+
+    sub = fetch_one(query)
+    if not sub:
+        raise HTTPException(status_code=404, detail="Здачу не знайдено")
+
+    # Перевіряємо що submissions не закрита
+    if sub.get("status") in ("closed", "reviewed"):
+        raise HTTPException(status_code=403, detail="Здача закрита або перевірена, видалення файлів неможливе")
+
+    # Перевіряємо що адмін не чіпає чужі файли без причини (або is_privileged — ок)
+    if not is_privileged and sub["team_id"] != team_id:
+        raise HTTPException(status_code=403, detail="Немає доступу до цієї здачі")
+
+    # Видаляємо файл з bucket
+    try:
+        supabase.storage.from_("submissions").remove([file_path])
+        print(f"[DELETE-FILE] Видалено з bucket: {file_path}", flush=True)
+    except Exception as e:
+        print(f"[DELETE-FILE] Помилка видалення з bucket {file_path}: {e}", flush=True)
+        # Не зупиняємося — прибираємо з БД навіть якщо файл вже не існує
+
+    # Прибираємо файл з file_paths у БД
+    current_files: list[dict] = sub.get("file_paths") or []
+    updated_files = [f for f in current_files if f.get("path") != file_path]
+
+    supabase.table("submissions") \
+        .update({"file_paths": updated_files, "updated_at": datetime.now(timezone.utc).isoformat()}) \
+        .eq("id", sub["id"]).execute()
+
+    print(f"[DELETE-FILE] {caller['username']} видалив файл {file_path} з submission {sub['id']}", flush=True)
+    return {"success": True}
 
 
 @app.post("/api/upload/submission-file")
