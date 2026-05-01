@@ -191,33 +191,45 @@ def update_tournament_statuses():
         now = datetime.now(timezone.utc)
 
         res = supabase.table("tournaments").select(
-            "id, status, registration_from, registration_to, start_at"
+            "id, status, registration_from, registration_to, start_at, end_at"
         ).execute()
         tournaments = res.data or []
 
         for t in tournaments:
             current = t["status"]
-            # Пропускаємо фінальні та незворотні статуси
-            if current in ("finished", "cancelled", "ongoing"):
+            # Пропускаємо лише повністю фінальні статуси
+            if current in ("finished", "cancelled"):
                 continue
 
             reg_from  = _parse_dt(t.get("registration_from"))
             reg_to    = _parse_dt(t.get("registration_to"))
             start_at  = _parse_dt(t.get("start_at"))
+            end_at    = _parse_dt(t.get("end_at"))
 
             new_status = current
 
-            if start_at and now >= start_at:
-                # Турнір почався → ongoing (відповідно до tournaments_status_check constraint)
+            # 1. Турнір завершився (є end_at і він минув)
+            if end_at and now >= end_at:
+                new_status = "finished"
+            # 2. Якщо немає end_at — перевіряємо чи всі раунди завершені
+            elif current == "ongoing" and not end_at:
+                try:
+                    rounds_res = supabase.table("rounds").select("status").eq("tournament_id", t["id"]).execute()
+                    rounds = rounds_res.data or []
+                    if rounds and all(r.get("status") == "finished" for r in rounds):
+                        new_status = "finished"
+                except Exception:
+                    pass  # Якщо не вдалось — залишаємо поточний статус
+            # 3. Турнір почався → ongoing
+            elif start_at and now >= start_at:
                 new_status = "ongoing"
+            # 4. Реєстрація відкрита
             elif reg_from and now >= reg_from and (not reg_to or now < reg_to):
-                # Реєстрація відкрита
                 new_status = "registration"
+            # 5. Реєстрація закрита, старт ще попереду
             elif reg_to and now >= reg_to and (not start_at or now < start_at):
-                # Реєстрація закрита, старт ще попереду → upcoming (очікування)
                 new_status = "upcoming"
             else:
-                # До початку реєстрації
                 new_status = "upcoming"
 
             if new_status != current:
