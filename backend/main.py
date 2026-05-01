@@ -1018,6 +1018,39 @@ async def create_tournament_rounds(
             detail=f"Не вдалося зберегти раунди №{failed_numbers}. Турнір створено, але деякі раунди неповні. Спробуйте відредагувати турнір."
         )
 
+    # ── FIX: після збереження раундів — додаємо jury_assignments для вже прийнятих журі ──
+    # Це вирішує проблему коли журі прийняв запрошення ДО того як були створені раунди.
+    if updated:
+        try:
+            accepted_jury = supabase.table("jury_tournament_invitations") \
+                .select("jury_id") \
+                .eq("tournament_id", tournament_id) \
+                .eq("status", "accepted") \
+                .execute()
+
+            for jury_row in (accepted_jury.data or []):
+                for round_row in updated:
+                    exists = supabase.table("jury_assignments") \
+                        .select("id") \
+                        .eq("jury_id", jury_row["jury_id"]) \
+                        .eq("round_id", round_row["id"]) \
+                        .execute()
+                    if not exists.data:
+                        supabase.table("jury_assignments").insert({
+                            "jury_id":       jury_row["jury_id"],
+                            "round_id":      round_row["id"],
+                            "tournament_id": tournament_id,
+                        }).execute()
+                        print(
+                            f"[ROUNDS] jury_assignment створено: jury={jury_row['jury_id']} "
+                            f"round={round_row['id']}",
+                            flush=True
+                        )
+        except Exception as ja_err:
+            # Не зупиняємо відповідь — jury_assignments це вторинна операція
+            print(f"[ROUNDS] Помилка створення jury_assignments: {ja_err}", flush=True)
+
+
     print(f"[ROUNDS] {len(updated)} раундів оновлено для турніру {tournament['name']}", flush=True)
     return {"success": True, "rounds": updated}
 
@@ -1082,13 +1115,13 @@ async def send_invitation(payload: SendInvitation, authorization: str = Header(.
             f"Капітан команди «{team['name']}» ({caller['username']}) "
             f"запрошує вас приєднатися до команди."
         ),
-        "meta": json.dumps({
+        "meta": {
             "invitation_id": invitation_id,
             "team_id":       payload.team_id,
             "team_name":     team["name"],
             "inviter_id":    caller["id"],
             "inviter_name":  caller["username"],
-        }),
+        },
         "read": False,
     }).execute()
 
@@ -1185,13 +1218,13 @@ async def send_jury_invitation(payload: SendJuryInvitation, authorization: str =
             f"Адміністратор {caller['username']} запрошує вас взяти участь "
             f"в оцінюванні робіт турніру «{tournament['name']}»."
         ),
-        "meta": json.dumps({
+        "meta": {
             "invitation_id":  invitation_id,
             "tournament_id":  payload.tournament_id,
             "tournament_name": tournament["name"],
             "inviter_id":     caller["id"],
             "inviter_name":   caller["username"],
-        }),
+        },
         "read": False,
     }).execute()
 
@@ -1261,12 +1294,12 @@ async def respond_jury_invitation(payload: RespondJuryInvitation, authorization:
                     f"Журі {caller['username']} прийняв запрошення до оцінювання "
                     f"турніру «{tournament['name']}»."
                 ),
-                "meta": json.dumps({
+                "meta": {
                     "tournament_id":   inv["tournament_id"],
                     "tournament_name": tournament["name"] if tournament else "",
                     "jury_id":         caller["id"],
                     "jury_name":       caller["username"],
-                }),
+                },
                 "read": False,
             }).execute()
 
@@ -1283,12 +1316,12 @@ async def respond_jury_invitation(payload: RespondJuryInvitation, authorization:
                     f"Журі {caller['username']} відхилив запрошення до оцінювання "
                     f"турніру «{tournament['name']}»."
                 ),
-                "meta": json.dumps({
+                "meta": {
                     "tournament_id":   inv["tournament_id"],
                     "tournament_name": tournament["name"] if tournament else "",
                     "jury_id":         caller["id"],
                     "jury_name":       caller["username"],
-                }),
+                },
                 "read": False,
             }).execute()
 
@@ -1466,11 +1499,11 @@ async def respond_invitation(payload: RespondInvitation, authorization: str = He
             "type":    "invitation_accepted",
             "title":   f"{caller['username']} прийняв запрошення",
             "message": f"Користувач {caller['username']} прийняв ваше запрошення до команди «{team['name']}».",
-            "meta":    json.dumps({
+            "meta":    {
                 "team_id":    inv["team_id"],
                 "team_name":  team["name"],
                 "new_member": caller["username"],
-            }),
+            },
             "read": False,
         }).execute()
 
@@ -1487,10 +1520,10 @@ async def respond_invitation(payload: RespondInvitation, authorization: str = He
                 "type":    "invitation_declined",
                 "title":   f"{caller['username']} відхилив запрошення",
                 "message": f"Користувач {caller['username']} відхилив ваше запрошення до команди «{team['name']}».",
-                "meta":    json.dumps({
+                "meta":    {
                     "team_id":   inv["team_id"],
                     "team_name": team["name"],
-                }),
+                },
                 "read": False,
             }).execute()
 
@@ -1823,11 +1856,11 @@ async def save_jury_evaluation(
     token  = authorization.replace("Bearer ", "").strip()
     caller = get_caller(token)
 
-    if caller.get("role") not in ("jury", "admin", "superadmin"):
+    if caller.get("role") != "jury":
         raise HTTPException(status_code=403, detail="Тільки журі може виставляти оцінки")
 
     # Для журі — перевіряємо що він запрошений саме до цього турніру
-    if caller.get("role") in ("jury", "admin", "superadmin"):
+    if caller.get("role") == "jury":
         round_ = fetch_one(
             supabase.table("rounds").select("tournament_id").eq("id", round_id)
         )
@@ -1859,7 +1892,8 @@ async def save_jury_evaluation(
                    "Оцінювання дозволено лише для активних або завершених раундів."
         )
 
-    # FIX (критичний): перевіряємо що журі призначено до цього раунду через jury_assignments
+    # FIX (критичний): перевіряємо що журі призначено до цього раунду через jury_assignments.
+    # Якщо запис відсутній але журі прийняв запрошення (раунди були створені пізніше) — створюємо автоматично.
     if caller.get("role") == "jury":
         assignment = fetch_one(
             supabase.table("jury_assignments")
@@ -1868,10 +1902,38 @@ async def save_jury_evaluation(
                 .eq("round_id", round_id)
         )
         if not assignment:
-            raise HTTPException(
-                status_code=403,
-                detail="Ви не призначені журі для цього раунду"
+            # Перевіряємо чи є accepted запрошення для цього турніру
+            round_for_check = fetch_one(
+                supabase.table("rounds").select("tournament_id").eq("id", round_id)
             )
+            if round_for_check:
+                accepted = fetch_one(
+                    supabase.table("jury_tournament_invitations")
+                        .select("id")
+                        .eq("tournament_id", round_for_check["tournament_id"])
+                        .eq("jury_id", caller["id"])
+                        .eq("status", "accepted")
+                )
+                if accepted:
+                    # Автоматично створюємо jury_assignment (раунди були створені після прийняття запрошення)
+                    try:
+                        supabase.table("jury_assignments").insert({
+                            "jury_id":       caller["id"],
+                            "round_id":      round_id,
+                            "tournament_id": round_for_check["tournament_id"],
+                        }).execute()
+                    except Exception as ja_err:
+                        print(f"[EVAL] Не вдалося створити jury_assignment: {ja_err}", flush=True)
+                else:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Ви не призначені журі для цього раунду"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Ви не призначені журі для цього раунду"
+                )
 
     record = {
         "jury_id":        caller["id"],
@@ -1972,6 +2034,106 @@ async def get_submission(round_id: str, authorization: str = Header(...), team_i
         sub["files"] = enriched
 
     return {"submission": sub}
+
+
+@app.get("/api/rounds/{round_id}/submissions")
+async def get_round_submissions(round_id: str, authorization: str = Header(...)):
+    """
+    Отримати всі submissions раунду (для журі та адмінів).
+    Журі повинен бути запрошений до турніру (jury_tournament_invitations accepted).
+    Повертає список робіт з підписаними URL для файлів та своєю оцінкою.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    if caller.get("role") not in ("jury", "admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Доступ тільки для журі та адміністраторів")
+
+    round_ = fetch_one(
+        supabase.table("rounds").select("id, tournament_id, status").eq("id", round_id)
+    )
+    if not round_:
+        raise HTTPException(status_code=404, detail="Раунд не знайдено")
+
+    # Журі — перевіряємо що він прийняв запрошення до цього турніру
+    if caller.get("role") == "jury":
+        invited = fetch_one(
+            supabase.table("jury_tournament_invitations")
+                .select("id")
+                .eq("tournament_id", round_["tournament_id"])
+                .eq("jury_id", caller["id"])
+                .eq("status", "accepted")
+        )
+        if not invited:
+            raise HTTPException(status_code=403, detail="Ви не є журі цього турніру")
+
+        # Автоматично створюємо jury_assignment якщо ще немає
+        assignment = fetch_one(
+            supabase.table("jury_assignments")
+                .select("id")
+                .eq("jury_id", caller["id"])
+                .eq("round_id", round_id)
+        )
+        if not assignment:
+            try:
+                supabase.table("jury_assignments").insert({
+                    "jury_id":       caller["id"],
+                    "round_id":      round_id,
+                    "tournament_id": round_["tournament_id"],
+                }).execute()
+                print(f"[SUBMISSIONS] Автоматично створено jury_assignment для {caller['username']}", flush=True)
+            except Exception as ja_err:
+                print(f"[SUBMISSIONS] Не вдалося створити jury_assignment: {ja_err}", flush=True)
+
+    # Отримуємо всі submissions для цього раунду (тільки фінальні, не чернетки)
+    subs_res = supabase.table("submissions") \
+        .select("*") \
+        .eq("round_id", round_id) \
+        .neq("status", "draft") \
+        .execute()
+
+    submissions = subs_res.data or []
+
+    # Збагачуємо: інфо про команду
+    team_ids = list({s["team_id"] for s in submissions if s.get("team_id")})
+    teams_map = {}
+    if team_ids:
+        teams_res = supabase.table("teams").select("id, name, city_school_org").in_("id", team_ids).execute()
+        teams_map = {t["id"]: t for t in (teams_res.data or [])}
+
+    for sub in submissions:
+        team_info = teams_map.get(sub.get("team_id"), {})
+        sub["team_name"] = team_info.get("name", "—")
+        sub["team_org"]  = team_info.get("city_school_org")
+
+        # Підписані URL для файлів
+        raw_files = sub.get("file_paths") or []
+        enriched_files = []
+        for f in raw_files:
+            if isinstance(f, dict) and f.get("path"):
+                try:
+                    signed = supabase.storage.from_("submissions").create_signed_url(f["path"], 3600)
+                    url = signed.get("signedURL") or signed.get("signedUrl")
+                except Exception:
+                    url = None
+                enriched_files.append({"name": f.get("name", ""), "path": f["path"], "url": url})
+        sub["files"] = enriched_files
+
+        # Оцінка поточного журі для цього submission
+        if caller.get("role") == "jury":
+            eval_res = fetch_one(
+                supabase.table("jury_evaluations")
+                    .select("id, total_score, criteria_scores, general_comment, updated_at")
+                    .eq("submission_id", sub["id"])
+                    .eq("jury_id", caller["id"])
+            )
+            sub["my_evaluation"] = eval_res
+
+    return {"submissions": submissions}
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2306,4 +2468,4 @@ async def search_users(q: str, authorization: str = Header(...)):
         .limit(10) \
         .execute()
 
-    return {"users": data.data or []}
+    return {"users": data.data or []} 
