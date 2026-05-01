@@ -10,11 +10,6 @@ import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 import { useAuth } from "@/context/AuthContext";
 
-const API_URL =
-typeof window !== "undefined" && window.location.hostname === "localhost"
-? "http://localhost:8000"
-: "https://site-turing-crutchmasters-team-s.onrender.com";
-
 const EyeIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -157,35 +152,22 @@ export default function RegisterPage() {
       const accessToken = verifyData.session.access_token;
       const refreshToken = verifyData.session.refresh_token;
 
-      // 2. Бэкенд создаёт запись в account (account.id = auth UUID из JWT)
-      // Передаём токен в Authorization — бэкенд достанет UUID из него.
-      // Пароль не передаём: он не нужен и не должен ходить лишний раз по сети.
-      const res = await fetch(`${API_URL}/api/register`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          username: formData.username,
-          login:    formData.login,
-          email:    formData.email,
-        }),
-      });
-
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.detail || "Failed to save user");
+      // 2. account уже создан автоматически триггером handle_new_user при signUp.
+      // Бэкенд не нужен. Просто читаем запись из БД.
+      // Ретраим до 5 раз — триггер срабатывает асинхронно и может чуть задержаться.
+      // 3. Берём account из БД
+      let accountData: any = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 600));
+        const { data } = await supabase
+          .from("account")
+          .select("id, username, login, email, role, status, avatar_url")
+          .eq("email", formData.email)
+          .maybeSingle();
+        if (data) { accountData = data; break; }
       }
 
-      // 3. Берём account из БД — получаем настоящий account.id
-      const { data: accountData, error: accErr } = await supabase
-      .from("account")
-      .select("id, username, login, email, role, status, avatar_url")
-      .eq("email", formData.email)
-      .single();
-
-      if (accErr || !accountData) {
+      if (!accountData) {
         throw new Error("Не вдалося отримати дані акаунту після реєстрації");
       }
 
@@ -201,6 +183,8 @@ export default function RegisterPage() {
       };
 
       authLogin(userData, accessToken, refreshToken);
+      // Небольшая пауза чтобы стейт успел обновиться перед навигацией
+      await new Promise(r => setTimeout(r, 100));
       router.push("/dashboard");
 
     } catch (error: any) {

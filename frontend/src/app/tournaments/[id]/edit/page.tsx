@@ -10,11 +10,12 @@ import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import RoundSettingsPanel, { type RoundData } from "@/components/RoundSettingsPanel";
+import JuryInvitePanel from "@/components/JuryInvitePanel";
 import {
     Trophy, ChevronRight, Save, AlertCircle,
-    CheckCircle, Clock, Layers, Zap, Users, CalendarDays,
-    Bold, Italic, Underline, List, Quote, Type, ArrowLeft,
+    CheckCircle, Clock, Layers, Zap, Users, CalendarDays, ArrowLeft,
 } from "lucide-react";
+import { RichTextEditor } from "@/components/RichTextEditor";
 
 interface Tournament {
     id: string;
@@ -159,8 +160,6 @@ export default function TournamentEditPage() {
     const [roundsData, setRoundsData]               = useState<Record<number, RoundData>>({});
     const [initialRoundsData, setInitialRoundsData] = useState<Record<number, Partial<RoundData>>>({});
 
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-
     const isAdmin = user?.role === "admin" || user?.role === "superadmin";
 
     const API_URL =
@@ -254,32 +253,6 @@ export default function TournamentEditPage() {
         const canEditLimited = ongoingWithin24h;
         const isFinished     = tourney?.status === "finished";
         const fieldsDisabled = !!(canEditLimited && !canEditFull);
-
-        const applyFormat = (syntax: string, wrap = false) => {
-            const el = textareaRef.current;
-            if (!el) return;
-            const start = el.selectionStart;
-            const end   = el.selectionEnd;
-            const selected = rules.slice(start, end);
-            let newText: string;
-            let newCursorStart: number;
-            let newCursorEnd: number;
-            if (wrap) {
-                const wrapped = `${syntax}${selected || "текст"}${syntax}`;
-                newText = rules.slice(0, start) + wrapped + rules.slice(end);
-                newCursorStart = selected ? start : start + syntax.length;
-                newCursorEnd   = selected ? start + wrapped.length : start + syntax.length + 4;
-            } else {
-                const lineStart = rules.lastIndexOf("\n", start - 1) + 1;
-                const line = rules.slice(lineStart, end);
-                const alreadyApplied = line.startsWith(syntax);
-                const newLine = alreadyApplied ? line.slice(syntax.length) : syntax + line;
-                newText = rules.slice(0, lineStart) + newLine + rules.slice(lineStart + line.length);
-                newCursorStart = newCursorEnd = alreadyApplied ? start - syntax.length : start + syntax.length;
-            }
-            setRules(newText);
-            requestAnimationFrame(() => { el.focus(); el.setSelectionRange(newCursorStart, newCursorEnd); });
-        };
 
         const uploadFile = async (file: File, roundNumber: number): Promise<string> => {
             const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
@@ -556,30 +529,12 @@ export default function TournamentEditPage() {
 
                 <div>
                 <label className={`block ${label10} mb-2`}>Опис / Правила</label>
-                <div className={`border border-(--brd) rounded-2xl overflow-hidden transition-all ${fieldsDisabled ? "opacity-50 pointer-events-none" : "focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-600"}`}>
-                <div className="border-b border-(--brd) px-4 py-2.5 flex items-center gap-1 bg-(--bg)/60 flex-wrap">
-                {([
-                    { Icon: Bold,      label: "Жирний",    action: () => applyFormat("**", true)   },
-                  { Icon: Italic,    label: "Курсив",    action: () => applyFormat("*",  true)   },
-                  { Icon: Underline, label: "Підкресл.", action: () => applyFormat("__", true)   },
-                  { Icon: List,      label: "Список",    action: () => applyFormat("- ", false)  },
-                  { Icon: Quote,     label: "Цитата",    action: () => applyFormat("> ", false)  },
-                  { Icon: Type,      label: "Заголовок", action: () => applyFormat("## ", false) },
-                ] as const).map(({ Icon, label, action }) => (
-                    <button key={label} type="button" onClick={action} title={label}
-                    className="p-2 rounded-xl hover:bg-(--card) text-(--t2) hover:text-blue-600 transition-all active:scale-90">
-                    <Icon className="w-3.5 h-3.5" />
-                    </button>
-                ))}
-                </div>
-                <textarea
-                ref={textareaRef}
-                rows={5}
+                <div className={fieldsDisabled ? "opacity-50 pointer-events-none" : ""}>
+                <RichTextEditor
                 value={rules}
-                onChange={e => setRules(e.target.value)}
+                onChange={setRules}
                 placeholder="Введіть опис та правила турніру..."
-                disabled={fieldsDisabled}
-                className="w-full px-5 py-4 outline-none resize-y text-sm bg-transparent text-(--t1) placeholder:text-(--t2)/50"
+                rows={7}
                 />
                 </div>
                 </div>
@@ -772,7 +727,13 @@ export default function TournamentEditPage() {
                     </div>
                 )}
 
+                {/* ── Запрошення журі ── */}
+                <div className="cdIn" style={{ animationDelay: "180ms" }}>
+                <JuryInvitePanel tournamentId={id as string} tournamentName={name} />
+                </div>
+
                 {/* Actions */}
+
                 <div className="cdIn flex flex-col sm:flex-row gap-3 pb-8" style={{ animationDelay: "200ms" }}>
                 <button
                 type="submit"

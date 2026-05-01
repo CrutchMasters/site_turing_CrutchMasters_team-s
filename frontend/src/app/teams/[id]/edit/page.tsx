@@ -7,6 +7,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
+import { API_URL } from "@/lib/api";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import {
@@ -68,6 +69,7 @@ export default function EditTeamPage() {
     const [removingId, setRemovingId] = useState<string | null>(null);
     const [addingId, setAddingId] = useState<string | null>(null);
     const [confirmRemove, setConfirmRemove] = useState<TeamMember | null>(null);
+    const [inviteSent, setInviteSent] = useState<string | null>(null);
 
     // Auth guard
     useEffect(() => {
@@ -135,24 +137,25 @@ export default function EditTeamPage() {
         }, [user, teamId]);
 
         // Search users to add
-        const handleSearch = useCallback(async () => {
-            if (!memberSearch.trim()) { setSearchResults([]); return; }
+        const handleSearch = useCallback(async (forceQuery?: string) => {
+            const q = (forceQuery ?? memberSearch).trim();
+            if (!q) { setSearchResults([]); return; }
             setIsSearching(true);
             try {
                 const q = memberSearch.trim();
-                const { data, error } = await supabase
-                .from("account")
-                .select("id, username, login, email, role, avatar_url, status")
-                .or(`username.ilike.%${q}%,login.ilike.%${q}%,email.ilike.%${q}%`)
-                .eq("status", "active")
-                .limit(10);
-                if (error) throw error;
-                // Exclude already-in-team users and captain
+                const token = localStorage.getItem("access_token");
+                const res = await fetch(
+                    `${API_URL}/api/users/search?q=${encodeURIComponent(q)}`,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+                if (!res.ok) throw new Error("Search failed");
+                const json = await res.json();
+
                 const currentIds = new Set([
                     team?.captain_id,
                     ...(team?.members_ids ?? []),
                 ]);
-                setSearchResults((data ?? []).filter(u => !currentIds.has(u.id)));
+                setSearchResults((json.users ?? []).filter((u: TeamMember) => !currentIds.has(u.id)));
             } catch (e) {
                 console.error(e);
                 setSearchResults([]);
@@ -161,18 +164,34 @@ export default function EditTeamPage() {
             }
         }, [memberSearch, team]);
 
+        // Auto-search with 400ms debounce when user types
+        useEffect(() => {
+            if (!memberSearch.trim()) { setSearchResults([]); return; }
+            const timer = setTimeout(() => { handleSearch(memberSearch); }, 400);
+            return () => clearTimeout(timer);
+        }, [memberSearch]); // eslint-disable-line react-hooks/exhaustive-deps
+
         const handleAddMember = async (member: TeamMember) => {
             if (!team) return;
             setAddingId(member.id);
             try {
-                const newIds = [...(team.members_ids ?? []), member.id];
-                const { error } = await supabase
-                .from("teams")
-                .update({ members_ids: newIds })
-                .eq("id", team.id);
-                if (error) throw error;
-                setTeam(prev => prev ? { ...prev, members_ids: newIds } : prev);
-                setMembers(prev => [...prev, member]);
+                const token = localStorage.getItem("access_token");
+                const res = await fetch(`${API_URL}/api/invitations/send`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        team_id: team.id,
+                        invitee_id: member.id,
+                    }),
+                });
+                if (!res.ok) {
+                    const json = await res.json();
+                    throw new Error(json.detail ?? t.editTeam.errAddMember);
+                }
+                // Запрошення відправлено — прибираємо зі списку пошуку
                 setSearchResults(prev => prev.filter(u => u.id !== member.id));
             } catch (e: any) {
                 setError(e.message ?? t.editTeam.errAddMember);
@@ -181,16 +200,19 @@ export default function EditTeamPage() {
             }
         };
 
-        const handleRemoveMember = async (member: TeamMember) => {
+        const handleRemoveMember = useCallback(async (member: TeamMember) => {
             if (!team) return;
             setRemovingId(member.id);
             try {
-                const newIds = (team.members_ids ?? []).filter(id => id !== member.id);
-                const { error } = await supabase
-                .from("teams")
-                .update({ members_ids: newIds })
-                .eq("id", team.id);
+                const { data, error } = await supabase
+                .rpc("remove_team_member", {
+                    p_team_id: team.id,
+                    p_member_id: member.id,
+                });
                 if (error) throw error;
+                if (data?.error) throw new Error(data.error);
+
+                const newIds: string[] = (data.members_ids ?? []);
                 setTeam(prev => prev ? { ...prev, members_ids: newIds } : prev);
                 setMembers(prev => prev.filter(m => m.id !== member.id));
                 setConfirmRemove(null);
@@ -199,7 +221,7 @@ export default function EditTeamPage() {
             } finally {
                 setRemovingId(null);
             }
-        };
+        }, [team, t]);
 
         const handleSave = async () => {
             if (!team || !name.trim()) return;
@@ -533,12 +555,18 @@ export default function EditTeamPage() {
                         </div>
                         <button
                         onClick={() => handleAddMember(person)}
-                        disabled={addingId === person.id}
-                        className="flex-shrink-0 flex items-center gap-1.5 bg-blue-600/10 border border-blue-600/20 text-blue-600 font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2 hover:bg-blue-600 hover:text-white transition-all active:scale-95"
+                        disabled={addingId === person.id || inviteSent === person.id}
+                        className={`flex-shrink-0 flex items-center gap-1.5 font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2 transition-all active:scale-95 border ${
+                            inviteSent === person.id
+                            ? "bg-green-500/10 border-green-500/30 text-green-500 cursor-default"
+                            : "bg-blue-600/10 border-blue-600/20 text-blue-600 hover:bg-blue-600 hover:text-white"
+                        }`}
                         >
                         {addingId === person.id
                             ? <Loader size={12} className="animate-spin" />
-                            : <><UserPlus size={12} /> {t.editTeam.addMemberBtn}</>
+                            : inviteSent === person.id
+                            ? <><Check size={12} /> Запрошення надіслано</>
+                            : <><Send size={12} /> Запросити</>
                         }
                         </button>
                         </div>

@@ -5,15 +5,22 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
 import { useT } from "@/context/LanguageContext";
-import { Trophy, Users, Upload, ExternalLink, ChevronRight, Plus, Loader } from "lucide-react";
+import {
+  Trophy, Users, Upload, ExternalLink, ChevronRight, Plus, Loader,
+  Megaphone, Link2, X, Pin, PinOff, Trash2, Edit3, Eye, ImageOff,
+} from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
-import { supabase } from "@/lib/supabase";
+import { supabase, authedSupabase } from "@/lib/supabase";
+import { RichTextEditor } from "@/components/RichTextEditor";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
 ? "http://localhost:8000"
 : "https://site-turing-crutchmasters-team-s.onrender.com";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Tournament {
   id: string;
@@ -27,9 +34,34 @@ interface Tournament {
   team_count?: number;
 }
 
+interface Announcement {
+  id: string;
+  title: string;
+  body?: string;
+  link_url?: string;
+  link_title?: string;
+  link_desc?: string;
+  link_image?: string;
+  is_pinned: boolean;
+  created_by?: string;
+  created_at: string;
+}
+
+interface LinkPreview {
+  title: string;
+  description: string;
+  image: string;
+  loading: boolean;
+  error: boolean;
+}
+
 type TournamentStatus = Tournament["status"];
 
-function computeStatus(t: Pick<Tournament, "start_at" | "end_at" | "registration_from" | "registration_to">): TournamentStatus {
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function computeStatus(
+  t: Pick<Tournament, "start_at" | "end_at" | "registration_from" | "registration_to">
+): TournamentStatus {
   const now     = Date.now();
   const start   = t.start_at          ? new Date(t.start_at).getTime()          : null;
   const end     = t.end_at            ? new Date(t.end_at).getTime()            : null;
@@ -54,17 +86,408 @@ function fmtDate(iso?: string) {
   return new Date(iso).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+function fmtDateTime(iso?: string) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("uk-UA", {
+    day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function extractDomain(url: string) {
+  try { return new URL(url).hostname.replace("www.", ""); } catch { return url; }
+}
+
+// ─── Link Preview Fetcher ─────────────────────────────────────────────────────
+// Uses a free Open Graph API proxy — no backend needed.
+// In production you may want to proxy this through your own backend.
+async function fetchLinkPreview(url: string): Promise<Partial<LinkPreview>> {
+  try {
+    // Try to parse YouTube / common embeds natively first
+    const u = new URL(url);
+
+    // YouTube
+    const ytMatch =
+    u.hostname.includes("youtube.com") || u.hostname.includes("youtu.be");
+    if (ytMatch) {
+      const videoId =
+      u.searchParams.get("v") ||
+      (u.hostname === "youtu.be" ? u.pathname.slice(1) : null) ||
+      u.pathname.replace("/embed/", "").replace("/shorts/", "");
+      if (videoId) {
+        return {
+          title: "YouTube Video",
+          description: url,
+          image: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+        };
+      }
+    }
+
+    // Generic OG via allorigins + html parsing
+    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    const resp  = await fetch(proxy, { signal: AbortSignal.timeout(6000) });
+    const json  = await resp.json();
+    const html: string = json.contents ?? "";
+
+    const getMeta = (prop: string) => {
+      const m =
+      html.match(new RegExp(`<meta[^>]+property=["']og:${prop}["'][^>]+content=["']([^"']+)`, "i")) ||
+      html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:${prop}`, "i")) ||
+      html.match(new RegExp(`<meta[^>]+name=["']${prop}["'][^>]+content=["']([^"']+)`, "i"));
+      return m?.[1] ?? "";
+    };
+
+    const titleTag = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] ?? "";
+
+    return {
+      title:       getMeta("title")       || titleTag || extractDomain(url),
+      description: getMeta("description") || getMeta("description"),
+      image:       getMeta("image"),
+    };
+  } catch {
+    return { title: extractDomain(url), description: "", image: "" };
+  }
+}
+
+// ─── Announcement Modal ───────────────────────────────────────────────────────
+
+interface AnnouncementModalProps {
+  onClose: () => void;
+  onSave: (a: Partial<Announcement>) => Promise<void>;
+  initial?: Announcement;
+}
+
+function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps) {
+  const [title,    setTitle]    = useState(initial?.title    ?? "");
+  const [body,     setBody]     = useState(initial?.body     ?? "");
+  const [linkUrl,  setLinkUrl]  = useState(initial?.link_url ?? "");
+  const [isPinned, setIsPinned] = useState(initial?.is_pinned ?? false);
+  const [saving,   setSaving]   = useState(false);
+  const [preview,  setPreview]  = useState<LinkPreview>({
+    title: "", description: "", image: "", loading: false, error: false,
+  });
+
+  // Prefill preview if editing
+  useEffect(() => {
+    if (initial?.link_title) {
+      setPreview({
+        title:       initial.link_title ?? "",
+        description: initial.link_desc  ?? "",
+        image:       initial.link_image ?? "",
+        loading: false, error: false,
+      });
+    }
+  }, [initial]);
+
+  const previewTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleLinkChange = (val: string) => {
+    setLinkUrl(val);
+    setPreview(p => ({ ...p, loading: !!val, error: false }));
+    if (!val.trim()) {
+      setPreview({ title: "", description: "", image: "", loading: false, error: false });
+      return;
+    }
+    previewTimeout.current = setTimeout(async () => {
+      const data = await fetchLinkPreview(val.trim());
+      setPreview({ ...data as LinkPreview, loading: false, error: !data.title });
+    }, 700);
+  };
+
+  const handleSave = async () => {
+    if (!title.trim()) return;
+    setSaving(true);
+    await onSave({
+      title:      title.trim(),
+                 body:       body.trim() || undefined,
+                 link_url:   linkUrl.trim() || undefined,
+                 link_title: preview.title  || undefined,
+                 link_desc:  preview.description || undefined,
+                 link_image: preview.image  || undefined,
+                 is_pinned:  isPinned,
+    });
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="w-full max-w-lg bg-(--card) rounded-3xl border border-(--brd) shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+
+    {/* Header */}
+    <div className="flex items-center justify-between px-6 py-5 border-b border-(--brd)">
+    <div className="flex items-center gap-3">
+    <div className="w-9 h-9 rounded-xl bg-blue-600/15 border border-blue-600/30 flex items-center justify-center">
+    <Megaphone className="text-blue-600" size={16} />
+    </div>
+    <h2 className="font-black text-sm uppercase tracking-widest text-(--t1)">
+    {initial ? "Редагувати оголошення" : "Нове оголошення"}
+    </h2>
+    </div>
+    <button
+    onClick={onClose}
+    className="p-2 rounded-xl text-(--t2) hover:bg-(--bg) hover:text-(--t1) transition-colors"
+    >
+    <X size={16} />
+    </button>
+    </div>
+
+    {/* Body */}
+    <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+
+    {/* Title */}
+    <div>
+    <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-2">
+    Заголовок *
+    </label>
+    <input
+    value={title}
+    onChange={e => setTitle(e.target.value)}
+    placeholder="Наприклад: Конференція WebSummit 2025"
+    className="w-full px-4 py-3 rounded-xl bg-(--bg) border border-(--brd) text-sm font-bold text-(--t1) placeholder:text-(--t2)/50 focus:outline-none focus:border-blue-600/60 transition-colors"
+    />
+    </div>
+
+    {/* Body */}
+    <div>
+    <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-2">
+    Опис
+    </label>
+    <RichTextEditor
+    value={body}
+    onChange={setBody}
+    placeholder="Детальний опис події, умови участі, дедлайни..."
+    rows={4}
+    />
+    </div>
+
+    {/* Link URL */}
+    <div>
+    <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-2">
+    Посилання (конференція, відео, сайт)
+    </label>
+    <div className="relative">
+    <Link2 size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-(--t2)" />
+    <input
+    value={linkUrl}
+    onChange={e => handleLinkChange(e.target.value)}
+    placeholder="https://..."
+    className="w-full pl-9 pr-4 py-3 rounded-xl bg-(--bg) border border-(--brd) text-sm font-bold text-(--t1) placeholder:text-(--t2)/50 focus:outline-none focus:border-blue-600/60 transition-colors"
+    />
+    </div>
+    </div>
+
+    {/* Link Preview */}
+    {(linkUrl || preview.loading) && (
+      <div className="rounded-2xl border border-(--brd) overflow-hidden bg-(--bg)">
+      <div className="px-4 py-2 border-b border-(--brd) flex items-center gap-2">
+      <Eye size={11} className="text-(--t2)" />
+      <span className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Передогляд посилання</span>
+      {preview.loading && <Loader size={10} className="text-blue-600 animate-spin ml-auto" />}
+      </div>
+
+      {preview.loading ? (
+        <div className="p-4 flex gap-3 animate-pulse">
+        <div className="w-20 h-14 rounded-lg bg-(--brd) flex-shrink-0" />
+        <div className="flex-1 space-y-2 pt-1">
+        <div className="h-3 bg-(--brd) rounded w-3/4" />
+        <div className="h-2 bg-(--brd) rounded w-full" />
+        <div className="h-2 bg-(--brd) rounded w-1/2" />
+        </div>
+        </div>
+      ) : preview.title ? (
+        <LinkPreviewCard
+        url={linkUrl}
+        title={preview.title}
+        description={preview.description}
+        image={preview.image}
+        />
+      ) : (
+        <div className="p-4 flex items-center gap-2 text-(--t2)">
+        <ImageOff size={14} />
+        <span className="text-xs font-bold">Не вдалось отримати передогляд</span>
+        </div>
+      )}
+      </div>
+    )}
+
+    {/* Pin toggle */}
+    <label className="flex items-center gap-3 cursor-pointer group">
+    <div
+    onClick={() => setIsPinned(p => !p)}
+    className={`w-10 h-5 rounded-full transition-colors relative ${isPinned ? "bg-blue-600" : "bg-(--brd)"}`}
+    >
+    <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${isPinned ? "translate-x-5" : ""}`} />
+    </div>
+    <span className="text-xs font-bold text-(--t2) group-hover:text-(--t1) transition-colors">
+    Закріпити оголошення
+    </span>
+    </label>
+    </div>
+
+    {/* Footer */}
+    <div className="px-6 py-4 border-t border-(--brd) flex gap-3 justify-end">
+    <button
+    onClick={onClose}
+    className="px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest text-(--t2) border border-(--brd) hover:bg-(--bg) transition-colors"
+    >
+    Скасувати
+    </button>
+    <button
+    onClick={handleSave}
+    disabled={!title.trim() || saving}
+    className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-blue-600/25 transition-all active:scale-95"
+    >
+    {saving && <Loader size={12} className="animate-spin" />}
+    {saving ? "Зберігаємо..." : initial ? "Оновити" : "Опублікувати"}
+    </button>
+    </div>
+    </div>
+    </div>
+  );
+}
+
+// ─── Link Preview Card (display only) ────────────────────────────────────────
+
+interface LinkPreviewCardProps {
+  url: string;
+  title: string;
+  description?: string;
+  image?: string;
+}
+
+function LinkPreviewCard({ url, title, description, image }: LinkPreviewCardProps) {
+  const [imgError, setImgError] = useState(false);
+  const domain = extractDomain(url);
+
+  return (
+    <a
+    href={url}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="flex gap-0 overflow-hidden group cursor-pointer hover:bg-(--bg)/50 transition-colors"
+    onClick={e => e.stopPropagation()}
+    >
+    {image && !imgError ? (
+      <div className="w-28 sm:w-36 flex-shrink-0 bg-(--brd) relative overflow-hidden">
+      <img
+      src={image}
+      alt=""
+      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+      onError={() => setImgError(true)}
+      />
+      </div>
+    ) : (
+      <div className="w-20 flex-shrink-0 bg-(--brd)/50 flex items-center justify-center">
+      <ImageOff size={16} className="text-(--t2)/30" />
+      </div>
+    )}
+    <div className="p-3 sm:p-4 flex-1 min-w-0">
+    <p className="text-[9px] font-black uppercase tracking-wider text-(--t2) mb-1">{domain}</p>
+    <p className="text-xs font-black text-(--t1) leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">{title}</p>
+    {description && (
+      <p className="text-[10px] font-bold text-(--t2) mt-1 line-clamp-2 leading-relaxed">{description}</p>
+    )}
+    </div>
+    </a>
+  );
+}
+
+// ─── Announcement Card ────────────────────────────────────────────────────────
+
+interface AnnouncementCardProps {
+  a: Announcement;
+  isAdmin: boolean;
+  onDelete: (id: string) => void;
+  onEdit: (a: Announcement) => void;
+  onTogglePin: (a: Announcement) => void;
+}
+
+function AnnouncementCard({ a, isAdmin, onDelete, onEdit, onTogglePin }: AnnouncementCardProps) {
+  return (
+    <div className={`rounded-2xl border overflow-hidden bg-(--card) transition-shadow hover:shadow-md ${a.is_pinned ? "border-blue-600/40" : "border-(--brd)"}`}>
+    {/* Card header */}
+    <div className="px-4 sm:px-5 py-3 sm:py-4 flex items-start gap-3">
+    <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${a.is_pinned ? "bg-blue-600/15 border border-blue-600/30" : "bg-(--bg) border border-(--brd)"}`}>
+    <Megaphone size={14} className={a.is_pinned ? "text-blue-600" : "text-(--t2)"} />
+    </div>
+    <div className="flex-1 min-w-0">
+    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+    {a.is_pinned && (
+      <span className="text-[8px] font-black uppercase tracking-widest bg-blue-600/10 text-blue-600 border border-blue-600/20 px-2 py-0.5 rounded-full">
+      📌 Закріплено
+      </span>
+    )}
+    <span className="text-[9px] font-bold text-(--t2)">{fmtDateTime(a.created_at)}</span>
+    </div>
+    <h3 className="font-black text-sm text-(--t1) leading-tight">{a.title}</h3>
+    {a.body && (
+      <MarkdownRenderer content={a.body} className="mt-1" />
+    )}
+    </div>
+
+    {/* Admin actions */}
+    {isAdmin && (
+      <div className="flex items-center gap-1 flex-shrink-0">
+      <button
+      onClick={() => onTogglePin(a)}
+      className={`p-1.5 rounded-lg transition-colors ${a.is_pinned ? "text-blue-600 bg-blue-600/10 hover:bg-blue-600/20" : "text-(--t2) hover:bg-(--bg)"}`}
+      title={a.is_pinned ? "Відкріпити" : "Закріпити"}
+      >
+      {a.is_pinned ? <PinOff size={13} /> : <Pin size={13} />}
+      </button>
+      <button
+      onClick={() => onEdit(a)}
+      className="p-1.5 rounded-lg text-(--t2) hover:bg-(--bg) hover:text-(--t1) transition-colors"
+      title="Редагувати"
+      >
+      <Edit3 size={13} />
+      </button>
+      <button
+      onClick={() => onDelete(a.id)}
+      className="p-1.5 rounded-lg text-(--t2) hover:bg-red-500/10 hover:text-red-500 transition-colors"
+      title="Видалити"
+      >
+      <Trash2 size={13} />
+      </button>
+      </div>
+    )}
+    </div>
+
+    {/* Link preview */}
+    {a.link_url && (
+      <div className="border-t border-(--brd)">
+      <LinkPreviewCard
+      url={a.link_url}
+      title={a.link_title || extractDomain(a.link_url)}
+      description={a.link_desc}
+      image={a.link_image}
+      />
+      </div>
+    )}
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
 export default function DashboardPage() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const [backendMessage, setBackendMessage] = useState("waiting...");
-  const [tournaments, setTournaments]       = useState<Tournament[]>([]);
-  const [tournamentsLoading, setTournamentsLoading] = useState(true);
-  const [activeFilter, setActiveFilter]     = useState<"all" | "upcoming" | "registration" | "ongoing" | "finished">("all");
+  const [backendMessage,      setBackendMessage]       = useState("waiting...");
+  const [tournaments,         setTournaments]          = useState<Tournament[]>([]);
+  const [tournamentsLoading,  setTournamentsLoading]   = useState(true);
+  const [activeFilter,        setActiveFilter]         = useState<"all" | "upcoming" | "registration" | "ongoing" | "finished">("all");
+
+  // Announcements state
+  const [announcements,        setAnnouncements]        = useState<Announcement[]>([]);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(true);
+  const [modalOpen,            setModalOpen]            = useState(false);
+  const [editAnnouncement,     setEditAnnouncement]     = useState<Announcement | undefined>();
+
   const revealRefs = useRef<(HTMLElement | null)[]>([]);
   const router = useRouter();
-  const { dark } = useTheme();
-  const { user, isLoading } = useAuth();
-  const { t } = useT();
+  const { dark }        = useTheme();
+  const { user, token, isLoading } = useAuth();
+  const { t }           = useT();
 
   const STATUS_CONFIG = {
     upcoming:     { label: t.mainPage.statusUpcoming,     color: STATUS_COLORS.upcoming },
@@ -77,6 +500,7 @@ export default function DashboardPage() {
     if (!isLoading && !user) router.push("/login");
   }, [isLoading, user, router]);
 
+    // ── fetch tournaments ──────────────────────────────────────────────────────
     const fetchTournaments = useCallback(async () => {
       setTournamentsLoading(true);
       try {
@@ -103,7 +527,7 @@ export default function DashboardPage() {
         setTournaments((data ?? []).map((t: any) => ({
           ...t,
           team_count: counts[t.id] ?? 0,
-          status: computeStatus(t),   // всегда вычисляем по датам — как в tournaments page
+          status: computeStatus(t),
         })));
       } catch (e) {
         console.error(e);
@@ -112,33 +536,85 @@ export default function DashboardPage() {
       }
     }, []);
 
-    useEffect(() => {
-      if (isLoading || !user) return;
+    // ── fetch announcements ────────────────────────────────────────────────────
+    const fetchAnnouncements = useCallback(async () => {
+      setAnnouncementsLoading(true);
+      try {
+        const { data, error } = await supabase
+        .from("announcements")
+        .select("*")
+        .order("is_pinned", { ascending: false })
+        .order("created_at",  { ascending: false })
+        .limit(20);
 
-      fetch(`${API_URL}/api/test`)
-      .then(r => r.json())
-      .then(d => setBackendMessage(d.message))
-      .catch(() => setBackendMessage("Disconnected"));
+        if (error) throw error;
+        setAnnouncements(data ?? []);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setAnnouncementsLoading(false);
+      }
+    }, []);
 
-      fetchTournaments();
+    // ── CRUD handlers ──────────────────────────────────────────────────────────
+    const handleSaveAnnouncement = async (payload: Partial<Announcement>) => {
+      if (editAnnouncement) {
+        const { error } = await (await authedSupabase(token))
+        .from("announcements")
+        .update(payload)
+        .eq("id", editAnnouncement.id);
+        if (!error) await fetchAnnouncements();
+      } else {
+        const { error } = await (await authedSupabase(token))
+        .from("announcements")
+        .insert({ ...payload, created_by: user?.id });
+        if (!error) await fetchAnnouncements();
+      }
+    };
 
-      const obs = new IntersectionObserver(
-        entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add("fuIn"); }),
-                                           { threshold: 0.1 }
+    const handleDeleteAnnouncement = async (id: string) => {
+      if (!confirm("Видалити оголошення?")) return;
+      await (await authedSupabase(token)).from("announcements").delete().eq("id", id);
+      setAnnouncements(prev => prev.filter(a => a.id !== id));
+    };
+
+    const handleTogglePin = async (a: Announcement) => {
+      const { error } = await (await authedSupabase(token))
+      .from("announcements")
+      .update({ is_pinned: !a.is_pinned })
+      .eq("id", a.id);
+      if (!error) await fetchAnnouncements();
+    };
+
+      // ── effects ────────────────────────────────────────────────────────────────
+      useEffect(() => {
+        if (isLoading || !user) return;
+
+        fetch(`${API_URL}/api/test`)
+        .then(r => r.json())
+        .then(d => setBackendMessage(d.message))
+        .catch(() => setBackendMessage("Disconnected"));
+
+        fetchTournaments();
+        fetchAnnouncements();
+
+        const obs = new IntersectionObserver(
+          entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add("fuIn"); }),
+                                             { threshold: 0.1 }
+        );
+        revealRefs.current.forEach(r => { if (r) obs.observe(r); });
+        return () => obs.disconnect();
+      }, [isLoading, user, fetchTournaments, fetchAnnouncements]);
+
+      if (isLoading) return (
+        <div className="min-h-screen bg-(--bg) flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        </div>
       );
-      revealRefs.current.forEach(r => { if (r) obs.observe(r); });
-      return () => obs.disconnect();
-    }, [isLoading, user, fetchTournaments]);
 
-    if (isLoading) return (
-      <div className="min-h-screen bg-(--bg) flex items-center justify-center">
-      <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+      if (!user) return null;
 
-    if (!user) return null;
-
-    const isAdmin = user.role === "admin" || user.role === "superadmin";
+      const isAdmin = user.role === "admin" || user.role === "superadmin";
 
   const filterLabels: { key: typeof activeFilter; label: string }[] = [
     { key: "all",          label: t.mainPage.filterAll },
@@ -163,6 +639,7 @@ export default function DashboardPage() {
       .spr:hover { transform: translateY(-2px) scale(1.025) }
       `}</style>
 
+      {/* Background logo */}
       <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
       <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
@@ -189,7 +666,7 @@ export default function DashboardPage() {
 
       <div className="max-w-6xl space-y-6 sm:space-y-8">
 
-      {/* Admin Banner */}
+      {/* ── Admin Banner ── */}
       {isAdmin && (
         <section
         ref={el => { revealRefs.current[0] = el; }}
@@ -209,10 +686,10 @@ export default function DashboardPage() {
         {user.role === "superadmin" ? "Superadmin" : "Admin"} panel
         </span>
         <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight leading-tight">
-          {t.admin.manageTournaments}
+        {t.admin.manageTournaments}
         </h2>
         <p className="text-xs font-bold text-(--t2) mt-1 max-w-sm">
-          {t.admin.manageTournamentsDesc}
+        {t.admin.manageTournamentsDesc}
         </p>
         </div>
         </div>
@@ -224,12 +701,11 @@ export default function DashboardPage() {
         {t.admin.createTournament}
         </button>
         </div>
-
         <div className="relative z-10 mt-6 pt-5 border-t border-(--brd) flex flex-wrap gap-4 sm:gap-8">
         {[
           { label: t.admin.statActive, value: tournaments.filter(t => t.status === "ongoing").length.toString() },
-          { label: t.admin.statOpen,   value: tournaments.filter(t => t.status === "registration").length.toString() },
-          { label: t.admin.statTotal,  value: tournaments.length.toString() },
+                   { label: t.admin.statOpen,   value: tournaments.filter(t => t.status === "registration").length.toString() },
+                   { label: t.admin.statTotal,  value: tournaments.length.toString() },
         ].map(({ label, value }) => (
           <div key={label}>
           <p className="text-[10px] font-black uppercase tracking-wider text-(--t2)">{label}</p>
@@ -240,8 +716,71 @@ export default function DashboardPage() {
         </section>
       )}
 
+      {/* ── Announcements Section ── */}
+      <section
+      ref={el => { revealRefs.current[1] = el; }}
+      className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl"
+      >
+      {/* Section header */}
+      <div className="p-4 sm:p-6 md:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd)">
+      <div className="flex items-center gap-3">
+      <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+      <Megaphone className="text-amber-500" size={16} />
+      </div>
+      <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">Оголошення</h2>
+      {announcements.length > 0 && (
+        <span className="text-[9px] font-black bg-amber-500/10 text-amber-600 border border-amber-500/20 px-2 py-0.5 rounded-full">
+        {announcements.length}
+        </span>
+      )}
+      </div>
+      {isAdmin && (
+        <button
+        onClick={() => { setEditAnnouncement(undefined); setModalOpen(true); }}
+        className="flex items-center justify-center gap-2 bg-amber-500 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl px-5 py-3 hover:bg-amber-600 shadow-lg shadow-amber-500/20 active:scale-95 transition-all w-full sm:w-auto group"
+        >
+        <Plus size={14} className="group-hover:rotate-90 transition-transform duration-300" />
+        Нове оголошення
+        </button>
+      )}
+      </div>
+
+      {/* Announcements list */}
+      <div className="p-4 sm:p-6 space-y-3">
+      {announcementsLoading ? (
+        <div className="flex items-center justify-center py-10">
+        <Loader className="w-6 h-6 text-blue-600 animate-spin" />
+        </div>
+      ) : announcements.length === 0 ? (
+        <div className="py-10 text-center">
+        <Megaphone className="w-10 h-10 text-(--t2) opacity-20 mx-auto mb-3" />
+        <p className="text-sm font-bold text-(--t2)">Оголошень поки немає</p>
+        {isAdmin && (
+          <button
+          onClick={() => { setEditAnnouncement(undefined); setModalOpen(true); }}
+          className="mt-3 text-xs font-black text-blue-600 hover:underline"
+          >
+          + Додати перше оголошення
+          </button>
+        )}
+        </div>
+      ) : (
+        announcements.map(a => (
+          <AnnouncementCard
+          key={a.id}
+          a={a}
+          isAdmin={isAdmin}
+          onDelete={handleDeleteAnnouncement}
+          onEdit={ann => { setEditAnnouncement(ann); setModalOpen(true); }}
+          onTogglePin={handleTogglePin}
+          />
+        ))
+      )}
+      </div>
+      </section>
+
       {/* ── Tournaments table ── */}
-      <section ref={el => { revealRefs.current[1] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
+      <section ref={el => { revealRefs.current[2] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
       <div className="p-4 sm:p-6 md:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd)">
       <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">{t.mainPage.tournamentList}</h2>
       <div className="flex flex-wrap gap-2">
@@ -324,8 +863,8 @@ export default function DashboardPage() {
       </div>
       </section>
 
-      {/* Team */}
-      <section ref={el => { revealRefs.current[2] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 relative overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
+      {/* ── Team section ── */}
+      <section ref={el => { revealRefs.current[3] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 relative overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
       <div className="absolute -right-12 -top-12 w-40 h-40 rounded-full blur-3xl opacity-10 bg-blue-600 pointer-events-none" />
       <h2 className="font-black text-lg sm:text-xl mb-6 sm:mb-8 flex items-center gap-3 relative z-10 text-(--t1) uppercase tracking-tight">
       <Users className="text-blue-600" size={24} /> {t.mainPage.currentTournament}
@@ -355,6 +894,15 @@ export default function DashboardPage() {
       </div>
       </div>
       </main>
+
+      {/* ── Announcement Modal ── */}
+      {modalOpen && (
+        <AnnouncementModal
+        onClose={() => { setModalOpen(false); setEditAnnouncement(undefined); }}
+        onSave={handleSaveAnnouncement}
+        initial={editAnnouncement}
+        />
+      )}
       </div>
   );
 }

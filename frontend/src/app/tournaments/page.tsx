@@ -165,7 +165,7 @@ function TournamentCard({
     return (
         <button
             onClick={onClick}
-            className={`w-full text-left rounded-2xl border ${cfg.accentBorder} ${cfg.accentBg} p-4 sm:p-5 flex flex-col gap-3 hover:scale-[1.01] active:scale-[0.99] transition-all group shadow-sm`}
+            className="w-full text-left rounded-2xl border border-(--brd) bg-(--card) p-4 sm:p-5 flex flex-col gap-3 hover:scale-[1.01] hover:border-blue-600/40 active:scale-[0.99] transition-all group shadow-sm"
         >
             {/* Top row: dot + name + status badge */}
             <div className="flex items-center gap-2 min-w-0">
@@ -187,7 +187,7 @@ function TournamentCard({
             </p>
 
             {/* Meta row */}
-            <div className="flex items-center gap-4 text-[10px] font-bold text-(--t2) uppercase tracking-wider">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-bold text-(--t2) uppercase tracking-wider">
                 <span className="flex items-center gap-1">
                     <Calendar size={11} className="flex-shrink-0" />
                     {fmtDate(tt.start_at, locale)}
@@ -361,10 +361,10 @@ export default function TournamentsPage() {
                     icon={<Trophy size={18} className="text-blue-600" />}
                 />
 
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-10 relative z-10">
+                <div className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-8 lg:p-10 relative z-10">
 
                     {/* Breadcrumb */}
-                    <nav className="fuIn flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
+                    <nav className="fuIn flex items-center gap-2 text-[10px] font-black mb-4 sm:mb-6 uppercase tracking-widest text-(--t2)">
                         <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">
                             {t.nav?.home ?? "Home"}
                         </button>
@@ -373,25 +373,25 @@ export default function TournamentsPage() {
                     </nav>
 
                     {/* Page title */}
-                    <h1 className="fuIn text-2xl sm:text-3xl font-black text-(--t1) uppercase tracking-tight mb-8"
+                    <h1 className="fuIn text-xl sm:text-2xl lg:text-3xl font-black text-(--t1) uppercase tracking-tight mb-5 sm:mb-8"
                         style={{ animationDelay: "40ms" }}>
                         {t.tournaments?.title ?? "Турніри"}
                     </h1>
 
                     {/* ── Two-column layout ─────────────────────────────────────── */}
-                    <div className="flex flex-col xl:flex-row gap-6 items-start max-w-7xl">
+                    <div className="flex flex-col xl:flex-row gap-4 sm:gap-6 items-start max-w-7xl mx-auto">
 
                         {/* ════ LEFT: search + results ════ */}
-                        <div className="flex-1 min-w-0 flex flex-col gap-5 fuIn" style={{ animationDelay: "80ms" }}>
+                        <div className="w-full flex-1 min-w-0 flex flex-col gap-4 sm:gap-5 fuIn" style={{ animationDelay: "80ms" }}>
 
                             {/* Panel label */}
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                                     <div className="w-8 h-8 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center flex-shrink-0">
                                         <Search size={15} className="text-blue-600" />
                                     </div>
-                                    <div>
-                                        <h2 className="text-sm font-black uppercase tracking-widest text-(--t1)">
+                                    <div className="min-w-0">
+                                        <h2 className="text-sm font-black uppercase tracking-widest text-(--t1) truncate">
                                             {t.tournaments?.title ?? "Турніри"}
                                         </h2>
                                         <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest">
@@ -402,34 +402,25 @@ export default function TournamentsPage() {
                                 {isAdmin && (
                                     <button
                                         onClick={() => router.push("/register_tourney")}
-                                        className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-blue-600/25 active:scale-95 transition-all group"
+                                        className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl sm:rounded-2xl shadow-lg shadow-blue-600/25 active:scale-95 transition-all group flex-shrink-0"
                                     >
-                                        <Plus size={14} className="group-hover:rotate-90 transition-transform duration-300" />
+                                        <Plus size={13} className="group-hover:rotate-90 transition-transform duration-300" />
                                         {t.tournaments?.create ?? "Створити"}
                                     </button>
                                 )}
                             </div>
 
-                            {/* Stats row — above search */}
-                            {!loading && (
-                                <div className="grid grid-cols-3 gap-3">
-                                    <StatCard label="Активних" value={active}  color="text-blue-500"  bg="bg-blue-500/5"  border="border-blue-500/20" />
-                                    <StatCard label="Реєстрація" value={openReg} color="text-green-500" bg="bg-green-500/5" border="border-green-500/20" />
-                                    <StatCard label="Всього"   value={total}  color="text-(--t1)"    bg="bg-(--card)"    border="border-(--brd)"    />
-                                </div>
-                            )}
-
                             {/* Search box */}
-                            <div className="scIn bg-(--card) rounded-2xl sm:rounded-[2rem] shadow-xl border border-(--brd) p-4 sm:p-6"
+                            <div className="scIn bg-(--card) rounded-2xl sm:rounded-[2rem] shadow-xl border border-(--brd) p-3 sm:p-6"
                                  style={{ animationDelay: "100ms" }}>
                                 <div className="relative">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-(--t2) pointer-events-none w-5 h-5" />
+                                    <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-(--t2) pointer-events-none w-4 h-4 sm:w-5 sm:h-5" />
                                     <input
                                         type="text"
                                         placeholder={t.tournaments?.searchPlaceholder ?? "Пошук турнірів…"}
                                         value={searchQ}
                                         onChange={e => setSearchQ(e.target.value)}
-                                        className="w-full pl-12 pr-5 py-4 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) focus:ring-2 focus:ring-blue-500 focus:bg-(--card) outline-none text-sm transition-all"
+                                        className="w-full pl-10 sm:pl-12 pr-4 sm:pr-5 py-3 sm:py-4 rounded-xl sm:rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) focus:ring-2 focus:ring-blue-500 focus:bg-(--card) outline-none text-sm transition-all"
                                     />
                                 </div>
                                 {searchQ && (
@@ -458,7 +449,7 @@ export default function TournamentsPage() {
 
                             {/* Loading */}
                             {loading && (
-                                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                                <div className="flex flex-col items-center justify-center py-16 sm:py-20 gap-4">
                                     <Loader className="w-8 h-8 text-blue-600 animate-spin" />
                                     <p className="text-[11px] font-black uppercase tracking-widest text-(--t2)">
                                         {t.common?.loading ?? "Завантаження..."}
@@ -468,9 +459,9 @@ export default function TournamentsPage() {
 
                             {/* Empty state */}
                             {!loading && !error && tournaments.length === 0 && (
-                                <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) p-16 text-center">
-                                    <Trophy className="w-16 h-16 text-(--t2) mx-auto mb-4 opacity-30" />
-                                    <p className="text-lg font-black text-(--t1) mb-2">Немає турнірів</p>
+                                <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) p-10 sm:p-16 text-center">
+                                    <Trophy className="w-12 h-12 sm:w-16 sm:h-16 text-(--t2) mx-auto mb-4 opacity-30" />
+                                    <p className="text-base sm:text-lg font-black text-(--t1) mb-2">Немає турнірів</p>
                                     <p className="text-sm text-(--t2)">Поки що турнірів не заплановано</p>
                                 </div>
                             )}
@@ -478,45 +469,16 @@ export default function TournamentsPage() {
 
                         {/* ════ RIGHT: sections panel ════ */}
                         {!loading && tournaments.length > 0 && (
-                            <div className="w-full xl:w-[400px] flex-shrink-0 fuIn" style={{ animationDelay: "120ms" }}>
-                                {/* Panel header */}
-                                <div className="flex items-center gap-3 mb-4">
-                                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
-                                        <Trophy size={15} className="text-amber-500" />
-                                    </div>
-                                    <div>
-                                        <h2 className="text-sm font-black uppercase tracking-widest text-(--t1)">Огляд</h2>
-                                        <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest">
-                                            За статусом
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Card */}
-                                <div className="scIn bg-(--card) rounded-2xl sm:rounded-[2rem] shadow-xl border border-(--brd) p-4 sm:p-5 flex flex-col gap-1"
-                                     style={{ animationDelay: "140ms" }}>
-                                    {SECTIONS.map(cfg => (
-                                        <SectionBlock
-                                            key={cfg.key}
-                                            cfg={cfg}
-                                            items={byStatus(cfg.key)}
-                                            locale={locale}
-                                            onOpen={id => router.push(`/tournaments/${id}`)}
-                                        />
-                                    ))}
-
-                                    {/* No results for search */}
-                                    {searchQ && SECTIONS.every(cfg => byStatus(cfg.key).length === 0) && (
-                                        <div className="py-8 text-center">
-                                            <Trophy size={28} className="mx-auto mb-2 text-(--t2) opacity-30" />
-                                            <p className="text-sm font-bold text-(--t2)">Нічого не знайдено</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
+                            <MobileOverviewPanel
+                                byStatus={byStatus}
+                                locale={locale}
+                                searchQ={searchQ}
+                                onOpen={id => router.push(`/tournaments/${id}`)}
+                            />
                         )}
 
                     </div>
+
                 </div>
             </main>
         </div>
@@ -533,6 +495,82 @@ function StatCard({
         <div className={`${bg} border ${border} rounded-2xl px-4 py-3 flex flex-col items-center text-center`}>
             <span className={`text-2xl font-black leading-none ${color}`}>{value}</span>
             <span className="text-[9px] font-black uppercase tracking-widest text-(--t2) mt-1">{label}</span>
+        </div>
+    );
+}
+
+// ─── Mobile-friendly Overview Panel ──────────────────────────────────────────
+function MobileOverviewPanel({
+    byStatus, locale, searchQ, onOpen,
+}: {
+    byStatus: (s: TournamentStatus) => Tournament[];
+    locale: string;
+    searchQ: string;
+    onOpen: (id: string) => void;
+}) {
+    // На xl — завжди відкрито, на мобілі — закрито за замовчуванням
+    const [mobileOpen, setMobileOpen] = React.useState(false);
+    const isDesktop = typeof window !== "undefined" && window.innerWidth >= 1280;
+
+    const cardContent = (
+        <>
+            {SECTIONS.map(cfg => (
+                <SectionBlock
+                    key={cfg.key}
+                    cfg={cfg}
+                    items={byStatus(cfg.key)}
+                    locale={locale}
+                    onOpen={onOpen}
+                />
+            ))}
+            {searchQ && SECTIONS.every(cfg => byStatus(cfg.key).length === 0) && (
+                <div className="py-8 text-center">
+                    <Trophy size={28} className="mx-auto mb-2 text-(--t2) opacity-30" />
+                    <p className="text-sm font-bold text-(--t2)">Нічого не знайдено</p>
+                </div>
+            )}
+        </>
+    );
+
+    return (
+        <div className="w-full xl:w-[400px] flex-shrink-0 fuIn" style={{ animationDelay: "120ms" }}>
+
+            {/* Header — тапабельний на мобілі, просто заголовок на xl */}
+            <button
+                className="w-full flex items-center justify-between gap-3 mb-3"
+                onClick={() => setMobileOpen(v => !v)}
+            >
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
+                        <Trophy size={15} className="text-amber-500" />
+                    </div>
+                    <div className="text-left">
+                        <h2 className="text-sm font-black uppercase tracking-widest text-(--t1)">Огляд</h2>
+                        <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest">За статусом</p>
+                    </div>
+                </div>
+                <span className="xl:hidden text-(--t2)">
+                    {mobileOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </span>
+            </button>
+
+            {/* На мобілі — показуємо тільки якщо відкрито */}
+            <div className="xl:hidden">
+                {mobileOpen && (
+                    <div className="bg-(--card) rounded-2xl shadow-xl border border-(--brd) p-4 flex flex-col gap-1">
+                        {cardContent}
+                    </div>
+                )}
+            </div>
+
+            {/* На xl — завжди видима */}
+            <div className="hidden xl:block">
+                <div className="scIn bg-(--card) rounded-[2rem] shadow-xl border border-(--brd) p-5 flex flex-col gap-1"
+                     style={{ animationDelay: "140ms" }}>
+                    {cardContent}
+                </div>
+            </div>
+
         </div>
     );
 }
