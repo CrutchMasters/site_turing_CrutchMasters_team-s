@@ -2286,3 +2286,24 @@ async def get_my_tournaments(authorization: str = Header(...)):
         .execute()
 
     return {"tournaments": tour_res.data or []}
+
+@app.get("/api/users/search")
+async def search_users(q: str, authorization: str = Header(...)):
+    """Пошук користувачів по username/login/email. Використовує service_role — обходить RLS."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token = authorization.replace("Bearer ", "").strip()
+    get_caller(token)  # просто перевіряємо що юзер авторизований
+
+    if len(q.strip()) < 2:
+        return {"users": []}
+
+    data = supabase.table("account") \
+        .select("id, username, login, email, role, avatar_url, status") \
+        .or_(f"username.ilike.%{q}%,login.ilike.%{q}%,email.ilike.%{q}%") \
+        .eq("status", "active") \
+        .limit(10) \
+        .execute()
+
+    return {"users": data.data or []}

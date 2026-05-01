@@ -7,6 +7,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
+import { API_URL } from "@/lib/api";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import {
@@ -140,19 +141,19 @@ export default function EditTeamPage() {
             setIsSearching(true);
             try {
                 const q = memberSearch.trim();
-                const { data, error } = await supabase
-                .from("account")
-                .select("id, username, login, email, role, avatar_url, status")
-                .or(`username.ilike.%${q}%,login.ilike.%${q}%,email.ilike.%${q}%`)
-                .eq("status", "active")
-                .limit(10);
-                if (error) throw error;
-                // Exclude already-in-team users and captain
+                const token = localStorage.getItem("access_token");
+                const res = await fetch(
+                    `${API_URL}/api/users/search?q=${encodeURIComponent(q)}`,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+                if (!res.ok) throw new Error("Search failed");
+                const json = await res.json();
+
                 const currentIds = new Set([
                     team?.captain_id,
                     ...(team?.members_ids ?? []),
                 ]);
-                setSearchResults((data ?? []).filter(u => !currentIds.has(u.id)));
+                setSearchResults((json.users ?? []).filter((u: TeamMember) => !currentIds.has(u.id)));
             } catch (e) {
                 console.error(e);
                 setSearchResults([]);
@@ -165,14 +166,23 @@ export default function EditTeamPage() {
             if (!team) return;
             setAddingId(member.id);
             try {
-                const newIds = [...(team.members_ids ?? []), member.id];
-                const { error } = await supabase
-                .from("teams")
-                .update({ members_ids: newIds })
-                .eq("id", team.id);
-                if (error) throw error;
-                setTeam(prev => prev ? { ...prev, members_ids: newIds } : prev);
-                setMembers(prev => [...prev, member]);
+                const token = localStorage.getItem("access_token");
+                const res = await fetch(`${API_URL}/api/invitations/send`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        team_id: team.id,
+                        invitee_id: member.id,
+                    }),
+                });
+                if (!res.ok) {
+                    const json = await res.json();
+                    throw new Error(json.detail ?? t.editTeam.errAddMember);
+                }
+                // Запрошення відправлено — прибираємо зі списку пошуку
                 setSearchResults(prev => prev.filter(u => u.id !== member.id));
             } catch (e: any) {
                 setError(e.message ?? t.editTeam.errAddMember);
