@@ -69,6 +69,7 @@ export default function EditTeamPage() {
     const [removingId, setRemovingId] = useState<string | null>(null);
     const [addingId, setAddingId] = useState<string | null>(null);
     const [confirmRemove, setConfirmRemove] = useState<TeamMember | null>(null);
+    const [inviteSent, setInviteSent] = useState<string | null>(null);
 
     // Auth guard
     useEffect(() => {
@@ -136,8 +137,9 @@ export default function EditTeamPage() {
         }, [user, teamId]);
 
         // Search users to add
-        const handleSearch = useCallback(async () => {
-            if (!memberSearch.trim()) { setSearchResults([]); return; }
+        const handleSearch = useCallback(async (forceQuery?: string) => {
+            const q = (forceQuery ?? memberSearch).trim();
+            if (!q) { setSearchResults([]); return; }
             setIsSearching(true);
             try {
                 const q = memberSearch.trim();
@@ -161,6 +163,13 @@ export default function EditTeamPage() {
                 setIsSearching(false);
             }
         }, [memberSearch, team]);
+
+        // Auto-search with 400ms debounce when user types
+        useEffect(() => {
+            if (!memberSearch.trim()) { setSearchResults([]); return; }
+            const timer = setTimeout(() => { handleSearch(memberSearch); }, 400);
+            return () => clearTimeout(timer);
+        }, [memberSearch]); // eslint-disable-line react-hooks/exhaustive-deps
 
         const handleAddMember = async (member: TeamMember) => {
             if (!team) return;
@@ -196,10 +205,10 @@ export default function EditTeamPage() {
             setRemovingId(member.id);
             try {
                 const { data, error } = await supabase
-                    .rpc("remove_team_member", {
-                        p_team_id: team.id,
-                        p_member_id: member.id,
-                    });
+                .rpc("remove_team_member", {
+                    p_team_id: team.id,
+                    p_member_id: member.id,
+                });
                 if (error) throw error;
                 if (data?.error) throw new Error(data.error);
 
@@ -546,12 +555,18 @@ export default function EditTeamPage() {
                         </div>
                         <button
                         onClick={() => handleAddMember(person)}
-                        disabled={addingId === person.id}
-                        className="flex-shrink-0 flex items-center gap-1.5 bg-blue-600/10 border border-blue-600/20 text-blue-600 font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2 hover:bg-blue-600 hover:text-white transition-all active:scale-95"
+                        disabled={addingId === person.id || inviteSent === person.id}
+                        className={`flex-shrink-0 flex items-center gap-1.5 font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2 transition-all active:scale-95 border ${
+                            inviteSent === person.id
+                            ? "bg-green-500/10 border-green-500/30 text-green-500 cursor-default"
+                            : "bg-blue-600/10 border-blue-600/20 text-blue-600 hover:bg-blue-600 hover:text-white"
+                        }`}
                         >
                         {addingId === person.id
                             ? <Loader size={12} className="animate-spin" />
-                            : <><UserPlus size={12} /> {t.editTeam.addMemberBtn}</>
+                            : inviteSent === person.id
+                            ? <><Check size={12} /> Запрошення надіслано</>
+                            : <><Send size={12} /> Запросити</>
                         }
                         </button>
                         </div>

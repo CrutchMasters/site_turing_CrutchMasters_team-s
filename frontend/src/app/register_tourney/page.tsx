@@ -2,9 +2,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Bold, Italic, Underline, List, Quote, Type,
   Zap, Trophy, Clock, Users, Layers, ChevronRight, ArrowLeft, X, CalendarDays,
 } from 'lucide-react';
+import { RichTextEditor } from '@/components/RichTextEditor';
 
 import Sidebar from "@/components/Sidebar";
 import { DatePicker, TimePicker } from "@/components/DateTimePicker";
@@ -74,34 +74,7 @@ export default function RegisterTourney() {
   const [isSubmitting, setIsSubmitting]   = useState(false);
   const [submitError, setSubmitError]     = useState<string | null>(null);
 
-  const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const applyFormat = (syntax: string, wrap = false) => {
-    const el = textareaRef.current;
-    if (!el) return;
-    const start = el.selectionStart;
-    const end   = el.selectionEnd;
-    const selected = description.slice(start, end);
-    let newText: string;
-    let newCursorStart: number;
-    let newCursorEnd: number;
-    if (wrap) {
-      const wrapped = `${syntax}${selected || 'текст'}${syntax}`;
-      newText = description.slice(0, start) + wrapped + description.slice(end);
-      newCursorStart = selected ? start : start + syntax.length;
-      newCursorEnd   = selected ? start + wrapped.length : start + syntax.length + 4;
-    } else {
-      const lineStart = description.lastIndexOf('\n', start - 1) + 1;
-      const line = description.slice(lineStart, end);
-      const alreadyApplied = line.startsWith(syntax);
-      const newLine = alreadyApplied ? line.slice(syntax.length) : syntax + line;
-      newText = description.slice(0, lineStart) + newLine + description.slice(lineStart + line.length);
-      newCursorStart = newCursorEnd = alreadyApplied ? start - syntax.length : start + syntax.length;
-    }
-    setDescription(newText);
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(newCursorStart, newCursorEnd); });
-  };
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (isLoading) return;
@@ -509,31 +482,12 @@ export default function RegisterTourney() {
         <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-2">
         {t.tourney?.desc ?? 'Опис / Правила'}
         </label>
-        <div className="border border-(--brd) rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-600 transition-all">
-        <div className="border-b border-(--brd) px-4 py-2.5 flex items-center gap-1 bg-(--bg)/60 flex-wrap">
-        {([
-          { Icon: Bold,      label: 'Жирний',    action: () => applyFormat('**', true)   },
-          { Icon: Italic,    label: 'Курсив',    action: () => applyFormat('*',  true)   },
-          { Icon: Underline, label: 'Підкресл.', action: () => applyFormat('__', true)   },
-          { Icon: List,      label: 'Список',    action: () => applyFormat('- ', false)  },
-          { Icon: Quote,     label: 'Цитата',    action: () => applyFormat('> ', false)  },
-          { Icon: Type,      label: 'Заголовок', action: () => applyFormat('## ', false) },
-        ] as const).map(({ Icon, label, action }) => (
-          <button key={label} type="button" onClick={action} title={label}
-          className="p-2 rounded-xl hover:bg-(--card) text-(--t2) hover:text-blue-600 transition-all active:scale-90">
-          <Icon className="w-3.5 h-3.5" />
-          </button>
-        ))}
-        </div>
-        <textarea
-        ref={textareaRef}
-        rows={5}
+        <RichTextEditor
         value={description}
-        onChange={e => setDescription(e.target.value)}
+        onChange={setDescription}
         placeholder={t.tourney?.descPlaceholder ?? 'Введіть опис турніру...'}
-        className="w-full px-5 py-4 outline-none resize-y text-sm bg-transparent text-(--t1) placeholder:text-(--t2)/50"
+        rows={7}
         />
-        </div>
         </div>
         </div>
         </section>
