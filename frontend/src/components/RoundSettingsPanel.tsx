@@ -1,10 +1,10 @@
 'use client';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
-    Bold, Italic, Underline, List, Quote, Type,
-    X, Plus, Clock, Upload, Link2, Trash2, CalendarDays
+    X, Plus, Upload, Link2, Trash2,
 } from 'lucide-react';
 import { DatePicker, TimePicker } from '@/components/DateTimePicker';
+import { RichTextEditor } from '@/components/RichTextEditor';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 export interface RoundData {
@@ -211,75 +211,6 @@ function FilesField({ files, onChange }: { files: FileItem[]; onChange: (f: File
             </button>
             </div>
         );
-}
-
-// ── RichTextEditor ────────────────────────────────────────────────────────
-function RichTextEditor({
-    value, onChange, placeholder = 'Опис...',
-}: { value: string; onChange: (v: string) => void; placeholder?: string }) {
-    const ref = useRef<HTMLTextAreaElement>(null);
-
-    const apply = (syntax: string, wrap = false) => {
-        const el = ref.current; if (!el) return;
-        const s = el.selectionStart, e = el.selectionEnd;
-        const selected = value.slice(s, e);
-        let newText: string, cs: number, ce: number;
-        if (wrap) {
-            const wrapped = `${syntax}${selected || 'текст'}${syntax}`;
-            newText = value.slice(0, s) + wrapped + value.slice(e);
-            cs = selected ? s : s + syntax.length;
-            ce = selected ? s + wrapped.length : cs + 4;
-        } else {
-            const ls = value.lastIndexOf('\n', s - 1) + 1;
-            const line = value.slice(ls, e);
-            const already = line.startsWith(syntax);
-            const newLine = already ? line.slice(syntax.length) : syntax + line;
-            newText = value.slice(0, ls) + newLine + value.slice(ls + line.length);
-            cs = ce = already ? s - syntax.length : s + syntax.length;
-        }
-        onChange(newText);
-        requestAnimationFrame(() => { el.focus(); el.setSelectionRange(cs, ce); });
-    };
-
-    const tools = [
-        { icon: Bold,      title: 'Жирний',    action: () => apply('**', true)   },
-        { icon: Italic,    title: 'Курсив',    action: () => apply('*', true)    },
-        { icon: Underline, title: 'Підкресл.', action: () => apply('__', true)   },
-        null,
-        { icon: List,      title: 'Список',    action: () => apply('- ', false)  },
-        { icon: Quote,     title: 'Цитата',    action: () => apply('> ', false)  },
-        { icon: Type,      title: 'Заголовок', action: () => apply('## ', false) },
-    ];
-
-    return (
-        <div className="border border-(--brd) rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-600 transition-all">
-        <div className="border-b border-(--brd) px-3 py-2 flex items-center gap-0.5 bg-(--bg)/60 flex-wrap">
-        {tools.map((t, i) =>
-            t === null
-            ? <div key={i} className="w-px h-4 bg-(--brd) mx-1" />
-            : (
-                <button
-                key={t.title}
-                type="button"
-                title={t.title}
-                onClick={t.action}
-                className="p-1.5 rounded-lg hover:bg-(--card) text-(--t2) hover:text-blue-600 transition-all active:scale-90"
-                >
-                <t.icon className="w-3.5 h-3.5" />
-                </button>
-            )
-        )}
-        </div>
-        <textarea
-        ref={ref}
-        rows={5}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full px-4 py-3 outline-none resize-y text-sm bg-transparent text-(--t1) placeholder:text-(--t2)/40 min-h-[100px]"
-        />
-        </div>
-    );
 }
 
 // ── RoundSettingsPanel (main export) ──────────────────────────────────────

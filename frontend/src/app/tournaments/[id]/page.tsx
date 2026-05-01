@@ -9,6 +9,7 @@ import { useTheme } from "@/hooks/useTheme";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import { Trophy, Users, ArrowLeft, Loader, Edit, ChevronRight, Clock, Flag, Lock } from "lucide-react";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -262,9 +263,9 @@ export default function TournamentPage() {
         </div>
 
         {tournament.rules && (
-            <p className="text-sm text-(--t2) leading-relaxed mb-5 bg-(--card) border border-(--brd) rounded-2xl p-4">
-            {tournament.rules}
-            </p>
+            <div className="mb-5 bg-(--card) border border-(--brd) rounded-2xl p-4">
+            <MarkdownRenderer content={tournament.rules} />
+            </div>
         )}
 
         {/* Stats */}

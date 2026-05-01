@@ -673,7 +673,7 @@ async def get_my_team(authorization: str = Header(...)):
     captain_res = supabase.table("teams")         .select("*")         .eq("captain_id", caller["id"])         .execute()
 
     # Команды где участник (members_ids содержит id)
-    member_res = supabase.table("teams")         .select("*")         .contains("members_ids", [caller["id"]])         .execute()
+    member_res = supabase.table("teams")         .select("*")         .contains("members_ids", json.dumps([caller["id"]]))         .execute()
 
     # FIX (низький): дедуплікація через set — O(n) замість O(n²)
     seen_ids = set()
@@ -1693,7 +1693,7 @@ async def submit_work(
         else:
             mem_res = supabase.table("teams") \
                 .select("id, name, captain_id, members_ids, tournament_id") \
-                .contains("members_ids", [caller["id"]]) \
+                .contains("members_ids", json.dumps([caller["id"]])) \
                 .eq("tournament_id", tournament_id) \
                 .limit(1).execute()
             if mem_res.data:
@@ -1813,7 +1813,7 @@ async def save_jury_evaluation(
 
     if caller.get("role") not in ("jury", "admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Тільки журі може виставляти оцінки")
-    
+
     # Для журі — перевіряємо що він запрошений саме до цього турніру
     if caller.get("role") in ("jury", "admin", "superadmin"):
         round_ = fetch_one(
@@ -1916,7 +1916,7 @@ async def get_submission(round_id: str, authorization: str = Header(...), team_i
         else:
             mem_res = supabase.table("teams") \
                 .select("id") \
-                .contains("members_ids", [caller["id"]]) \
+                .contains("members_ids", json.dumps([caller["id"]])) \
                 .eq("tournament_id", tournament_id) \
                 .limit(1).execute()
             if mem_res.data:
@@ -2008,7 +2008,7 @@ async def delete_submission_file(round_id: str, body: dict, authorization: str =
         else:
             mem_res = supabase.table("teams") \
                 .select("id") \
-                .contains("members_ids", [caller["id"]]) \
+                .contains("members_ids", json.dumps([caller["id"]])) \
                 .eq("tournament_id", tournament_id) \
                 .limit(1).execute()
             if mem_res.data:
@@ -2200,7 +2200,7 @@ async def get_signed_urls(body: dict, authorization: str = Header(...)):
     # Очікуваний формат: submissions/{round_id}/{team_id}/...
     # Знаходимо команди користувача і перевіряємо team_id в шляху.
     captain_res = supabase.table("teams").select("id").eq("captain_id", caller["id"]).execute()
-    member_res  = supabase.table("teams").select("id").contains("members_ids", [caller["id"]]).execute()
+    member_res  = supabase.table("teams").select("id").contains("members_ids", json.dumps([caller["id"]])).execute()
     is_admin    = caller.get("role") in ("admin", "superadmin", "jury")
     if not is_admin:
         user_team_ids = {t["id"] for t in (captain_res.data or []) + (member_res.data or [])}
@@ -2253,7 +2253,7 @@ async def get_my_tournaments(authorization: str = Header(...)):
     # FIX (критичний): використовуємо [user_id] (список), а не json.dumps([user_id]) (рядок)
     member_res = supabase.table("teams") \
         .select("id, tournament_id") \
-        .contains("members_ids", [user_id]) \
+        .contains("members_ids", json.dumps([user_id])) \
         .execute()
 
     # Собираем уникальные tournament_id (пропускаем None)
