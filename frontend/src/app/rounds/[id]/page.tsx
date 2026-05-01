@@ -9,10 +9,10 @@ import { useTheme } from "@/hooks/useTheme";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import {
-    Clock, Calendar, ChevronLeft, Download, Upload,
+    Clock, Calendar, ChevronLeft, Shield, Download, Upload,
     Link2, FileText, AlertCircle, CheckCircle2, Cpu, Loader2,
     X, ZoomIn, ZoomOut, RotateCw, ExternalLink, File, Film,
-    Image as ImageIcon, Archive, FileCode, Paperclip, Flag,
+    Image as ImageIcon, Archive, FileCode, Paperclip, Flag, ClipboardCheck,
 } from "lucide-react";
 
 function getFileType(name: string): "image" | "video" | "pdf" | "archive" | "code" | "other" {
@@ -268,6 +268,8 @@ export default function RoundPage() {
     const { dark }  = useTheme();
     const id = params?.id as string;
 
+    const isJury = user?.role === "jury" || user?.role === "admin" || user?.role === "superadmin";
+
     const [round,       setRound]       = useState<Round | null>(null);
     const [submission,  setSubmission]  = useState<Submission | null>(null);
     const [loading,     setLoading]     = useState(true);
@@ -275,6 +277,7 @@ export default function RoundPage() {
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [userTeamId,  setUserTeamId]  = useState<string | null>(null);
+    const [isInvitedJury, setIsInvitedJury] = useState<boolean | null>(null);
     const [previewFile, setPreviewFile] = useState<RoundAttachment | null>(null);
     const [previewUrl,  setPreviewUrl]  = useState<string | null>(null);
 
@@ -290,6 +293,20 @@ export default function RoundPage() {
             const { data, error } = await supabase.from("rounds").select("*").eq("id", id).single();
             if (error) throw error;
             setRound(data);
+
+            if ((user?.role === "jury") && data?.tournament_id) {
+                const { data: inv } = await supabase
+                    .from("jury_tournament_invitations")
+                    .select("id")
+                    .eq("tournament_id", data.tournament_id)
+                    .eq("jury_id", user.id)
+                    .eq("status", "accepted")
+                    .single();
+                setIsInvitedJury(!!inv);
+} else {
+    setIsInvitedJury(false);
+}
+
             if (userTeamId) fetchSubmission(data.id, userTeamId);
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
@@ -577,20 +594,22 @@ export default function RoundPage() {
         </Card>
 
         <div className="flex items-stretch gap-3">
-        <div className={`flex-1 flex items-center gap-3 px-5 py-4 rounded-2xl border font-bold text-sm ${
-            submission
-            ? "bg-green-500/10 border-green-500/25 text-green-500"
-            : "bg-(--card) border-(--brd) text-(--t2)"
-        }`}>
-        {submission
-            ? <><CheckCircle2 size={18}/> Статус: Здано</>
-            : <><AlertCircle  size={18}/> Статус: Не здано</>
-        }
-        </div>
+        {!isJury && (
+            <div className={`flex-1 flex items-center gap-3 px-5 py-4 rounded-2xl border font-bold text-sm ${
+                submission
+                ? "bg-green-500/10 border-green-500/25 text-green-500"
+                : "bg-(--card) border-(--brd) text-(--t2)"
+            }`}>
+            {submission
+                ? <><CheckCircle2 size={18}/> Статус: Здано</>
+                : <><AlertCircle  size={18}/> Статус: Не здано</>
+            }
+            </div>
+        )}
         <button
         onClick={handleDownloadTemplate}
         disabled={!round.template_path}
-        className="flex items-center gap-2 px-5 py-4 rounded-2xl bg-(--card) border border-(--brd) text-(--t1) text-sm font-bold hover:border-blue-600/40 hover:text-blue-600 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+        className={`flex items-center gap-2 px-5 py-4 rounded-2xl bg-(--card) border border-(--brd) text-(--t1) text-sm font-bold hover:border-blue-600/40 hover:text-blue-600 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed ${isJury ? "flex-1" : "flex-shrink-0"}`}
         >
         <Download size={16}/> Шаблон
         </button>
@@ -728,25 +747,49 @@ export default function RoundPage() {
             </div>
         )}
 
-        <button
-        onClick={handleSubmit}
-        disabled={submitting || !!submission}
-        className={`flex items-center justify-center gap-3 px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-[0.98] ${
-            submission
-            ? "bg-green-500/10 border border-green-500/25 text-green-500 cursor-default"
-            : submitting
-            ? "bg-blue-600/60 text-white cursor-wait"
-            : "bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20"
-        } disabled:opacity-70`}
-        >
-        {submitting ? (
-            <><Loader2 size={18} className="animate-spin"/> Надсилається...</>
-        ) : submission ? (
-            <><CheckCircle2 size={18}/> Завдання здано</>
+        {isJury ? (
+        isInvitedJury ? (
+            /* ── Запрошений журі — кнопка оцінювання ── */
+            <button
+            onClick={() => router.push(`/jury/rounds/${round.id}/evaluate`)}
+            className="flex items-center justify-center gap-3 px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-[0.98] bg-violet-600 text-white hover:bg-violet-700 shadow-lg shadow-violet-600/20"
+            >
+            <ClipboardCheck size={18}/> Оцінити роботи
+            </button>
         ) : (
-            <><Upload size={18}/> Здати завдання</>
+            /* ── Незапрошений журі — інформаційна плашка ── */
+            <div className="flex flex-col items-center gap-2 px-6 py-5 rounded-2xl bg-violet-500/5 border border-violet-500/20 text-center">
+            <div className="w-9 h-9 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
+                <Shield size={16} className="text-violet-400" />
+            </div>
+            <p className="text-xs font-black text-violet-400 uppercase tracking-widest">Оцінювання недоступне</p>
+            <p className="text-[11px] font-medium text-(--t2) max-w-[260px] leading-relaxed">
+                Ви не залучені до оцінювання робіт учасників цього турніру
+            </p>
+            </div>
+        )
+        ) : (
+            /* ── Кнопка для учасника — здати або статус ── */
+            <button
+            onClick={handleSubmit}
+            disabled={submitting || !!submission}
+            className={`flex items-center justify-center gap-3 px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-[0.98] ${
+                submission
+                ? "bg-green-500/10 border border-green-500/25 text-green-500 cursor-default"
+                : submitting
+                ? "bg-blue-600/60 text-white cursor-wait"
+                : "bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20"
+            } disabled:opacity-70`}
+            >
+            {submitting ? (
+                <><Loader2 size={18} className="animate-spin"/> Надсилається...</>
+            ) : submission ? (
+                <><CheckCircle2 size={18}/> Завдання здано</>
+            ) : (
+                <><Upload size={18}/> Здати завдання</>
+            )}
+            </button>
         )}
-        </button>
         </div>
         </div>
         </div>
