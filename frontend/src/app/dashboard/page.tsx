@@ -12,6 +12,8 @@ import {
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import { supabase, authedSupabase } from "@/lib/supabase";
+import { RichTextEditor } from "@/components/RichTextEditor";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -250,12 +252,11 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
     <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-2">
     Опис
     </label>
-    <textarea
+    <RichTextEditor
     value={body}
-    onChange={e => setBody(e.target.value)}
+    onChange={setBody}
     placeholder="Детальний опис події, умови участі, дедлайни..."
-    rows={3}
-    className="w-full px-4 py-3 rounded-xl bg-(--bg) border border-(--brd) text-sm font-bold text-(--t1) placeholder:text-(--t2)/50 focus:outline-none focus:border-blue-600/60 transition-colors resize-none"
+    rows={4}
     />
     </div>
 
@@ -420,7 +421,7 @@ function AnnouncementCard({ a, isAdmin, onDelete, onEdit, onTogglePin }: Announc
     </div>
     <h3 className="font-black text-sm text-(--t1) leading-tight">{a.title}</h3>
     {a.body && (
-      <p className="text-xs font-bold text-(--t2) mt-1 leading-relaxed">{a.body}</p>
+      <MarkdownRenderer content={a.body} className="mt-1" />
     )}
     </div>
 
