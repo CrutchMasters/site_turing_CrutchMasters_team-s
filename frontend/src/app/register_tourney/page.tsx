@@ -25,11 +25,13 @@ function DateTimePair({
   dateVal, onDate,
   timeVal, onTime,
   required,
+  requiredLabel,
 }: {
   label: string;
   dateVal: string; onDate: (v: string) => void;
   timeVal: string; onTime: (v: string) => void;
   required?: boolean;
+  requiredLabel?: string;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -37,7 +39,7 @@ function DateTimePair({
     <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">{label}</span>
     {required && (
       <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1">
-      <Zap className="w-2.5 h-2.5 fill-red-500" /> Обов&apos;язково
+      <Zap className="w-2.5 h-2.5 fill-red-500" /> {requiredLabel ?? 'Обов\'язково'}
       </span>
     )}
     </div>
@@ -500,12 +502,12 @@ export default function RegisterTourney() {
         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white flex-shrink-0">
         <Users size={16} />
         </div>
-        <span className="text-xs font-black uppercase tracking-widest text-(--t2)">Реєстрація команд</span>
+        <span className="text-xs font-black uppercase tracking-widest text-(--t2)">{t.tourney?.regTeams ?? 'Реєстрація команд'}</span>
         </div>
         <div className="p-6 space-y-4 flex-1">
-        <DateTimePair label="Початок реєстрації" dateVal={regStartDate} onDate={setRegStartDate} timeVal={regStartTime} onTime={setRegStartTime} />
+        <DateTimePair label={t.tourney?.regStart ?? 'Початок реєстрації'} dateVal={regStartDate} onDate={setRegStartDate} timeVal={regStartTime} onTime={setRegStartTime} />
         <div className="border-t border-(--brd)" />
-        <DateTimePair label="Кінець реєстрації" dateVal={regEndDate} onDate={setRegEndDate} timeVal={regEndTime} onTime={setRegEndTime} />
+        <DateTimePair label={t.tourney?.regEnd ?? 'Кінець реєстрації'} dateVal={regEndDate} onDate={setRegEndDate} timeVal={regEndTime} onTime={setRegEndTime} />
         </div>
         </div>
 
@@ -514,12 +516,12 @@ export default function RegisterTourney() {
         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
         <Clock size={16} />
         </div>
-        <span className="text-xs font-black uppercase tracking-widest text-(--t2)">Дати старту</span>
+        <span className="text-xs font-black uppercase tracking-widest text-(--t2)">{t.tourney?.startDates ?? 'Дати старту'}</span>
         </div>
         <div className="p-6 space-y-4 flex-1">
-        <DateTimePair label="Початок турніру" dateVal={startDate} onDate={setStartDate} timeVal={startTime} onTime={setStartTime} required />
+        <DateTimePair label={t.tourney?.tourStart ?? 'Початок турніру'} dateVal={startDate} onDate={setStartDate} timeVal={startTime} onTime={setStartTime} required requiredLabel={t.common?.required} />
         <div className="border-t border-(--brd)" />
-        <DateTimePair label="Кінець турніру" dateVal={endDate} onDate={setEndDate} timeVal={endTime} onTime={setEndTime} />
+        <DateTimePair label={t.tourney?.tourEnd ?? 'Кінець турніру'} dateVal={endDate} onDate={setEndDate} timeVal={endTime} onTime={setEndTime} />
         </div>
         </div>
         </section>
@@ -532,16 +534,16 @@ export default function RegisterTourney() {
         <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
         <Layers size={14} />
         </div>
-        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">3. Формат</span>
+        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">3. {t.tourney?.format ?? 'Формат'}</span>
         <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1 whitespace-nowrap">
-        <Zap className="w-2 h-2 fill-red-500" /> Обов'язково
+        <Zap className="w-2 h-2 fill-red-500" /> {t.common?.required ?? 'Обов\'язково'}
         </span>
         </div>
         <div className="p-5 flex flex-col gap-3 flex-1">
         <div className="flex items-center justify-between">
-        <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Кількість раундів</p>
+        <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{t.tourney?.roundCount ?? 'Кількість раундів'}</p>
         <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">
-        Вибрано: <span className="text-blue-500">{roundCount}</span> {roundCount === 1 ? 'раунд' : roundCount < 5 ? 'раунди' : 'раундів'}
+        {t.tourney?.roundSelected ?? 'Вибрано:'} <span className="text-blue-500">{roundCount}</span> {roundCount === 1 ? (t.tourney?.roundWord_1 ?? 'раунд') : roundCount < 5 ? (t.tourney?.roundWord_2 ?? 'раунди') : (t.tourney?.roundWord_5 ?? 'раундів')}
         </p>
         </div>
         <div className="grid grid-cols-4 gap-1.5">
@@ -567,13 +569,13 @@ export default function RegisterTourney() {
         <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
         <Users size={14} />
         </div>
-        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">Команди</span>
+        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">{t.tourney?.teamCount ?? 'Команди'}</span>
         <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full whitespace-nowrap">
         {t.common?.optional ?? 'Опціонально'}
         </span>
         </div>
         <div className="p-5 flex flex-col gap-3 flex-1">
-        <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Кількість команд</p>
+        <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{t.tourney?.teamCount ?? 'Кількість команд'}</p>
         <div className="flex items-center justify-center gap-3 flex-1">
         <button type="button"
         onClick={() => setTeamCount(Math.max(0, teamCount - 1))}
@@ -601,7 +603,7 @@ export default function RegisterTourney() {
             ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/30'
             : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600'
           }`}>
-          {n === 0 ? 'Без ліміту' : n}
+          {n === 0 ? (t.tourney?.noLimit ?? 'Без ліміту') : n}
           </button>
         ))}
         </div>
@@ -615,7 +617,7 @@ export default function RegisterTourney() {
         <button type="submit" disabled={isSubmitting}
         className="flex-1 px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
         {isSubmitting && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
-        {isSubmitting ? 'Зберігається...' : (t.tourney?.createBtn ?? 'Створити турнір')}
+        {isSubmitting ? (t.tourney?.saving ?? 'Зберігається...') : (t.tourney?.createBtn ?? 'Створити турнір')}
         </button>
         <button type="button" onClick={() => router.back()} disabled={isSubmitting}
         className="flex-1 px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60">
