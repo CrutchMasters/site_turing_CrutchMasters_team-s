@@ -525,7 +525,7 @@ export default function EditTeamPage() {
                 />
                 </div>
                 <button
-                onClick={handleSearch}
+                onClick={() => handleSearch()}
                 disabled={isSearching || !memberSearch.trim()}
                 className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center gap-1.5 ${
                     isSearching || !memberSearch.trim()
