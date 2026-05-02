@@ -371,6 +371,92 @@ export default function TournamentPage() {
             </div>
         )}
 
+        {/* ── Rounds section ── */}
+        {rounds.length > 0 && (
+            <div className="mt-6">
+            <h2 className="font-black text-lg mb-3 text-(--t1) flex items-center gap-2">
+            <Flag size={18} className="text-blue-600" />
+            Раунди
+            </h2>
+            <div className="grid gap-2">
+            {rounds.map((round) => {
+                const now = Date.now();
+                const start = round.start_at ? new Date(round.start_at).getTime() : null;
+                const end = round.end_at ? new Date(round.end_at).getTime() : null;
+
+                const dbStatus = round.status;
+                const isFinished = dbStatus === "finished" || (!dbStatus && end && now > end);
+                const isActive   = dbStatus === "active"   || (!dbStatus && start && end && now >= start && now <= end);
+                const isPending  = dbStatus === "pending"  || (!dbStatus && start && now < start);
+
+                let statusLabel = "Очікується";
+                let statusColor = "text-(--t2)";
+                let statusBadgeBg = "bg-(--bg)";
+                let statusBadgeBorder = "border-(--brd)";
+                let dotColor    = "bg-gray-400";
+
+                if (isFinished) {
+                    statusLabel = "Завершено";
+                } else if (isActive) {
+                    statusLabel        = "Активний";
+                    statusColor        = "text-green-400";
+                    statusBadgeBg      = "bg-green-500/20";
+                    statusBadgeBorder  = "border-green-500/40";
+                    dotColor           = "bg-green-400";
+                } else if (isPending) {
+                    statusLabel = "Очікується";
+                }
+
+                const isLocked = isFinished;
+
+                return (
+                    <div
+                    key={round.id}
+                    onClick={() => router.push(`/rounds/${round.id}`)}
+                    className={`flex items-center gap-4 p-4 border rounded-2xl cursor-pointer transition-all group bg-(--card) hover:bg-(--card) ${
+                        isActive
+                        ? 'border-green-500/40 hover:border-green-500/60'
+                        : 'border-(--brd) hover:border-blue-600/40'
+                    }`}
+                    >
+                    {/* Round number badge */}
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0 transition-all ${
+                        isLocked
+                        ? "bg-(--bg) border border-(--brd) text-(--t2)"
+                        : "bg-blue-600/10 text-blue-600 group-hover:bg-blue-600 group-hover:text-white"
+                    }`}>
+                    {isLocked ? <Lock size={14} /> : round.number}
+                    </div>
+
+                    {/* Name + dates */}
+                    <div className="flex-1 min-w-0">
+                    <p className="font-black text-sm text-(--t1) group-hover:text-blue-600 transition-colors truncate">
+                    {round.name || `Раунд ${round.number}`}
+                    </p>
+                    {(round.start_at || round.end_at) && (
+                        <p className="text-[11px] text-(--t2) font-medium mt-0.5 flex items-center gap-1">
+                        <Clock size={10} />
+                        {round.start_at && fmtDate(round.start_at)}
+                        {round.start_at && round.end_at && " — "}
+                        {round.end_at && fmtDate(round.end_at)}
+                        </p>
+                    )}
+                    </div>
+
+                    {/* Status badge */}
+                    <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-wider flex-shrink-0 ${statusBadgeBg} ${statusBadgeBorder} ${statusColor}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${dotColor} ${isActive ? 'animate-pulse' : ''}`} />
+                    {statusLabel}
+                    </div>
+
+                    <ChevronRight size={16} className="text-(--t2) group-hover:text-blue-600 transition-colors flex-shrink-0" />
+                    </div>
+                );
+            })}
+            </div>
+            </div>
+        )}
+
         {/* Teams list */}
         <div>
         <h2 className="font-black text-lg mb-3 text-(--t1)">Команди-учасники</h2>
@@ -401,84 +487,6 @@ export default function TournamentPage() {
             </div>
         )}
         </div>
-
-        {/* ── Rounds section ── */}
-        {rounds.length > 0 && (
-            <div className="mt-6">
-            <h2 className="font-black text-lg mb-3 text-(--t1) flex items-center gap-2">
-            <Flag size={18} className="text-blue-600" />
-            Раунди
-            </h2>
-            <div className="grid gap-2">
-            {rounds.map((round) => {
-                const now = Date.now();
-                const start = round.start_at ? new Date(round.start_at).getTime() : null;
-                const end = round.end_at ? new Date(round.end_at).getTime() : null;
-
-                let statusLabel = "Очікується";
-                const statusColor = "text-(--t2)";
-                const statusBg = "bg-(--bg)";
-                const statusBorder = "border-(--brd)";
-                const dotColor = "bg-gray-400";
-
-                const dbStatus = round.status;
-                const isFinished = dbStatus === "finished" || (!dbStatus && end && now > end);
-                const isActive   = dbStatus === "active"   || (!dbStatus && start && end && now >= start && now <= end);
-                const isPending  = dbStatus === "pending"  || (!dbStatus && start && now < start);
-
-                if (isFinished) {
-                    statusLabel = "Завершено";
-                } else if (isActive) {
-                    statusLabel = "Активний";
-                } else if (isPending) {
-                    statusLabel = "Очікується";
-                }
-
-                const isLocked = isFinished;
-
-                return (
-                    <div
-                    key={round.id}
-                    onClick={() => router.push(`/rounds/${round.id}`)}
-                    className={`flex items-center gap-4 p-4 border rounded-2xl cursor-pointer transition-all group ${statusBg} ${statusBorder} hover:border-blue-600/40 hover:bg-(--card)`}
-                    >
-                    {/* Round number badge */}
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0 transition-all ${
-                        isLocked
-                        ? "bg-(--bg) border border-(--brd) text-(--t2)"
-                        : "bg-blue-600/10 text-blue-600 group-hover:bg-blue-600 group-hover:text-white"
-                    }`}>
-                    {isLocked ? <Lock size={14} /> : round.number}
-                    </div>
-
-                    {/* Name + dates */}
-                    <div className="flex-1 min-w-0">
-                    <p className="font-black text-sm text-(--t1) group-hover:text-blue-600 transition-colors truncate">
-                    {round.name || `Раунд ${round.number}`}
-                    </p>
-                    {(round.start_at || round.end_at) && (
-                        <p className="text-[11px] text-(--t2) font-medium mt-0.5 flex items-center gap-1">
-                        <Clock size={10} />
-                        {round.start_at && fmtDate(round.start_at)}
-                        {round.start_at && round.end_at && " — "}
-                        {round.end_at && fmtDate(round.end_at)}
-                        </p>
-                    )}
-                    </div>
-
-                    {/* Status badge */}
-                    <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-wider flex-shrink-0 ${statusBg} ${statusBorder} ${statusColor}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
-                    {statusLabel}
-                    </div>
-
-                    <ChevronRight size={16} className="text-(--t2) group-hover:text-blue-600 transition-colors flex-shrink-0" />
-                    </div>
-                );
-            })}
-            </div>
-            </div>
-        )}
 
         </div>
         </main>
