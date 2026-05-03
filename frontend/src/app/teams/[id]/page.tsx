@@ -183,7 +183,7 @@ function TeamAvatarModal({
             onClose();
         } catch (err: any) {
             console.error("Team avatar upload error:", err);
-            alert(err?.message ?? t.teamProfile.errLoad);
+            alert(err?.message ?? teamProfile.errLoad);
         } finally {
             setUploading(false);
         }
