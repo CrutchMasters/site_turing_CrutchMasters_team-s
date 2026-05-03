@@ -625,8 +625,10 @@ function NotificationCard({
   error: string;
   onAccept: () => void; onDecline: () => void; onMarkRead: () => void; onGoTeam: (id: string) => void;
 }) {
-  const meta     = parseMeta(notif.meta);
-  const isInvite = notif.type === "team_invitation";
+  const meta        = parseMeta(notif.meta);
+  const isTeamInvite = notif.type === "team_invitation";
+  const isJuryInvite = notif.type === "jury_invitation";
+  const isInvite    = isTeamInvite || isJuryInvite;
   const borderClass = typeBorder[notif.type] ?? "border-l-gray-400";
   return (
     <div className={`fuIn bg-(--bg) rounded-xl border border-(--brd) border-l-4 ${borderClass} p-3.5 transition-all ${!notif.read ? "shadow-sm" : "opacity-60"}`} style={{ animationDelay: `${idx * 40}ms` }}>
@@ -644,7 +646,7 @@ function NotificationCard({
     <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-(--t2) opacity-50">{timeAgo(notif.created_at)}</p>
     {isInvite && !responded && (
       <div className="flex items-center gap-1.5 mt-2.5">
-      <button onClick={onAccept} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-60">
+      <button onClick={onAccept} disabled={!!responding} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-white font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all disabled:opacity-60 ${isJuryInvite ? "bg-amber-500 hover:bg-amber-600 shadow-sm shadow-amber-500/25" : "bg-blue-600 hover:bg-blue-700"}`}>
       {responding === "accept" ? <Loader size={10} className="animate-spin" /> : <Check size={10} />} Прийняти
       </button>
       <button onClick={onDecline} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-(--card) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 active:scale-95 transition-all disabled:opacity-60">
@@ -875,8 +877,12 @@ export default function ProfilePage() {
     setResponding(prev => ({ ...prev, [key]: accept ? "accept" : "decline" }));
     setNotifErrors(prev => ({ ...prev, [key]: "" }));
     try {
-      const res = await fetch(`${API_URL}/api/invitations/respond`, { method: "POST", headers: authHeader(), body: JSON.stringify({ invitation_id: invitationId, accept }) });
-      if (!res.ok) { const err = await res.json(); setNotifErrors(prev => ({ ...prev, [key]: err.detail ?? "Помилка відповіді" })); return; }
+      // Вибираємо правильний endpoint залежно від типу запрошення
+      const endpoint = notif.type === "jury_invitation"
+        ? `${API_URL}/api/jury-invitations/respond`
+        : `${API_URL}/api/invitations/respond`;
+      const res = await fetch(endpoint, { method: "POST", headers: authHeader(), body: JSON.stringify({ invitation_id: invitationId, accept }) });
+      if (!res.ok) { const err = await res.json(); alert(err.detail ?? "Помилка відповіді"); return; }
       setResponded(prev => ({ ...prev, [key]: accept ? "accepted" : "declined" }));
       await markRead(notif.id);
     } catch { setNotifErrors(prev => ({ ...prev, [key]: "Помилка з'єднання з сервером" })); }

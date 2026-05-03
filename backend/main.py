@@ -1008,9 +1008,14 @@ async def create_tournament_rounds(
             "end_at":        r.get("end_at"),
             "links":         r.get("links"),
             "attachments":   r.get("attachments"),
-            "status":        r.get("status", "pending"),
             "template_path": r.get("template_path"),
+            # FIX (критичний): НЕ перезаписуємо status — scheduler керує статусом.
+            # Фронтенд завжди шле status='pending' що скидало active/finished раунди.
+            # Якщо явно передано non-pending статус (напр. 'finished') — зберігаємо його.
         }
+        incoming_status = r.get("status", "pending")
+        if incoming_status and incoming_status != "pending":
+            update_data["status"] = incoming_status
         try:
             res = (
                 supabase.table("rounds")
