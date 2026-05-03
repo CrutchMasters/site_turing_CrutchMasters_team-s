@@ -1,7 +1,6 @@
 //site_turing_CrutchMasters_team-s/frontend/src/app/teams/[id]/page.tsx
 "use client";
 
-import { useTranslations } from 'next-intl';
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useTheme } from "@/hooks/useTheme";
@@ -232,77 +231,75 @@ function TeamAvatarModal({
     const rotateCW  = () => { const v = rotate + 90; setRotate(v); draw(undefined, undefined, v); };
     const rotateCCW = () => { const v = rotate - 90; setRotate(v); draw(undefined, undefined, v); };
 
-    const t = useTranslations();
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-        <div className="bg-(--card) border border-(--brd) rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-(--brd)">
-        <p className="text-sm font-black uppercase tracking-widest text-(--t1)">{t.teamProfile.avatarModal}</p>
-        <button onClick={onClose}
-        className="w-7 h-7 rounded-full border border-(--brd) flex items-center justify-center text-(--t2) hover:text-red-500 hover:border-red-500/40 transition-all">
-        <X size={13} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="bg-(--card) border border-(--brd) rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
+    <div className="flex items-center justify-between px-5 py-4 border-b border-(--brd)">
+    <p className="text-sm font-black uppercase tracking-widest text-(--t1)">Change Avatar</p>
+    <button onClick={onClose}
+    className="w-7 h-7 rounded-full border border-(--brd) flex items-center justify-center text-(--t2) hover:text-red-500 hover:border-red-500/40 transition-all">
+    <X size={13} />
+    </button>
+    </div>
+
+    {!img ? (
+        <label className="flex flex-col items-center justify-center gap-3 m-5 p-10 border-2 border-dashed border-(--brd) rounded-2xl cursor-pointer hover:border-blue-600/40 hover:bg-blue-600/5 transition-all">
+        <div className="w-14 h-14 rounded-2xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-3xl">🖼️</div>
+        <div className="text-center">
+        <p className="text-sm font-black text-(--t1)">Choose Image</p>
+        <p className="text-[11px] text-(--t2) mt-1 font-medium">Click or drag to select</p>
+        </div>
+        <input type="file" accept="image/*" className="hidden" onChange={loadImage} />
+        </label>
+    ) : (
+        <>
+        <div className="flex flex-col items-center pt-5 pb-2 gap-2">
+        <div
+        className="rounded-2xl overflow-hidden border-2 border-blue-600 cursor-grab active:cursor-grabbing select-none"
+        style={{ width: SIZE, height: SIZE }}
+        onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
+        onWheel={onWheel} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+        <canvas ref={canvasRef} width={SIZE} height={SIZE} style={{ width: SIZE, height: SIZE, display: "block" }} />
+        </div>
+        <p className="text-[10px] text-(--t2) font-bold">Drag to adjust position</p>
+        </div>
+
+        <div className="px-5 space-y-3 pb-2">
+        <div className="flex items-center gap-3">
+        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) w-16 flex-shrink-0">Scale</span>
+        <input type="range" min="20" max="300" step="1" value={scale} className="flex-1"
+        onChange={e => { const v = +e.target.value; setScale(v); draw(undefined, v); }} />
+        <span className="text-[10px] font-bold text-(--t2) w-10 text-right">{scale}%</span>
+        </div>
+        <div className="flex items-center gap-3">
+        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) w-16 flex-shrink-0">Rotate</span>
+        <input type="range" min="-180" max="180" step="1" value={rotate} className="flex-1"
+        onChange={e => { const v = +e.target.value; setRotate(v); draw(undefined, undefined, v); }} />
+        <span className="text-[10px] font-bold text-(--t2) w-10 text-right">{rotate}°</span>
+        </div>
+        </div>
+
+        <div className="flex gap-2 p-5 pt-3">
+        <button onClick={rotateCCW} className="flex-1 h-9 rounded-xl border border-(--brd) text-(--t2) text-xs font-black hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95">↺ −90°</button>
+        <button onClick={rotateCW} className="flex-1 h-9 rounded-xl border border-(--brd) text-(--t2) text-xs font-black hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95">↻ +90°</button>
+        <button onClick={handleSave} disabled={uploading}
+        className="flex-1 h-9 rounded-xl bg-blue-600 text-white text-xs font-black hover:bg-blue-700 transition-all disabled:opacity-40 active:scale-95 flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/20">
+        {uploading ? <Loader size={13} className="animate-spin" /> : null}
+        {uploading ? "..." : "Save"}
         </button>
         </div>
 
-        {!img ? (
-            <label className="flex flex-col items-center justify-center gap-3 m-5 p-10 border-2 border-dashed border-(--brd) rounded-2xl cursor-pointer hover:border-blue-600/40 hover:bg-blue-600/5 transition-all">
-            <div className="w-14 h-14 rounded-2xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-3xl">🖼️</div>
-            <div className="text-center">
-            <p className="text-sm font-black text-(--t1)">{t.teamProfile.avatarChoose}</p>
-            <p className="text-[11px] text-(--t2) mt-1 font-medium">{t.teamProfile.avatarHint}</p>
-            </div>
-            <input type="file" accept="image/*" className="hidden" onChange={loadImage} />
-            </label>
-        ) : (
-            <>
-            <div className="flex flex-col items-center pt-5 pb-2 gap-2">
-            <div
-            className="rounded-2xl overflow-hidden border-2 border-blue-600 cursor-grab active:cursor-grabbing select-none"
-            style={{ width: SIZE, height: SIZE }}
-            onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
-            onWheel={onWheel} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
-            <canvas ref={canvasRef} width={SIZE} height={SIZE} style={{ width: SIZE, height: SIZE, display: "block" }} />
-            </div>
-            <p className="text-[10px] text-(--t2) font-bold">{t.teamProfile.avatarDrag}</p>
-            </div>
-
-            <div className="px-5 space-y-3 pb-2">
-            <div className="flex items-center gap-3">
-            <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) w-16 flex-shrink-0">{t.teamProfile.avatarScale}</span>
-            <input type="range" min="20" max="300" step="1" value={scale} className="flex-1"
-            onChange={e => { const v = +e.target.value; setScale(v); draw(undefined, v); }} />
-            <span className="text-[10px] font-bold text-(--t2) w-10 text-right">{scale}%</span>
-            </div>
-            <div className="flex items-center gap-3">
-            <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) w-16 flex-shrink-0">{t.teamProfile.avatarRotate}</span>
-            <input type="range" min="-180" max="180" step="1" value={rotate} className="flex-1"
-            onChange={e => { const v = +e.target.value; setRotate(v); draw(undefined, undefined, v); }} />
-            <span className="text-[10px] font-bold text-(--t2) w-10 text-right">{rotate}°</span>
-            </div>
-            </div>
-
-            <div className="flex gap-2 p-5 pt-3">
-            <button onClick={rotateCCW} className="flex-1 h-9 rounded-xl border border-(--brd) text-(--t2) text-xs font-black hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95">↺ −90°</button>
-            <button onClick={rotateCW} className="flex-1 h-9 rounded-xl border border-(--brd) text-(--t2) text-xs font-black hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95">↻ +90°</button>
-            <button onClick={handleSave} disabled={uploading}
-            className="flex-1 h-9 rounded-xl bg-blue-600 text-white text-xs font-black hover:bg-blue-700 transition-all disabled:opacity-40 active:scale-95 flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/20">
-            {uploading ? <Loader size={13} className="animate-spin" /> : null}
-            {uploading ? "..." : t.teamProfile.avatarSave}
-            </button>
-            </div>
-
-            <div className="text-center pb-4">
-            <label className="text-[10px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 cursor-pointer transition-colors">
-            {t.teamProfile.avatarChange}
-            <input type="file" accept="image/*" className="hidden" onChange={loadImage} />
-            </label>
-            </div>
-            </>
-        )}
+        <div className="text-center pb-4">
+        <label className="text-[10px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 cursor-pointer transition-colors">
+        Change Image
+        <input type="file" accept="image/*" className="hidden" onChange={loadImage} />
+        </label>
         </div>
-        </div>
-    );
-}
+        </>
+    )}
+    </div>
+    </div>
+);
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function TeamProfilePage() {
