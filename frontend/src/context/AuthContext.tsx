@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from "react";
-import { createBrowserClient } from "@supabase/ssr";
+import { supabase as supabaseClient } from "@/lib/supabase";
 
 export interface User {
     id: string;
@@ -36,11 +36,6 @@ export const useAuth = () => {
     if (!context) throw new Error("useAuth must be used within an AuthProvider");
     return context;
 };
-
-const supabaseClient = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
-);
 
 function getTokenExpiry(token: string): number {
     try {
@@ -90,12 +85,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         timerRef.current = setTimeout(() => { doRefresh().then(t => { if (t) scheduleRefresh(t); }); }, delay);
     }, [doRefresh]);
 
-    const refreshRole = useCallback(async (u: User) => {
+    // БАГ ФИКС: добавили параметр cancelled чтобы refreshRole не обновлял
+    // state после размонтирования компонента (race condition).
+    const refreshRole = useCallback(async (u: User, cancelled: { current: boolean }) => {
         try {
             const { data } = await supabaseClient.from("account")
             .select("id, username, login, email, role, status, avatar_url")
-            .eq("id", u.id).single();
-            if (!data) return;
+            .eq("id", u.id)
+            .single();
+
+            // БАГ ФИКС: проверяем cancelled перед setState.
+            // Раньше refreshRole мог записать данные уже после logout/размонтирования.
+            if (!data || cancelled.current) return;
+
             const fresh: User = {
                 id: data.id,
                 username: data.username,
@@ -112,87 +114,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch { /* silent */ }
     }, []);
 
-    // ── Sync token state when supabase.ts performs a silent refresh ────────────
-    // authedSupabase() in supabase.ts may refresh the token independently (e.g.
-    // when the browser tab was sleeping and the scheduled timer didn't fire).
-    // It dispatches "token:refreshed" so we can keep React state in sync without
-    // a full page reload.
+    // Sync token state when supabase.ts performs a silent refresh
     useEffect(() => {
         const handleTokenRefreshed = (e: Event) => {
             const { access_token } = (e as CustomEvent<{ access_token: string }>).detail;
             setToken(access_token);
-            // Re-schedule the proactive timer from AuthContext as well,
-            // so both refresh paths stay aligned.
             scheduleRefresh(access_token);
         };
-
         window.addEventListener("token:refreshed", handleTokenRefreshed);
         return () => window.removeEventListener("token:refreshed", handleTokenRefreshed);
     }, [scheduleRefresh]);
 
     useEffect(() => {
-        let cancelled = false;
+        // БАГ ФИКС: используем объект вместо примитива, чтобы передавать
+        // cancelled по ссылке в refreshRole (избегаем stale closure).
+        const cancelledRef = { current: false };
 
         const init = async () => {
-            const savedToken = localStorage.getItem("access_token");
-            const savedUser  = localStorage.getItem("user");
-
-            // No data — treat as guest
-            if (!savedToken || !savedUser) {
-                if (!cancelled) setIsLoading(false);
-                return;
-            }
-
-            // Parse saved user
-            let parsedUser: User;
+            // БАГ ФИКС: весь init обёрнут в try/finally — isLoading
+            // гарантированно станет false даже при неожиданных ошибках.
             try {
-                parsedUser = JSON.parse(savedUser);
-            } catch {
-                clearStorage();
-                if (!cancelled) setIsLoading(false);
-                return;
-            }
+                const savedToken = localStorage.getItem("access_token");
+                const savedUser  = localStorage.getItem("user");
 
-            // Determine active token:
-            // — if still valid, use it
-            // — if expired, attempt a silent refresh
-            // IMPORTANT: setUser is only called after the token is confirmed valid
-            let activeToken: string;
-
-            if (getTokenExpiry(savedToken) > Date.now()) {
-                activeToken = savedToken;
-            } else {
-                const refreshed = await doRefresh();
-                if (!refreshed) {
-                    clearStorage();
-                    if (!cancelled) {
-                        setUser(null);
-                        setToken(null);
-                        setIsLoading(false);
-                    }
-                    return;
+                if (!savedToken || !savedUser) {
+                    return; // finally → setIsLoading(false)
                 }
-                activeToken = refreshed;
-            }
 
-            // Token confirmed — now it's safe to set user state
-            if (!cancelled) {
-                setToken(activeToken);
-                setUser(parsedUser);
-                scheduleRefresh(activeToken);
-                setIsLoading(false);
-            }
+                let parsedUser: User;
+                try {
+                    parsedUser = JSON.parse(savedUser);
+                } catch {
+                    clearStorage();
+                    return; // finally → setIsLoading(false)
+                }
 
-            // Sync role from DB in the background
-            refreshRole(parsedUser);
+                let activeToken: string;
+
+                if (getTokenExpiry(savedToken) > Date.now()) {
+                    activeToken = savedToken;
+                } else {
+                    const refreshed = await doRefresh();
+                    if (!refreshed) {
+                        clearStorage();
+                        if (!cancelledRef.current) {
+                            setUser(null);
+                            setToken(null);
+                        }
+                        return; // finally → setIsLoading(false)
+                    }
+                    activeToken = refreshed;
+                }
+
+                if (!cancelledRef.current) {
+                    setToken(activeToken);
+                    setUser(parsedUser);
+                    scheduleRefresh(activeToken);
+                }
+
+                // refreshRole вызываем после setIsLoading(false) (в finally),
+                // передаём cancelledRef чтобы не писать в state после размонтирования.
+                // Специально не await — не блокируем загрузку страницы.
+                refreshRole(parsedUser, cancelledRef);
+
+            } finally {
+                // БАГ ФИКС: isLoading становится false ВСЕГДА — даже если
+                // произошла любая неожиданная ошибка внутри init.
+                if (!cancelledRef.current) {
+                    setIsLoading(false);
+                }
+            }
         };
 
         init().catch(() => {
-            if (!cancelled) setIsLoading(false);
+            if (!cancelledRef.current) setIsLoading(false);
         });
 
             return () => {
-                cancelled = true;
+                cancelledRef.current = true;
                 clearTimer();
             };
     }, [doRefresh, scheduleRefresh, refreshRole]);

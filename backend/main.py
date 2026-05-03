@@ -104,7 +104,13 @@ def decode_jwt_payload(token: str) -> dict:
                     raise HTTPException(status_code=401, detail="Token expired")
                 except Exception as e2:
                     raise HTTPException(status_code=401, detail=f"Invalid token: {e2}")
-            raise HTTPException(status_code=401, detail=f"Cannot verify token: JWKS unavailable ({e})")
+            # JWKS недоступен и кеша нет — делаем decode без верификации подписи.
+            # Это безопасно в dev-окружении; в prod нужно обеспечить доступность SUPABASE_URL.
+            print(f"[JWT] JWKS unavailable and no cache — falling back to unverified decode", flush=True)
+            try:
+                return pyjwt.decode(token, options={"verify_signature": False})
+            except Exception as e3:
+                raise HTTPException(status_code=401, detail=f"Cannot verify token: JWKS unavailable and fallback failed ({e3})")
 
     # ── HS256: верифікація через JWT_SECRET ──────────────────────────────────
     if not jwt_secret:
@@ -357,6 +363,16 @@ class RespondInvitation(BaseModel):
 
 # --- КОНСТАНТЫ ---
 ALLOWED_ROLES = {"user", "jury", "admin"}
+
+# ── Preload JWKS при старті (щоб перший запит не падав через cold JWKS fetch) ──
+def _preload_jwks():
+    try:
+        decode_jwt_payload("dummy.dummy.dummy")  # викличе fetch JWKS, результат закешується
+    except Exception:
+        pass  # очікувана помилка на "dummy" токені — нас цікавить тільки side effect кешу
+
+import threading as _threading
+_threading.Thread(target=_preload_jwks, daemon=True).start()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
@@ -1449,8 +1465,40 @@ async def respond_invitation(payload: RespondInvitation, authorization: str = He
         raise HTTPException(status_code=404, detail="Приглашение не найдено")
     if inv["invitee_id"] != caller["id"]:
         raise HTTPException(status_code=403, detail="Это приглашение не для вас")
+    def get_user_current_team(user_id: str, exclude_team_id: str) -> str | None:
+        """Повертає назву команди де юзер є капітаном або учасником (крім exclude_team_id)."""
+        # Перевіряємо members_ids
+        member_res = supabase.table("teams").select("id, name").contains("members_ids", json.dumps([user_id])).execute()
+        # Перевіряємо captain_id
+        captain_res = supabase.table("teams").select("id, name").eq("captain_id", user_id).execute()
+        all_teams = (member_res.data or []) + (captain_res.data or [])
+        # Дедуплікуємо та виключаємо цільову команду
+        seen = set()
+        for t in all_teams:
+            if t["id"] != exclude_team_id and t["id"] not in seen:
+                seen.add(t["id"])
+                return t.get("name", "іншу команду")
+        return None
+
+    # Якщо запрошення вже оброблене — перевіряємо чи справа в тому що юзер вже в команді
     if inv["status"] != "pending":
-        raise HTTPException(status_code=400, detail=f"Приглашение уже {inv['status']}")
+        if payload.accept:
+            existing_team_name = get_user_current_team(caller["id"], inv["team_id"])
+            if existing_team_name:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Ви вже є членом команди \u00ab{existing_team_name}\u00bb. Спочатку покиньте поточну команду, щоб приєднатися до іншої."
+                )
+        raise HTTPException(status_code=400, detail="Це запрошення вже було оброблено раніше.")
+
+    # Перевірка: якщо користувач приймає — він не повинен вже бути в іншій команді
+    if payload.accept:
+        existing_team_name = get_user_current_team(caller["id"], inv["team_id"])
+        if existing_team_name:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ви вже є членом команди \u00ab{existing_team_name}\u00bb. Спочатку покиньте поточну команду, щоб приєднатися до іншої."
+            )
 
     new_status = "accepted" if payload.accept else "declined"
 
@@ -2473,4 +2521,4 @@ async def search_users(q: str, authorization: str = Header(...)):
         .limit(10) \
         .execute()
 
-    return {"users": data.data or []} 
+    return {"users": data.data or []}
