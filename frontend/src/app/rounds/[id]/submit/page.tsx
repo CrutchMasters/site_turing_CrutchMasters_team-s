@@ -159,7 +159,7 @@ interface ExistingSubmission {
 export default function SubmitPage() {
     const params = useParams();
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, token, isLoading: authLoading } = useAuth();
     const { dark } = useTheme();
     const id = params?.id as string;
 
@@ -200,7 +200,6 @@ export default function SubmitPage() {
         if (!user) return;
         setLoadingDraft(true);
         try {
-            const token = localStorage.getItem("access_token") || "";
             const res = await fetch(`${API_URL}/api/rounds/${id}/submission`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -234,7 +233,11 @@ export default function SubmitPage() {
         }
     };
 
-    useEffect(() => { if (id) fetchRound(); }, [id]);
+    useEffect(() => {
+        if (!authLoading && !user) router.push("/login");
+    }, [authLoading, user, router]);
+
+    useEffect(() => { if (id && !authLoading && user) fetchRound(); }, [id, authLoading, user]);
     useEffect(() => { if (user && id) fetchExistingSubmission(); }, [user, id]);
 
     /* ── file handling ── */
@@ -259,7 +262,6 @@ export default function SubmitPage() {
     const removeRemoteFile = async (file: RemoteFile) => {
         setDeletingFile(file.path);
         try {
-            const token = localStorage.getItem("access_token") || "";
             const res = await fetch(`${API_URL}/api/rounds/${id}/submission/file`, {
                 method: "DELETE",
                 headers: {
@@ -330,7 +332,6 @@ export default function SubmitPage() {
             setSubmitSuccess(null);
 
             try {
-                const token = localStorage.getItem("access_token") || "";
                 const formData = new FormData();
 
                 // payload — зберігаємо team_id пустим, бекенд визначить сам

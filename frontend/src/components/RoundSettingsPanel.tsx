@@ -251,10 +251,6 @@ export default function RoundSettingsPanel({ roundCount, selectedRound, onSelect
     const rd = getRound(selectedRound);
     const hasData = (n: number) => !!(rounds[n]?.name || rounds[n]?.description);
 
-    const handleSave = () => {
-        console.log('Saving round', selectedRound, rd);
-    };
-
     return (
         <div className="sirIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
 
@@ -371,17 +367,6 @@ export default function RoundSettingsPanel({ roundCount, selectedRound, onSelect
     />
     </div>
 
-    </div>
-
-    {/* ── Footer ── */}
-    <div className="px-6 py-4 border-t border-(--brd) bg-(--bg)/40">
-    <button
-    type="button"
-    onClick={handleSave}
-    className="w-full py-3 rounded-xl font-black text-[10px] uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-600/20"
-    >
-    Зберегти налаштування раунду
-    </button>
     </div>
 
     </div>
