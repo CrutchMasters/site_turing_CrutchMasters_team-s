@@ -1,6 +1,7 @@
 //site_turing_CrutchMasters_team-s/frontend/src/app/teams/[id]/page.tsx
 "use client";
 
+import { useTranslations } from 'next-intl';
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useTheme } from "@/hooks/useTheme";
