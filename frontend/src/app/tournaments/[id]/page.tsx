@@ -60,7 +60,7 @@ function fmtDate(iso?: string) {
 export default function TournamentPage() {
     const router = useRouter();
     const params = useParams();
-    const { user } = useAuth();
+    const { user, isLoading: authLoading } = useAuth();
     const { dark } = useTheme();
     const id = params?.id as string;
 
@@ -72,7 +72,11 @@ export default function TournamentPage() {
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-    useEffect(() => { if (id) fetchTournament(); }, [id]);
+    useEffect(() => {
+        if (!authLoading && !user) router.push("/login");
+    }, [authLoading, user, router]);
+
+    useEffect(() => { if (id && !authLoading && user) fetchTournament(); }, [id, authLoading, user]);
 
     const fetchTournament = async () => {
         setLoading(true);
@@ -203,7 +207,7 @@ export default function TournamentPage() {
         }
     };
 
-    if (loading || !tournament) {
+    if (authLoading || loading || !tournament) {
         return (
             <div className="min-h-screen bg-(--bg) flex items-center justify-center">
             <Loader className="animate-spin text-blue-600" />

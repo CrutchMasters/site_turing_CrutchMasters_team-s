@@ -1,5 +1,4 @@
 import { createClient } from "@supabase/supabase-js";
-import { createBrowserClient } from "@supabase/ssr";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -11,13 +10,57 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 }
 
 /**
- * Анонімний клієнт — тільки для публічних SELECT-запитів.
- * Не передає JWT, тому RLS-політики на INSERT/UPDATE/DELETE заблокують його.
+ * БАГ ФИКС: раньше клиент создавался с persistSession: true и autoRefreshToken: true,
+ * но токен хранился в кастомном ключе localStorage ("access_token"), а не в стандартном
+ * ключе Supabase ("sb-*-auth-token"). Из-за этого:
+ *
+ *  1. Supabase-клиент при старте не находил свою сессию → считал пользователя анонимным.
+ *  2. Запросы к таблицам с RLS выполнялись без JWT → падали или зависали.
+ *  3. autoRefreshToken конфликтовал с логикой рефреша в AuthContext.
+ *
+ * Решение: отключаем авто-управление сессией (persistSession: false, autoRefreshToken: false)
+ * и вручную устанавливаем сессию через setSession() при наличии токенов в localStorage.
+ * Это делает клиент синхронным с AuthContext.
  */
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+        persistSession: false,      // не используем встроенное хранилище Supabase
+        autoRefreshToken: false,    // рефреш управляется AuthContext
+        detectSessionInUrl: false,
+    },
+});
 
-// Internal browser client used only for silent token refresh inside authedSupabase.
-const _browserClient = createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+/**
+ * Инициализируем сессию Supabase из кастомного localStorage при старте.
+ * Вызывается один раз на клиенте — синхронизирует supabase-клиент с токеном
+ * который хранит AuthContext, чтобы запросы шли с JWT, а не анонимно.
+ */
+if (typeof window !== "undefined") {
+    const accessToken  = localStorage.getItem("access_token");
+    const refreshToken = localStorage.getItem("refresh_token");
+
+    if (accessToken && refreshToken) {
+        // setSession не делает сетевых запросов — просто устанавливает токены в памяти клиента.
+        // Ошибку игнорируем: если токен протух, AuthContext сам выполнит рефреш.
+        supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+        }).catch(() => { /* silent — AuthContext handles refresh */ });
+    }
+}
+
+// Слушаем событие обновления токена от AuthContext и синхронизируем сессию Supabase.
+// Это гарантирует что после рефреша все запросы идут с новым токеном.
+if (typeof window !== "undefined") {
+    window.addEventListener("token:refreshed", (e: Event) => {
+        const { access_token } = (e as CustomEvent<{ access_token: string }>).detail;
+        const refreshToken = localStorage.getItem("refresh_token") ?? "";
+        supabase.auth.setSession({
+            access_token,
+            refresh_token: refreshToken,
+        }).catch(() => {});
+    });
+}
 
 function getTokenExpiry(token: string): number {
     try {
@@ -32,8 +75,6 @@ function getTokenExpiry(token: string): number {
  * Silently refreshes the access token using the stored refresh_token.
  * On success, persists the new tokens and dispatches a "token:refreshed" event
  * so AuthContext can sync its React state.
- *
- * Returns the new access token, or null if refresh failed.
  */
 async function silentRefresh(): Promise<string | null> {
     try {
@@ -42,7 +83,7 @@ async function silentRefresh(): Promise<string | null> {
         : null;
         if (!saved) return null;
 
-        const { data, error } = await _browserClient.auth.refreshSession({
+        const { data, error } = await supabase.auth.refreshSession({
             refresh_token: saved,
         });
         if (error || !data?.session) return null;
@@ -52,7 +93,6 @@ async function silentRefresh(): Promise<string | null> {
         localStorage.setItem("refresh_token", refresh_token);
         document.cookie = `access_token=${access_token}; path=/; max-age=604800`;
 
-        // Notify AuthContext so it can update its React state without a page reload.
         window.dispatchEvent(
             new CustomEvent("token:refreshed", { detail: { access_token } })
         );
@@ -64,34 +104,22 @@ async function silentRefresh(): Promise<string | null> {
 }
 
 /**
- * Аутентифікований клієнт — передає JWT користувача в заголовку Authorization.
- * Використовуй для будь-яких INSERT / UPDATE / DELETE операцій, захищених RLS.
+ * Аутентифікований клієнт для INSERT / UPDATE / DELETE операцій захищених RLS.
  *
- * Перед створенням клієнта перевіряє чи токен ще живий.
- * Якщо токен протух (або протухне впродовж наступних 30 с) — виконує тихий
- * рефреш через збережений refresh_token. Це захищає від ситуацій, коли браузерна
- * вкладка "засинає" і таймер у AuthContext не спрацьовує вчасно.
- *
- * @param token — JWT з useAuth() → token. Якщо не переданий, клієнт працює як анонімний.
- *
- * @example
- * const client = await authedSupabase(token);
- * const { error } = await client.from("announcements").insert({ title: "Hello" });
+ * @param token — JWT з useAuth() → token.
  */
 export async function authedSupabase(token?: string | null) {
     let activeToken = token ?? null;
 
     if (activeToken) {
         const expiresAt = getTokenExpiry(activeToken);
-        const isExpiredOrExpiringSoon = expiresAt - Date.now() < 30_000; // < 30 seconds left
+        const isExpiredOrExpiringSoon = expiresAt - Date.now() < 30_000;
 
         if (isExpiredOrExpiringSoon) {
             const refreshed = await silentRefresh();
             if (refreshed) {
                 activeToken = refreshed;
             }
-            // If refresh failed, fall through with the (possibly expired) token —
-            // Supabase will return a 401 and the caller can handle it gracefully.
         }
     }
 
@@ -102,7 +130,6 @@ export async function authedSupabase(token?: string | null) {
             : {},
         },
         auth: {
-            // Сесією керує кастомний AuthContext — тут авто-рефреш вимкнено.
             persistSession: false,
             autoRefreshToken: false,
             detectSessionInUrl: false,

@@ -1,19 +1,20 @@
 //src/app/tournaments/[id]/edit/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useT } from "@/context/LanguageContext";
 import { useTheme } from "@/hooks/useTheme";
-import { supabase } from "@/lib/supabase";
+import { supabase, authedSupabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import RoundSettingsPanel, { type RoundData } from "@/components/RoundSettingsPanel";
 import JuryInvitePanel from "@/components/JuryInvitePanel";
+import { DatePicker, TimePicker } from "@/components/DateTimePicker";
 import {
     Trophy, ChevronRight, Save, AlertCircle,
-    CheckCircle, Clock, Layers, Zap, Users, CalendarDays, ArrowLeft,
+    CheckCircle, Clock, Layers, Zap, Users, ArrowLeft,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/RichTextEditor";
 
@@ -21,14 +22,14 @@ interface Tournament {
     id: string;
     name: string;
     rules?: string;
-    status: "upcoming" | "registration" | "ongoing" | "finished";
+    status: string;
     start_at: string;
+    end_at?: string;
     registration_from?: string;
     registration_to?: string;
     max_teams?: number;
     rounds?: number;
     created_by?: string;
-    created_at?: string;
 }
 
 interface RoundRow {
@@ -40,7 +41,6 @@ interface RoundRow {
     technologies?: string[];
     start_at?: string;
     end_at?: string;
-    links?: { url: string }[];
     attachments?: { id: string; name: string; url: string; type: string }[];
 }
 
@@ -54,29 +54,27 @@ function toTimeStr(iso?: string) {
 }
 function toIso(date: string, time: string) {
     if (!date) return null;
-    // FIX (високий): datetime-local не містить timezone info — браузер інтерпретує
-    // як локальний час. Явно додаємо 'Z' аби сервер завжди отримував UTC.
-    // Якщо адмін хоче вводити в локальному часі — потрібен окремий timezone picker.
     const localStr = `${date}T${time || "00:00"}:00`;
-    // FIX: new Date(localStr) парсить як локальний час, .toISOString() конвертує в UTC.
-    // Попередній код робив подвійний зсув timezone.
     return new Date(localStr).toISOString();
+}
+
+async function getToken(): Promise<string> {
+    const stored = typeof window !== "undefined" ? localStorage.getItem("access_token") ?? "" : "";
+    await authedSupabase(stored || null);
+    return typeof window !== "undefined" ? (localStorage.getItem("access_token") ?? "") : "";
 }
 
 const inp = "w-full px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none transition-all";
 const label10 = "text-[10px] font-black uppercase tracking-widest text-(--t2)";
 
 function DateTimePair({
-    label, dateVal, onDate, timeVal, onTime, required, disabled,
+    label, dateVal, onDate, timeVal, onTime, required,
 }: {
     label: string;
     dateVal: string; onDate: (v: string) => void;
     timeVal: string; onTime: (v: string) => void;
     required?: boolean;
-    disabled?: boolean;
 }) {
-    const timeRef = useRef<HTMLInputElement>(null);
-    const dateRef = useRef<HTMLInputElement>(null);
     return (
         <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
@@ -87,42 +85,8 @@ function DateTimePair({
             </span>
         )}
         </div>
-        <div className="relative">
-        <input
-        ref={dateRef}
-        type="date"
-        value={dateVal}
-        onChange={e => onDate(e.target.value)}
-        disabled={disabled}
-        className={inp + " pr-9 disabled:opacity-50 disabled:cursor-not-allowed"}
-        style={{ colorScheme: "dark" }}
-        />
-        {!disabled && (
-            <button type="button" tabIndex={-1}
-            onClick={() => dateRef.current?.showPicker?.()}
-            className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-(--t2) hover:text-blue-500 transition-colors cursor-pointer">
-            <CalendarDays className="w-4 h-4" />
-            </button>
-        )}
-        </div>
-        <div className="relative">
-        <input
-        ref={timeRef}
-        type="time"
-        value={timeVal}
-        onChange={e => onTime(e.target.value)}
-        disabled={disabled}
-        className={inp + " pr-9 disabled:opacity-50 disabled:cursor-not-allowed"}
-        style={{ colorScheme: "dark" }}
-        />
-        {!disabled && (
-            <button type="button" tabIndex={-1}
-            onClick={() => timeRef.current?.showPicker?.()}
-            className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-(--t2) hover:text-blue-500 transition-colors cursor-pointer">
-            <Clock className="w-4 h-4" />
-            </button>
-        )}
-        </div>
+        <DatePicker value={dateVal} onChange={onDate} />
+        <TimePicker value={timeVal} onChange={onTime} />
         </div>
     );
 }
@@ -136,26 +100,25 @@ export default function TournamentEditPage() {
     const { dark } = useTheme();
     const id = params?.id as string;
 
-    const [loading, setLoading]     = useState(true);
-    const [saving, setSaving]       = useState(false);
-    const [error, setError]         = useState("");
-    const [success, setSuccess]     = useState("");
-    const [tourney, setTourney]     = useState<Tournament | null>(null);
+    const [loading, setLoading]   = useState(true);
+    const [saving, setSaving]     = useState(false);
+    const [error, setError]       = useState("");
+    const [success, setSuccess]   = useState("");
+    const [tourney, setTourney]   = useState<Tournament | null>(null);
 
-    // Tournament form state
     const [name, setName]               = useState("");
     const [rules, setRules]             = useState("");
     const [startDate, setStartDate]     = useState("");
     const [startTime, setStartTime]     = useState("");
+    const [endDate, setEndDate]         = useState("");
+    const [endTime, setEndTime]         = useState("");
     const [regFromDate, setRegFromDate] = useState("");
     const [regFromTime, setRegFromTime] = useState("");
     const [regToDate, setRegToDate]     = useState("");
     const [regToTime, setRegToTime]     = useState("");
     const [maxTeams, setMaxTeams]       = useState(0);
     const [roundCount, setRoundCount]   = useState<number>(1);
-    const [status, setStatus]           = useState<string>("upcoming");
 
-    // Round panel state
     const [selectedRoundTab, setSelectedRoundTab]   = useState<number>(1);
     const [roundsData, setRoundsData]               = useState<Record<number, RoundData>>({});
     const [initialRoundsData, setInitialRoundsData] = useState<Record<number, Partial<RoundData>>>({});
@@ -188,15 +151,15 @@ export default function TournamentEditPage() {
                 setRules(data.rules ?? "");
                 setStartDate(toDateStr(data.start_at));
                 setStartTime(toTimeStr(data.start_at));
+                setEndDate(toDateStr(data.end_at));
+                setEndTime(toTimeStr(data.end_at));
                 setRegFromDate(toDateStr(data.registration_from));
                 setRegFromTime(toTimeStr(data.registration_from));
                 setRegToDate(toDateStr(data.registration_to));
                 setRegToTime(toTimeStr(data.registration_to));
                 setMaxTeams(data.max_teams ?? 0);
                 setRoundCount(data.rounds ?? 1);
-                setStatus(data.status ?? "upcoming");
 
-                // Fetch rounds data to pre-populate RoundSettingsPanel
                 const { data: roundRows, error: roundErr } = await supabase
                 .from("rounds")
                 .select("*")
@@ -218,11 +181,8 @@ export default function TournamentEditPage() {
                                          ? r.criteria.split("\n").filter(Boolean)
                                          : [],
                                          links: (r.attachments ?? [])
-                                         .filter(a => a.type === "link")
-                                         .map(a => a.url),
-                                         // Існуючі файли з bucket показуємо як FileItem з маркером existing: true.
-                                         // При збереженні вони фільтруються (file instanceof File з new File([], name)
-                                         // технічно проходить, тому перевіряємо маркер нижче).
+                                         .filter((a: any) => a.type === "link")
+                                         .map((a: any) => a.url),
                                          files: (r.attachments ?? [])
                                          .filter((a: any) => a.type === "file")
                                          .map((a: any) => ({
@@ -246,16 +206,8 @@ export default function TournamentEditPage() {
 
         useEffect(() => { fetchTourney(); }, [fetchTourney]);
 
-        const isOngoing    = tourney?.status === "ongoing";
-        const ongoingWithin24h = isOngoing &&
-        tourney && (new Date().getTime() - new Date(tourney.start_at).getTime()) < 24 * 60 * 60 * 1000;
-        const canEditFull    = tourney?.status === "upcoming" || tourney?.status === "registration";
-        const canEditLimited = ongoingWithin24h;
-        const isFinished     = tourney?.status === "finished";
-        const fieldsDisabled = !!(canEditLimited && !canEditFull);
-
         const uploadFile = async (file: File, roundNumber: number): Promise<string> => {
-            const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+            const token = await getToken();
             if (!token) throw new Error("Не вдалося отримати токен авторизації. Спробуйте увійти знову.");
             const form = new FormData();
             form.append("round_number", String(roundNumber));
@@ -282,27 +234,25 @@ export default function TournamentEditPage() {
 
             setSaving(true);
             try {
-                // ── 1. Оновлюємо турнір ──────────────────────────────────────
+                const token = await getToken();
+                if (!token) throw new Error("Не вдалося отримати токен авторизації. Спробуйте увійти знову.");
+
                 const payload: Record<string, any> = {
                     name:              name.trim(),
                     rules:             rules.trim() || null,
                     start_at:          toIso(startDate, startTime),
+                    end_at:            toIso(endDate, endTime) || null,
                     registration_from: toIso(regFromDate, regFromTime),
                     registration_to:   toIso(regToDate, regToTime),
                     max_teams:         maxTeams > 0 ? maxTeams : null,
                     rounds:            roundCount,
-                    status,
                 };
-
-                if (canEditLimited && !canEditFull) {
-                    Object.keys(payload).forEach(k => { if (k !== "status") delete payload[k]; });
-                }
 
                 const tourneyRes = await fetch(`${API_URL}/api/tournaments/${id}`, {
                     method: "PATCH",
                     headers: {
                         "Content-Type": "application/json",
-                        "Authorization": `Bearer ${(typeof window !== "undefined" && localStorage.getItem("access_token")) || ""}`,
+                        "Authorization": `Bearer ${token}`,
                     },
                     body: JSON.stringify(payload),
                 });
@@ -311,103 +261,108 @@ export default function TournamentEditPage() {
                     throw new Error(err.detail ?? `Помилка збереження турніру: ${tourneyRes.statusText}`);
                 }
 
-                // ── 2. Оновлюємо раунди (тільки при повному редагуванні) ─────
-                if (!fieldsDisabled) {
-                    const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+                const roundsPayload = await Promise.all(
+                    Array.from({ length: roundCount }, async (_, i) => {
+                        const n  = i + 1;
+                        const rd = roundsData[n];
 
-                    const roundsPayload = await Promise.all(
-                        Array.from({ length: roundCount }, async (_, i) => {
-                            const n  = i + 1;
-                            const rd = roundsData[n];
+                        const linkAttachments = (rd?.links ?? [])
+                        .filter(Boolean)
+                        .map((url, idx) => ({
+                            id: `link-${n}-${idx}`,
+                            name: url,
+                            url,
+                            type: "link" as const,
+                        }));
 
-                            const linkAttachments = (rd?.links ?? [])
-                            .filter(Boolean)
-                            .map((url, idx) => ({
-                                id: `link-${n}-${idx}`,
-                                name: url,
-                                url,
-                                type: "link" as const,
-                            }));
+                        const fileAttachments: { id: string; name: string; url: string; type: "file" }[] = [];
 
-                            const fileAttachments: { id: string; name: string; url: string; type: "file" }[] = [];
+                        const existingFiles = ((rd as any)?.files ?? []).filter(
+                            (f: any) => f?.existing === true
+                        );
+                        for (let fi = 0; fi < existingFiles.length; fi++) {
+                            const f = existingFiles[fi];
+                            fileAttachments.push({
+                                id: `file-existing-${n}-${fi}`,
+                                name: f.name,
+                                url: f.url,
+                                type: "file" as const,
+                            });
+                        }
 
-                            // Існуючі файли (existing: true) — вже в bucket, зберігаємо їх URL без повторного завантаження
-                            const existingFiles = ((rd as any)?.files ?? []).filter(
-                                (f: any) => f?.existing === true
-                            );
-                            for (let fi = 0; fi < existingFiles.length; fi++) {
-                                const f = existingFiles[fi];
-                                fileAttachments.push({
-                                    id: `file-existing-${n}-${fi}`,
-                                    name: f.name,
-                                    url: f.url,
-                                    type: "file" as const,
-                                });
-                            }
-
-                            // Нові файли (FileItem з реальним File об'єктом) → завантажуємо в bucket
-                            const rawFiles: File[] = ((rd as any)?.files ?? [])
-                            .filter((f: any) => !f?.existing)
-                            .map((f: unknown): File | null => {
-                                if (f instanceof File) return f;
-                                if (f && typeof f === 'object' && (f as any).file instanceof File)
-                                    return (f as any).file as File;
-                                return null;
-                            })
-                            .filter((f: File | null): f is File => f !== null);
-                            for (let fi = 0; fi < rawFiles.length; fi++) {
-                                const file = rawFiles[fi];
-                                const publicUrl = await uploadFile(file, n);
-                                fileAttachments.push({
-                                    id: `file-new-${n}-${fi}`,
-                                    name: file.name,
-                                    url: publicUrl,
-                                    type: "file" as const,
-                                });
-                            }
-
-                            const attachments = [...linkAttachments, ...fileAttachments];
-
-                            return {
-                                number:       n,
-                                name:         rd?.name?.trim()                         || `Раунд ${n}`,
-                                   description:  rd?.description?.trim()                  || null,
-                                   criteria:     rd?.criteria?.filter(Boolean).join("\n") || null,
-                                   technologies: rd?.requirements?.filter(Boolean)        ?? [],
-                                   start_at:     toIso(rd?.startDate ?? "", rd?.startTime ?? "") ?? null,
-                                   end_at:       toIso(rd?.deadlineDate ?? "", rd?.deadlineTime ?? "") ?? null,
-                                   links:        linkAttachments,
-                                   attachments,
-                                   status:       "pending",
-                            };
+                        const rawFiles: File[] = ((rd as any)?.files ?? [])
+                        .filter((f: any) => !f?.existing)
+                        .map((f: unknown): File | null => {
+                            if (f instanceof File) return f;
+                            if (f && typeof f === "object" && (f as any).file instanceof File)
+                                return (f as any).file as File;
+                            return null;
                         })
-                    );
+                        .filter((f: File | null): f is File => f !== null);
+                        for (let fi = 0; fi < rawFiles.length; fi++) {
+                            const file = rawFiles[fi];
+                            const publicUrl = await uploadFile(file, n);
+                            fileAttachments.push({
+                                id: `file-new-${n}-${fi}`,
+                                name: file.name,
+                                url: publicUrl,
+                                type: "file" as const,
+                            });
+                        }
 
-                    const roundsRes = await fetch(`${API_URL}/api/tournaments/${id}/rounds`, {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Authorization": `Bearer ${token}`,
-                        },
-                        body: JSON.stringify({ rounds: roundsPayload }),
-                    });
+                        const attachments = [...linkAttachments, ...fileAttachments];
 
-                    if (!roundsRes.ok) {
-                        const err = await roundsRes.json().catch(() => ({}));
-                        throw new Error(`Турнір збережено, але раунди не оновлено: ${err.detail ?? JSON.stringify(err)}`);
+                        return {
+                            number:       n,
+                            name:         rd?.name?.trim()                         || `Раунд ${n}`,
+                               description:  rd?.description?.trim()                  || null,
+                               criteria:     rd?.criteria?.filter(Boolean).join("\n") || null,
+                               technologies: rd?.requirements?.filter(Boolean)        ?? [],
+                               start_at:     toIso(rd?.startDate ?? "", rd?.startTime ?? "") ?? null,
+                               end_at:       toIso(rd?.deadlineDate ?? "", rd?.deadlineTime ?? "") ?? null,
+                               links:        linkAttachments,
+                               attachments,
+                               status:       "pending",
+                        };
+                    })
+                );
+
+                if (roundsPayload.length > 8) {
+                    throw new Error("Максимальна кількість раундів — 8");
+                }
+
+                const roundsRes = await fetch(`${API_URL}/api/tournaments/${id}/rounds`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ rounds: roundsPayload }),
+                });
+
+                if (!roundsRes.ok) {
+                    const err = await roundsRes.json().catch(() => ({}));
+                    const errMsg: string = err.detail ?? JSON.stringify(err);
+                    if (errMsg.includes("rounds_number_check") || errMsg.includes("number_check")) {
+                        throw new Error("Номер раунду має бути від 1 до 8. Перевірте кількість раундів.");
                     }
+                    throw new Error(`Турнір збережено, але раунди не оновлено: ${errMsg}`);
                 }
 
                 setSuccess("Зміни збережено ✓");
                 await fetchTourney();
             } catch (e: any) {
-                setError(e?.message ?? "Помилка збереження");
+                const msg: string = e?.message ?? "";
+                if (msg.includes("rounds_number_check") || msg.includes("number_check")) {
+                    setError("Номер раунду має бути від 1 до 8. Перевірте кількість раундів.");
+                } else {
+                    setError(msg || "Виникла помилка. Спробуйте ще раз.");
+                }
             } finally {
                 setSaving(false);
             }
         };
 
-        // ── Loading ──
         if (authLoading || !user || loading) {
             return (
                 <div className="min-h-screen bg-(--bg) flex items-center justify-center">
@@ -416,15 +371,12 @@ export default function TournamentEditPage() {
             );
         }
 
-        // ── Finished / not found ──
-        if (!tourney || isFinished) {
+        if (!tourney) {
             return (
                 <div className="min-h-screen bg-(--bg) flex items-center justify-center flex-col gap-4">
                 <Trophy size={48} className="text-(--t2) opacity-30" />
-                <p className="font-black text-(--t1) uppercase">
-                {isFinished ? "Завершений турнір не можна редагувати" : "Турнір не знайдено"}
-                </p>
-                <button onClick={() => router.push(`/tournaments/${id}`)} className="text-blue-600 text-sm font-bold">← Назад</button>
+                <p className="font-black text-(--t1) uppercase">Турнір не знайдено</p>
+                <button onClick={() => router.push("/tournaments")} className="text-blue-600 text-sm font-bold">← До турнірів</button>
                 </div>
             );
         }
@@ -439,10 +391,10 @@ export default function TournamentEditPage() {
                 .cdIn  { animation: cardDrop    500ms cubic-bezier(.22,1,.36,1) both }
                 .sirIn { animation: slideInRight 400ms cubic-bezier(.22,1,.36,1) both }
                 input[type="date"]::-webkit-calendar-picker-indicator,
-                input[type="time"]::-webkit-calendar-picker-indicator { display: none !important; }
+                input[type="time"]::-webkit-calendar-picker-indicator { display: none !important; opacity: 0 !important; width: 0 !important; }
+                input[type="date"], input[type="time"] { -moz-appearance: textfield; }
                 `}</style>
 
-                {/* Watermark */}
                 <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
                 <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
                 </div>
@@ -462,7 +414,7 @@ export default function TournamentEditPage() {
                 />
 
                 <div className="flex-1 p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
-                {/* Breadcrumb */}
+
                 <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2) flex-wrap">
                 <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">{t.nav?.home ?? "Головна"}</button>
                 <ChevronRight size={10} />
@@ -480,20 +432,6 @@ export default function TournamentEditPage() {
                 <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-(--t1) mb-8">
                 Редагування турніру
                 </h1>
-
-                {/* Ongoing notice */}
-                {isOngoing && (
-                    <div className="mb-6 flex items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl">
-                    <AlertCircle size={18} className="text-amber-500 flex-shrink-0" />
-                    <p className="text-sm font-bold text-amber-500">
-                    Турнір розпочато.{" "}
-                    {canEditLimited
-                        ? "Ви можете змінити лише статус (у межах 24 год після старту)."
-                        : "Редагування доступне лише в перші 24 год після старту."
-                    }
-                    </p>
-                    </div>
-                )}
 
                 <form className="space-y-5" onSubmit={handleSave}>
                 <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
@@ -522,21 +460,17 @@ export default function TournamentEditPage() {
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Назва турніру..."
-                disabled={fieldsDisabled}
-                className={inp + " disabled:opacity-50 disabled:cursor-not-allowed"}
+                className={inp}
                 />
                 </div>
-
                 <div>
                 <label className={`block ${label10} mb-2`}>Опис / Правила</label>
-                <div className={fieldsDisabled ? "opacity-50 pointer-events-none" : ""}>
                 <RichTextEditor
                 value={rules}
                 onChange={setRules}
                 placeholder="Введіть опис та правила турніру..."
                 rows={7}
                 />
-                </div>
                 </div>
                 </div>
                 </section>
@@ -552,19 +486,9 @@ export default function TournamentEditPage() {
                 <span className="text-xs font-black uppercase tracking-widest text-(--t2)">Реєстрація команд</span>
                 </div>
                 <div className="p-6 space-y-4 flex-1">
-                <DateTimePair
-                label="Початок реєстрації"
-                dateVal={regFromDate} onDate={setRegFromDate}
-                timeVal={regFromTime} onTime={setRegFromTime}
-                disabled={fieldsDisabled}
-                />
+                <DateTimePair label="Початок реєстрації" dateVal={regFromDate} onDate={setRegFromDate} timeVal={regFromTime} onTime={setRegFromTime} />
                 <div className="border-t border-(--brd)" />
-                <DateTimePair
-                label="Кінець реєстрації"
-                dateVal={regToDate} onDate={setRegToDate}
-                timeVal={regToTime} onTime={setRegToTime}
-                disabled={fieldsDisabled}
-                />
+                <DateTimePair label="Кінець реєстрації" dateVal={regToDate} onDate={setRegToDate} timeVal={regToTime} onTime={setRegToTime} />
                 </div>
                 </div>
 
@@ -576,13 +500,9 @@ export default function TournamentEditPage() {
                 <span className="text-xs font-black uppercase tracking-widest text-(--t2)">Дати старту</span>
                 </div>
                 <div className="p-6 space-y-4 flex-1">
-                <DateTimePair
-                label="Початок турніру"
-                dateVal={startDate} onDate={setStartDate}
-                timeVal={startTime} onTime={setStartTime}
-                required
-                disabled={fieldsDisabled}
-                />
+                <DateTimePair label="Початок турніру" dateVal={startDate} onDate={setStartDate} timeVal={startTime} onTime={setStartTime} required />
+                <div className="border-t border-(--brd)" />
+                <DateTimePair label="Кінець турніру" dateVal={endDate} onDate={setEndDate} timeVal={endTime} onTime={setEndTime} />
                 </div>
                 </div>
                 </section>
@@ -611,14 +531,8 @@ export default function TournamentEditPage() {
                 <div className="grid grid-cols-4 gap-1.5">
                 {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
                     <button key={n} type="button"
-                    onClick={() => {
-                        if (!fieldsDisabled) {
-                            setRoundCount(n);
-                            if (selectedRoundTab > n) setSelectedRoundTab(1);
-                        }
-                    }}
-                    disabled={fieldsDisabled}
-                    className={`h-10 rounded-xl font-black text-sm border transition-all duration-150 active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    onClick={() => { setRoundCount(n); if (selectedRoundTab > n) setSelectedRoundTab(1); }}
+                    className={`h-10 rounded-xl font-black text-sm border transition-all duration-150 active:scale-90 ${
                         n === roundCount
                         ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/30"
                         : n <= roundCount
@@ -632,8 +546,7 @@ export default function TournamentEditPage() {
                 </div>
                 </div>
 
-                <div className="flex flex-col gap-5">
-                <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col flex-1">
+                <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
                 <div className="flex items-center gap-3 px-5 py-4 border-b border-(--brd) bg-(--bg)/50">
                 <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
                 <Users size={14} />
@@ -641,35 +554,25 @@ export default function TournamentEditPage() {
                 <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">Команди</span>
                 <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full">Опціонально</span>
                 </div>
-                <div className="p-5 flex flex-col gap-3 flex-1 justify-center">
-                <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Максимум команд <span className="normal-case font-bold opacity-60">(0 = без ліміту)</span></p>
-                <div className="flex items-center justify-center gap-3">
-                <button type="button"
-                onClick={() => setMaxTeams(Math.max(0, maxTeams - 1))}
-                disabled={fieldsDisabled}
-                className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0 disabled:opacity-50">−</button>
+                <div className="p-5 flex flex-col gap-3 flex-1">
+                <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Кількість команд</p>
+                <div className="flex items-center justify-center gap-3 flex-1">
+                <button type="button" onClick={() => setMaxTeams(Math.max(0, maxTeams - 1))}
+                className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">−</button>
                 <input
                 type="number" min={0}
                 value={maxTeams === 0 ? "" : maxTeams}
-                onChange={e => {
-                    const v = parseInt(e.target.value, 10);
-                    setMaxTeams(isNaN(v) || v < 0 ? 0 : v);
-                }}
+                onChange={e => { const v = parseInt(e.target.value, 10); setMaxTeams(isNaN(v) || v < 0 ? 0 : v); }}
                 placeholder="∞"
-                disabled={fieldsDisabled}
-                className="w-16 text-center text-2xl font-black bg-transparent outline-none text-(--t1) placeholder:text-(--t2)/60 border-b-2 border-(--brd) focus:border-blue-500 transition-colors tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:opacity-50"
+                className="w-16 text-center text-2xl font-black bg-transparent outline-none text-(--t1) placeholder:text-(--t2)/60 border-b-2 border-(--brd) focus:border-blue-500 transition-colors tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
-                <button type="button"
-                onClick={() => setMaxTeams(maxTeams + 1)}
-                disabled={fieldsDisabled}
-                className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0 disabled:opacity-50">+</button>
+                <button type="button" onClick={() => setMaxTeams(maxTeams + 1)}
+                className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">+</button>
                 </div>
                 <div className="flex gap-1.5 flex-wrap justify-center">
                 {[0, 8, 16, 32, 64].map(n => (
-                    <button key={n} type="button"
-                    onClick={() => !fieldsDisabled && setMaxTeams(n)}
-                    disabled={fieldsDisabled}
-                    className={`text-[10px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50 ${
+                    <button key={n} type="button" onClick={() => setMaxTeams(n)}
+                    className={`text-[10px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest transition-all active:scale-95 ${
                         maxTeams === n
                         ? "bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/30"
                         : "bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600"
@@ -680,40 +583,8 @@ export default function TournamentEditPage() {
                 </div>
                 </div>
                 </div>
-                </div>
                 </section>
 
-                {/* BLOCK 4: Статус */}
-                <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden" style={{ animationDelay: "160ms" }}>
-                <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd) bg-(--bg)/50">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
-                <Zap size={16} />
-                </div>
-                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">4. Статус турніру</span>
-                </div>
-                <div className="p-6 sm:p-8">
-                <div className="flex flex-wrap gap-2">
-                {(["upcoming", "registration", "ongoing", "finished"] as const).map(s => (
-                    <button key={s} type="button" onClick={() => setStatus(s)}
-                    className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95 ${
-                        status === s
-                        ? "bg-blue-600 text-white border-blue-600 shadow-md"
-                        : "bg-(--bg) text-(--t2) border-(--brd) hover:border-blue-600/40"
-                    }`}>
-                    {s === "upcoming" ? "⏳ Скоро"
-                        : s === "registration" ? "📋 Реєстрація"
-                        : s === "ongoing" ? "⚡ Тривають"
-                        : "✅ Завершено"}
-                        </button>
-                ))}
-                </div>
-                {isOngoing && !canEditLimited && (
-                    <p className="mt-3 text-[10px] font-bold text-amber-500">⚠️ Зміна статусу недоступна після перших 24 год</p>
-                )}
-                </div>
-                </section>
-
-                {/* Errors & Success */}
                 {error && (
                     <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl">
                     <AlertCircle size={16} className="text-red-500 flex-shrink-0" />
@@ -727,30 +598,20 @@ export default function TournamentEditPage() {
                     </div>
                 )}
 
-                {/* ── Запрошення журі ── */}
-                <div className="cdIn" style={{ animationDelay: "180ms" }}>
+                <div className="cdIn" style={{ animationDelay: "160ms" }}>
                 <JuryInvitePanel tournamentId={id as string} tournamentName={name} />
                 </div>
 
-                {/* Actions */}
-
-                <div className="cdIn flex flex-col sm:flex-row gap-3 pb-8" style={{ animationDelay: "200ms" }}>
-                <button
-                type="submit"
-                disabled={saving}
-                className="flex-1 flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
+                <div className="cdIn flex flex-col sm:flex-row gap-3 pb-8" style={{ animationDelay: "180ms" }}>
+                <button type="submit" disabled={saving}
+                className="flex-1 flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed">
                 {saving
                     ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Збереження...</>
                     : <><Save size={15} /> Зберегти зміни</>
                 }
                 </button>
-                <button
-                type="button"
-                onClick={() => router.push(`/tournaments/${id}`)}
-                disabled={saving}
-                className="flex-1 px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60"
-                >
+                <button type="button" onClick={() => router.push(`/tournaments/${id}`)} disabled={saving}
+                className="flex-1 px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60">
                 Скасувати
                 </button>
                 </div>
@@ -758,13 +619,8 @@ export default function TournamentEditPage() {
                 </div>
                 {/* end LEFT COLUMN */}
 
-                {/* ── RIGHT COLUMN: RoundSettingsPanel ── */}
-                <div className={`w-full xl:sticky xl:top-6 xl:flex-1 xl:min-w-0 ${fieldsDisabled ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                {fieldsDisabled && (
-                    <div className="mb-3 px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-[10px] font-bold text-amber-500 uppercase tracking-widest text-center">
-                    ⚠️ Редагування раундів недоступне під час турніру
-                    </div>
-                )}
+                {/* ── RIGHT COLUMN ── */}
+                <div className="w-full xl:sticky xl:top-6 xl:flex-1 xl:min-w-0">
                 <RoundSettingsPanel
                 roundCount={roundCount}
                 selectedRound={selectedRoundTab}
@@ -775,8 +631,6 @@ export default function TournamentEditPage() {
                 </div>
 
                 </div>
-                {/* end TWO-COLUMN LAYOUT */}
-
                 </form>
                 </div>
                 </main>

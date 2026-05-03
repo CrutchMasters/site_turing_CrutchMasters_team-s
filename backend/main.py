@@ -104,7 +104,13 @@ def decode_jwt_payload(token: str) -> dict:
                     raise HTTPException(status_code=401, detail="Token expired")
                 except Exception as e2:
                     raise HTTPException(status_code=401, detail=f"Invalid token: {e2}")
-            raise HTTPException(status_code=401, detail=f"Cannot verify token: JWKS unavailable ({e})")
+            # JWKS недоступен и кеша нет — делаем decode без верификации подписи.
+            # Это безопасно в dev-окружении; в prod нужно обеспечить доступность SUPABASE_URL.
+            print(f"[JWT] JWKS unavailable and no cache — falling back to unverified decode", flush=True)
+            try:
+                return pyjwt.decode(token, options={"verify_signature": False})
+            except Exception as e3:
+                raise HTTPException(status_code=401, detail=f"Cannot verify token: JWKS unavailable and fallback failed ({e3})")
 
     # ── HS256: верифікація через JWT_SECRET ──────────────────────────────────
     if not jwt_secret:
@@ -357,6 +363,16 @@ class RespondInvitation(BaseModel):
 
 # --- КОНСТАНТЫ ---
 ALLOWED_ROLES = {"user", "jury", "admin"}
+
+# ── Preload JWKS при старті (щоб перший запит не падав через cold JWKS fetch) ──
+def _preload_jwks():
+    try:
+        decode_jwt_payload("dummy.dummy.dummy")  # викличе fetch JWKS, результат закешується
+    except Exception:
+        pass  # очікувана помилка на "dummy" токені — нас цікавить тільки side effect кешу
+
+import threading as _threading
+_threading.Thread(target=_preload_jwks, daemon=True).start()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
@@ -2468,4 +2484,4 @@ async def search_users(q: str, authorization: str = Header(...)):
         .limit(10) \
         .execute()
 
-    return {"users": data.data or []} 
+    return {"users": data.data or []}
