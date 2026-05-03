@@ -13,7 +13,7 @@ import {
     Clock, Calendar, ChevronLeft, Flag, FileText,
     AlertCircle, CheckCircle2, Loader2, Send, BookOpen,
     Edit3, Star, Users, Eye, ShieldAlert, Info,
-    Lock, UserX, Crown, Gavel,
+    Lock, UserX, Crown, Gavel, Shield, ClipboardCheck,
 } from "lucide-react";
 
 const API_URL =
@@ -21,20 +21,16 @@ typeof window !== "undefined" && window.location.hostname === "localhost"
 ? "http://localhost:8000"
 : "https://site-turing-crutchmasters-team-s.onrender.com";
 
+/* ─── types ─────────────────────────────────────────────── */
+
 interface Round {
     id: string;
     tournament_id: string;
     name: string;
     description?: string;
-    criteria?: string;
-    technologies?: string[];
     start_at?: string;
     end_at?: string;
     status?: string;
-    template_path?: string;
-    attachments?: unknown[];
-    links?: unknown[];
-    number?: number;
 }
 
 interface Tournament {
@@ -45,14 +41,10 @@ interface Tournament {
 
 interface MySubmission {
     id: string;
-    round_id: string;
-    team_id: string;
+    is_draft: boolean;
     status: string;
-    is_draft?: boolean;
     submitted_at?: string;
 }
-
-
 
 /* ─── helpers ──────────────────────────────────────────── */
 
@@ -139,6 +131,7 @@ function ViewOnlyBanner({ children }: { children: React.ReactNode }) {
     );
 }
 
+/* ─── main page ─────────────────────────────────────────── */
 
 export default function RoundPage() {
     const params        = useParams();
@@ -282,33 +275,33 @@ export default function RoundPage() {
         if (!authLoading && !user) router.push("/login");
     }, [authLoading, user, router]);
 
-    useEffect(() => {
-        if (!authLoading && user && id) fetchData();
-    }, [id, authLoading, user, fetchData]);
-
-        // Запускаем fetchUserData только когда tournament уже загружен
         useEffect(() => {
-            if (!authLoading && user && tournament?.id) {
-                fetchUserData(tournament.id);
-            }
-        }, [authLoading, user, tournament?.id, fetchUserData]);
+            if (!authLoading && user && id) fetchData();
+        }, [id, authLoading, user, fetchData]);
 
-        /* ── derived ── */
-        const role         = user?.role ?? null;
-        const isSuperAdmin = role === "superadmin";
-        const isAdmin      = role === "admin";
-        const isJury       = role === "jury";
-        const isUser       = role === "user";
-        const isOwner      = !!user && !!tournament && tournament.created_by === user.id;
+            // Запускаем fetchUserData только когда tournament уже загружен
+            useEffect(() => {
+                if (!authLoading && user && tournament?.id) {
+                    fetchUserData(tournament.id);
+                }
+            }, [authLoading, user, tournament?.id, fetchUserData]);
 
-        const roundActive  = round?.status === "active";
-        const roundDraft   = round?.status === "draft";
-        const now          = Date.now();
-        const endTs        = round?.end_at ? new Date(round.end_at).getTime() : 0;
-        const startTs      = round?.start_at ? new Date(round.start_at).getTime() : 0;
-        let progressPct    = 0;
-        if (endTs > 0 && startTs > 0 && endTs > startTs)
-            progressPct = Math.min(100, Math.max(0, ((now - startTs) / (endTs - startTs)) * 100));
+            /* ── derived ── */
+            const role         = user?.role ?? null;
+            const isSuperAdmin = role === "superadmin";
+            const isAdmin      = role === "admin";
+            const isJury       = role === "jury";
+            const isUser       = role === "user";
+            const isOwner      = !!user && !!tournament && tournament.created_by === user.id;
+
+            const roundActive  = round?.status === "active";
+            const roundDraft   = round?.status === "draft";
+            const now          = Date.now();
+            const endTs        = round?.end_at ? new Date(round.end_at).getTime() : 0;
+            const startTs      = round?.start_at ? new Date(round.start_at).getTime() : 0;
+            let progressPct    = 0;
+            if (endTs > 0 && startTs > 0 && endTs > startTs)
+                progressPct = Math.min(100, Math.max(0, ((now - startTs) / (endTs - startTs)) * 100));
     const isUrgent = progressPct > 80;
     const isEnded  = endTs > 0 && now > endTs;
 
@@ -707,9 +700,10 @@ export default function RoundPage() {
 
             {renderActionsPanel()}
             </div>
+
+            </div>{/* end grid */}
+            </div>{/* end p-6 container */}
+            </main>
             </div>
-        </div>
-        </main>
-    </div>
-);
+    );
 }
