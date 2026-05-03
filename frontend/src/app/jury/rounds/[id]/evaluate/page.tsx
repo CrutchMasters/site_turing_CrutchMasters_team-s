@@ -35,6 +35,7 @@ interface SubmissionWork {
     submitted_at: string;
     github_url?: string;
     video_url?: string;
+    files?: { name: string; path: string; url: string | null }[];
     status: "not_evaluated" | "in_progress" | "evaluated";
     // filled after evaluation load
     criteria: CriterionScore[];
@@ -296,9 +297,11 @@ export default function JuryEvaluationPage() {
             setRound({ ...roundData, tournament_name: tournamentName });
 
             // 2. Submissions — через бекенд (перевіряє JWT і права журі)
-            const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+            // Токен беремо з localStorage (актуальніший ніж сесія Supabase)
+            const freshToken = (typeof window !== "undefined" ? localStorage.getItem("access_token") : null)
+            ?? (await supabase.auth.getSession()).data.session?.access_token ?? "";
             const subsRes = await fetch(`${API_URL}/api/rounds/${roundId}/submissions`, {
-                headers: { Authorization: `Bearer ${token}` },
+                headers: { Authorization: `Bearer ${freshToken}` },
             });
             if (!subsRes.ok) {
                 const err = await subsRes.json().catch(() => ({}));
@@ -307,33 +310,21 @@ export default function JuryEvaluationPage() {
             const subsJson = await subsRes.json();
             const assignedSubmissions: any[] = subsJson.submissions ?? [];
 
-            // Загальна кількість submissions раунду (для статистики адміна)
-            const { count: totalCount } = await supabase
-            .from("submissions")
-            .select("id", { count: "exact", head: true })
-            .eq("round_id", roundId)
-            .neq("status", "draft");
+            // Загальна кількість submissions раунду (для статистики)
+            const totalCount = assignedSubmissions.length;
 
             if (assignedSubmissions.length === 0) {
                 setWorks([]);
-                setStats({ total: totalCount ?? 0, distributed: 0, evaluated: 0 });
+                setStats({ total: 0, distributed: 0, evaluated: 0 });
                 setPageLoading(false);
                 return;
             }
 
-            // 3. Load existing evaluations
-            const submissionIds = assignedSubmissions.map((s: any) => s.id);
-            const { data: evalsData } = await supabase
-            .from("jury_evaluations")
-            .select("submission_id, criteria_scores, general_comment, total_score")
-            .eq("jury_id", user.id)
-            .in("submission_id", submissionIds);
-            const evalMap: Record<string, any> = {};
-            (evalsData ?? []).forEach((e: any) => { evalMap[e.submission_id] = e; });
-
-            // 4. Build work list (team_name/team_org вже є в відповіді бекенду)
+            // 3. Build work list — бекенд вже повертає my_evaluation для журі,
+            //    тому окремого запиту до jury_evaluations не потрібно.
             const workList: SubmissionWork[] = assignedSubmissions.map((s: any) => {
-                const existingEval = evalMap[s.id];
+                // my_evaluation присутній якщо роль === "jury", інакше null
+                const existingEval = s.my_evaluation ?? null;
                 let criteria = buildDefaultCriteria();
                 let general_comment = "";
                 let total_score: number | undefined;
@@ -361,6 +352,7 @@ export default function JuryEvaluationPage() {
                     submitted_at: s.submitted_at,
                     github_url: s.github_url,
                     video_url: s.video_url,
+                    files: s.files ?? [],
                     status,
                     criteria,
                     general_comment,
@@ -485,15 +477,24 @@ export default function JuryEvaluationPage() {
         const handleRedistribute = async () => {
             if (!isAdmin || !roundId) return;
             setRedistributing(true);
+            setSaveMsg(null);
             try {
-                // FIX (середній): ендпоінт /api/rounds/{id}/redistribute не існує в бекенді.
-                // Поки не реалізовано — показуємо повідомлення замість 404-помилки.
-                // TODO: реалізувати POST /api/rounds/{round_id}/redistribute в main.py
-                console.warn("[handleRedistribute] ендпоінт ще не реалізований на бекенді");
-                setSaveMsg({ type: "err", text: "Функція перерозподілу ще не реалізована на сервері" });
+                const freshToken = (typeof window !== "undefined" ? localStorage.getItem("access_token") : null) ?? "";
+                const API_URL = window.location.hostname === "localhost"
+                ? "http://localhost:8000"
+                : "https://site-turing-crutchmasters-team-s.onrender.com";
+                const res = await fetch(`${API_URL}/api/rounds/${roundId}/redistribute`, {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${freshToken}` },
+                });
+                const json = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(json.detail ?? `HTTP ${res.status}`);
+                setSaveMsg({ type: "ok", text: `Розподілено ${json.submissions} робіт між ${json.jury_count} журі` });
+                if (saveMsgTimer.current) clearTimeout(saveMsgTimer.current);
+                saveMsgTimer.current = setTimeout(() => setSaveMsg(null), 4000);
                 await fetchData();
-            } catch (e) {
-                console.error(e);
+            } catch (e: any) {
+                setSaveMsg({ type: "err", text: e?.message ?? "Помилка перерозподілу" });
             } finally {
                 setRedistributing(false);
             }
@@ -733,7 +734,20 @@ export default function JuryEvaluationPage() {
                             <Video size={12} /> Відео
                             </a>
                         )}
-                        {!activeWork.github_url && !activeWork.video_url && (
+                        {/* Uploaded files */}
+                        {(activeWork.files ?? []).map(f => f.url ? (
+                            <a
+                            key={f.path}
+                            href={f.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download={f.name}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"
+                            >
+                            📎 {f.name || "Файл"}
+                            </a>
+                        ) : null)}
+                        {!activeWork.github_url && !activeWork.video_url && !(activeWork.files?.some(f => f.url)) && (
                             <span className="text-[10px] font-bold text-(--t2) opacity-50 italic">Посилання не додані</span>
                         )}
                         <span className="ml-auto text-[9px] font-bold text-(--t2) opacity-50 self-center">
