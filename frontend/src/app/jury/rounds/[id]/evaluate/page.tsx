@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import {
-    Trophy, ChevronRight, ArrowLeft, Loader, Save,
+    Trophy, ChevronRight, ChevronLeft, ArrowLeft, Loader, Save,
     CheckCircle2, AlertCircle, Github, Video,
     RefreshCw, Star, BarChart2, Shuffle, Users,
     Lock, Unlock, ChevronDown, ChevronUp, Eye,
@@ -561,9 +561,10 @@ export default function JuryEvaluationPage() {
                 <div className="flex items-center gap-3 mb-6">
                 <button
                 onClick={() => round && router.push(`/rounds/${round.id}`)}
-                className="p-2.5 rounded-xl bg-(--card) border border-(--brd) text-(--t2) hover:text-blue-600 hover:border-blue-600/30 transition-all active:scale-95"
+                className="flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors group"
                 >
-                <ArrowLeft size={16} />
+                <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
+                Назад до раунду
                 </button>
                 <div className="flex-1 min-w-0">
                 <h1 className="text-xl sm:text-2xl font-black text-(--t1) uppercase tracking-tight truncate">
