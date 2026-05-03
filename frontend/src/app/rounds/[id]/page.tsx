@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase, authedSupabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/hooks/useTheme";
@@ -20,6 +20,39 @@ const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
 ? "http://localhost:8000"
 : "https://site-turing-crutchmasters-team-s.onrender.com";
+
+interface Round {
+    id: string;
+    tournament_id: string;
+    name: string;
+    description?: string;
+    criteria?: string;
+    technologies?: string[];
+    start_at?: string;
+    end_at?: string;
+    status?: string;
+    template_path?: string;
+    attachments?: unknown[];
+    links?: unknown[];
+    number?: number;
+}
+
+interface Tournament {
+    id: string;
+    name: string;
+    created_by: string;
+}
+
+interface MySubmission {
+    id: string;
+    round_id: string;
+    team_id: string;
+    status: string;
+    is_draft?: boolean;
+    submitted_at?: string;
+}
+
+
 
 /* ─── helpers ──────────────────────────────────────────── */
 
@@ -106,73 +139,6 @@ function ViewOnlyBanner({ children }: { children: React.ReactNode }) {
     );
 }
 
-export default function RoundPage() {
-    const params = useParams();
-    const router = useRouter();
-    const { user, isLoading: authLoading }  = useAuth();
-    const { dark }  = useTheme();
-    const id = params?.id as string;
-
-    const isJury = user?.role === "jury" || user?.role === "admin" || user?.role === "superadmin";
-
-    const [round,       setRound]       = useState<Round | null>(null);
-    const [submission,  setSubmission]  = useState<Submission | null>(null);
-    const [loading,     setLoading]     = useState(true);
-    const [submitting,  setSubmitting]  = useState(false);
-    const [submitError, setSubmitError] = useState<string | null>(null);
-    const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-    const [userTeamId,  setUserTeamId]  = useState<string | null>(null);
-    const [isInvitedJury, setIsInvitedJury] = useState<boolean | null>(null);
-    const [previewFile, setPreviewFile] = useState<RoundAttachment | null>(null);
-    const [previewUrl,  setPreviewUrl]  = useState<string | null>(null);
-
-interface Round {
-    id: string;
-    tournament_id: string;
-    name: string;
-    description?: string;
-    start_at?: string;
-    end_at?: string;
-    status?: string;
-}
-
-    // FIX (критичний): чекаємо поки user завантажиться перед fetchRound.
-    // Раніше authLoading міг бути false але user ще null → isInvitedJury не встановлювався.
-    useEffect(() => { if (id && !authLoading && user !== undefined) fetchRound(); }, [id, authLoading, user?.id, user?.role]);
-    // FIX (високий): залежимо від round щоб мати tournament_id при виклику fetchUserTeam
-    useEffect(() => { if (user && round) fetchUserTeam(); }, [user, round?.tournament_id]);
-
-    const fetchRound = async () => {
-        setLoading(true);
-        try {
-            const { data, error } = await supabase.from("rounds").select("*").eq("id", id).single();
-            if (error) throw error;
-            setRound(data);
-
-            if ((user?.role === "jury" || user?.role === "admin" || user?.role === "superadmin") && data?.tournament_id) {
-                // ВИПРАВЛЕННЯ: використовуємо authedSupabase з JWT токеном.
-                // Раніше використовувався анонімний supabase — без токена auth.uid() = null,
-                // тому RLS policy "jury_id = auth.uid()" завжди поверала false.
-                try {
-                    const tkn = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
-                    const authedClient = await authedSupabase(tkn);
-                    const { data: inv, error: invErr } = await authedClient
-                        .from("jury_tournament_invitations")
-                        .select("id")
-                        .eq("tournament_id", data.tournament_id)
-                        .eq("jury_id", user.id)
-                        .eq("status", "accepted")
-                        .maybeSingle();
-                    if (!invErr) setIsInvitedJury(!!inv);
-                    else setIsInvitedJury(false);
-                } catch {
-                    setIsInvitedJury(false);
-                }
-            } else {
-                setIsInvitedJury(false);
-            }
-
-/* ─── main page ─────────────────────────────────────────── */
 
 export default function RoundPage() {
     const params        = useParams();
@@ -741,30 +707,9 @@ export default function RoundPage() {
 
             {renderActionsPanel()}
             </div>
-        )}
-
-        {isJury ? (
-        isInvitedJury === null ? (
-            /* ── Завантаження перевірки доступу ── */
-            <div className="flex items-center justify-center gap-2 px-6 py-4">
-            <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
             </div>
-        ) : isInvitedJury ? (
-            /* ── Запрошений журі — кнопка оцінювання ── */
-            <button
-            onClick={() => router.push(`/jury/rounds/${round.id}/evaluate`)}
-            className="flex items-center justify-center gap-3 px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-[0.98] bg-violet-600 text-white hover:bg-violet-700 shadow-lg shadow-violet-600/20"
-            >
-            <ClipboardCheck size={18}/> Оцінити роботи
-            </button>
-        ) : (
-            /* ── Незапрошений журі — інформаційна плашка ── */
-            <div className="flex flex-col items-center gap-2 px-6 py-5 rounded-2xl bg-violet-500/5 border border-violet-500/20 text-center">
-            <div className="w-9 h-9 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
-                <Shield size={16} className="text-violet-400" />
-            </div>
-            </div>
-            </main>
-            </div>
-    );
+        </div>
+        </main>
+    </div>
+);
 }
