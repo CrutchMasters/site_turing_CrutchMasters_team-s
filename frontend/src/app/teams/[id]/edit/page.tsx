@@ -338,14 +338,16 @@ export default function EditTeamPage() {
             <span className="text-(--t1)">{t.editTeam.breadcrumbEdit}</span>
             </nav>
 
-            {/* Page header */}
-            <div className="fuIn flex items-center gap-4 mb-8">
+            {/* Back button */}
             <button
             onClick={() => router.push(`/teams/${teamId}`)}
-            className="p-2.5 rounded-xl bg-(--card) border border-(--brd) text-(--t2) hover:text-blue-600 hover:border-blue-600/30 transition-all active:scale-95"
+            className="fuIn mb-6 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors"
             >
-            <ArrowLeft size={16} />
+            <ArrowLeft size={14} /> {t.editTeam.backToTeam}
             </button>
+
+            {/* Page header */}
+            <div className="fuIn flex items-center gap-4 mb-8">
             <div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-(--t1) uppercase">
             {t.editTeam.pageTitle}
@@ -582,16 +584,6 @@ export default function EditTeamPage() {
                 </div>
             )}
             </section>
-
-            {/* ─── Back button ─── */}
-            <div className="fuIn pb-4" style={{ animationDelay: "200ms" }}>
-            <button
-            onClick={() => router.push(`/teams/${teamId}`)}
-            className="flex items-center gap-2 text-(--t2) font-black text-xs uppercase tracking-widest hover:text-blue-600 transition-colors"
-            >
-            <ArrowLeft size={14} /> {t.editTeam.backToTeam}
-            </button>
-            </div>
 
             </div>
             </div>

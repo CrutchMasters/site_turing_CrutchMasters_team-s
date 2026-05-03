@@ -183,7 +183,7 @@ function TeamAvatarModal({
             onClose();
         } catch (err: any) {
             console.error("Team avatar upload error:", err);
-            alert(err?.message ?? "Помилка завантаження аватара");
+            alert(err?.message ?? t.teamProfile.errLoad);
         } finally {
             setUploading(false);
         }
@@ -235,7 +235,7 @@ function TeamAvatarModal({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
         <div className="bg-(--card) border border-(--brd) rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-(--brd)">
-        <p className="text-sm font-black uppercase tracking-widest text-(--t1)">Аватар команди</p>
+        <p className="text-sm font-black uppercase tracking-widest text-(--t1)">{t.teamProfile.avatarModal}</p>
         <button onClick={onClose}
         className="w-7 h-7 rounded-full border border-(--brd) flex items-center justify-center text-(--t2) hover:text-red-500 hover:border-red-500/40 transition-all">
         <X size={13} />
@@ -246,8 +246,8 @@ function TeamAvatarModal({
             <label className="flex flex-col items-center justify-center gap-3 m-5 p-10 border-2 border-dashed border-(--brd) rounded-2xl cursor-pointer hover:border-blue-600/40 hover:bg-blue-600/5 transition-all">
             <div className="w-14 h-14 rounded-2xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-3xl">🖼️</div>
             <div className="text-center">
-            <p className="text-sm font-black text-(--t1)">Виберіть фото</p>
-            <p className="text-[11px] text-(--t2) mt-1 font-medium">PNG, JPG, WEBP — до 5MB</p>
+            <p className="text-sm font-black text-(--t1)">{t.teamProfile.avatarChoose}</p>
+            <p className="text-[11px] text-(--t2) mt-1 font-medium">{t.teamProfile.avatarHint}</p>
             </div>
             <input type="file" accept="image/*" className="hidden" onChange={loadImage} />
             </label>
@@ -261,18 +261,18 @@ function TeamAvatarModal({
             onWheel={onWheel} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
             <canvas ref={canvasRef} width={SIZE} height={SIZE} style={{ width: SIZE, height: SIZE, display: "block" }} />
             </div>
-            <p className="text-[10px] text-(--t2) font-bold">Перетягни · Колесо миші = масштаб</p>
+            <p className="text-[10px] text-(--t2) font-bold">{t.teamProfile.avatarDrag}</p>
             </div>
 
             <div className="px-5 space-y-3 pb-2">
             <div className="flex items-center gap-3">
-            <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) w-16 flex-shrink-0">Масштаб</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) w-16 flex-shrink-0">{t.teamProfile.avatarScale}</span>
             <input type="range" min="20" max="300" step="1" value={scale} className="flex-1"
             onChange={e => { const v = +e.target.value; setScale(v); draw(undefined, v); }} />
             <span className="text-[10px] font-bold text-(--t2) w-10 text-right">{scale}%</span>
             </div>
             <div className="flex items-center gap-3">
-            <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) w-16 flex-shrink-0">Поворот</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) w-16 flex-shrink-0">{t.teamProfile.avatarRotate}</span>
             <input type="range" min="-180" max="180" step="1" value={rotate} className="flex-1"
             onChange={e => { const v = +e.target.value; setRotate(v); draw(undefined, undefined, v); }} />
             <span className="text-[10px] font-bold text-(--t2) w-10 text-right">{rotate}°</span>
@@ -285,13 +285,13 @@ function TeamAvatarModal({
             <button onClick={handleSave} disabled={uploading}
             className="flex-1 h-9 rounded-xl bg-blue-600 text-white text-xs font-black hover:bg-blue-700 transition-all disabled:opacity-40 active:scale-95 flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/20">
             {uploading ? <Loader size={13} className="animate-spin" /> : null}
-            {uploading ? "..." : "Зберегти"}
+            {uploading ? "..." : t.teamProfile.avatarSave}
             </button>
             </div>
 
             <div className="text-center pb-4">
             <label className="text-[10px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 cursor-pointer transition-colors">
-            Змінити фото
+            {t.teamProfile.avatarChange}
             <input type="file" accept="image/*" className="hidden" onChange={loadImage} />
             </label>
             </div>
@@ -310,7 +310,7 @@ export default function TeamProfilePage() {
     const { dark } = useTheme();
     const { user, isLoading: authLoading } = useAuth();
 
-    const { locale } = useLanguage();
+    const { locale, t } = useLanguage();
     const [team, setTeam]           = useState<Team | null>(null);
     const [captain, setCaptain]     = useState<TeamMember | null>(null);
     const [members, setMembers]     = useState<TeamMember[]>([]);
@@ -439,7 +439,7 @@ export default function TeamProfilePage() {
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <MobileHeader
         onOpenSidebar={() => setIsMobileSidebarOpen(true)}
-        title={team?.name ?? "Команда"}
+        title={team?.name ?? t.teamProfile.teamFallback}
         icon={<Users size={18} className="text-blue-600" />}
         />
 
@@ -447,25 +447,25 @@ export default function TeamProfilePage() {
 
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-        <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
+        <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">{t.teamProfile.breadcrumbHome}</button>
         <ChevronRight size={10} />
-        <button onClick={() => router.push("/teams")} className="hover:text-blue-600 transition-colors">Команди</button>
+        <button onClick={() => router.push("/teams")} className="hover:text-blue-600 transition-colors">{t.teamProfile.breadcrumbTeams}</button>
         <ChevronRight size={10} />
-        <span className="text-(--t1) truncate max-w-[120px]">{isLoading ? "..." : team?.name ?? "Профіль"}</span>
+        <span className="text-(--t1) truncate max-w-[120px]">{isLoading ? t.teamProfile.breadcrumbLoading : team?.name ?? t.teamProfile.breadcrumbFallback}</span>
         </nav>
 
         <button
-        onClick={() => router.back()}
+        onClick={() => router.push("/teams")}
         className="mb-6 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors"
         >
-        <ArrowLeft size={14} /> Назад
+        <ArrowLeft size={14} /> {t.teamProfile.back}
         </button>
 
         {/* Error state */}
         {error && (
             <div className="max-w-2xl bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) p-12 text-center">
             <Users className="w-16 h-16 text-(--t2) mx-auto mb-4 opacity-40" />
-            <p className="text-lg font-black text-(--t1) mb-2">Команду не знайдено</p>
+            <p className="text-lg font-black text-(--t1) mb-2">{t.teamProfile.notFound}</p>
             <p className="text-(--t2) text-sm">{error}</p>
             <button
             onClick={() => router.push("/teams")}
@@ -510,7 +510,7 @@ export default function TeamProfilePage() {
                 <button
                 onClick={() => setAvatarModalOpen(true)}
                 className="absolute inset-0 rounded-2xl sm:rounded-3xl bg-black/50 flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity cursor-pointer"
-                title="Змінити аватар команди"
+                title={t.teamProfile.avatarChangeTip}
                 >
                 <Camera size={20} className="text-white" />
                 </button>
@@ -539,7 +539,7 @@ export default function TeamProfilePage() {
             <div className="flex items-center gap-1.5 text-(--t2)">
             <Users size={14} />
             <span className="text-[11px] font-black uppercase tracking-wider">
-            {allMembers.length} учасник{allMembers.length === 1 ? "" : "ів"}
+            {allMembers.length}{allMembers.length === 1 ? t.teamProfile.memberCount_one : t.teamProfile.memberCount_many}
             </span>
             </div>
             {team.created_at && (
@@ -576,7 +576,7 @@ export default function TeamProfilePage() {
             {/* Social links */}
             {(team.telegram_url || team.discord_url) && (
                 <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) shadow-sm p-6 sm:p-8" style={{ animationDelay: "60ms" }}>
-                <h2 className="text-xs font-black uppercase tracking-widest text-(--t2) mb-4">Соціальні мережі</h2>
+                <h2 className="text-xs font-black uppercase tracking-widest text-(--t2) mb-4">{t.teamProfile.socialTitle}</h2>
                 <div className="flex flex-wrap gap-3">
                 {team.telegram_url && (
                     <a
@@ -609,7 +609,7 @@ export default function TeamProfilePage() {
                 <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) shadow-sm overflow-hidden" style={{ animationDelay: "75ms" }}>
                 <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-blue-500/5">
                 <Trophy size={14} className="text-blue-500" />
-                <h2 className="text-xs font-black uppercase tracking-widest text-blue-500">Бере участь у турнірі</h2>
+                <h2 className="text-xs font-black uppercase tracking-widest text-blue-500">{t.teamProfile.tournamentTitle}</h2>
                 </div>
                 <div className="p-6 sm:p-8">
                 <button
@@ -626,10 +626,10 @@ export default function TeamProfilePage() {
                 </span>
                 {tournament.status && (
                     <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 text-(--t2) bg-(--bg) border-(--brd)">
-                    {tournament.status === "active" || tournament.status === "ongoing" ? "Активний"
-                        : tournament.status === "registration" ? "Реєстрація"
-                        : tournament.status === "upcoming" ? "Очікується"
-                        : tournament.status === "finished" ? "Завершено"
+                    {tournament.status === "active" || tournament.status === "ongoing" ? t.teamProfile.tournamentStatusActive
+                        : tournament.status === "registration" ? t.teamProfile.tournamentStatusRegistration
+                        : tournament.status === "upcoming" ? t.teamProfile.tournamentStatusUpcoming
+                        : tournament.status === "finished" ? t.teamProfile.tournamentStatusFinished
                         : tournament.status}
                     </span>
                 )}
@@ -651,7 +651,7 @@ export default function TeamProfilePage() {
                 <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-amber-500/20 shadow-sm overflow-hidden" style={{ animationDelay: "90ms" }}>
                 <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-amber-500/5">
                 <Crown size={14} className="text-amber-500" />
-                <h2 className="text-xs font-black uppercase tracking-widest text-amber-500">Капітан команди</h2>
+                <h2 className="text-xs font-black uppercase tracking-widest text-amber-500">{t.teamProfile.captainTitle}</h2>
                 </div>
                 <div className="p-6 sm:p-8">
                 <MemberRow member={captain} isCaptain onClick={() => router.push(captain.id === user?.id ? "/profile" : `/user/${captain.id}`)} />
@@ -664,7 +664,7 @@ export default function TeamProfilePage() {
             <div className="flex items-center justify-between px-6 sm:px-8 py-4 border-b border-(--brd)">
             <div className="flex items-center gap-3">
             <Users size={14} className="text-blue-600" />
-            <h2 className="text-xs font-black uppercase tracking-widest text-(--t1)">Учасники</h2>
+            <h2 className="text-xs font-black uppercase tracking-widest text-(--t1)">{t.teamProfile.membersTitle}</h2>
             </div>
             <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg bg-(--bg) border border-(--brd) text-(--t2)">
             {members.length} / 10
@@ -673,7 +673,7 @@ export default function TeamProfilePage() {
             <div className="divide-y divide-(--brd)">
             {members.length === 0 ? (
                 <div className="px-6 sm:px-8 py-10 text-center">
-                <p className="text-[11px] font-black uppercase tracking-widest text-(--t2)">Учасників ще немає</p>
+                <p className="text-[11px] font-black uppercase tracking-widest text-(--t2)">{t.teamProfile.noMembers}</p>
                 </div>
             ) : (
                 members.map((m, i) => (
@@ -695,7 +695,7 @@ export default function TeamProfilePage() {
                 onClick={() => router.push(`/teams/${teamId}/edit`)}
                 className="w-full sm:w-auto flex items-center justify-center gap-2 bg-(--card) border border-(--brd) text-(--t2) font-black text-xs uppercase tracking-widest rounded-2xl px-8 py-4 hover:bg-(--bg) hover:text-(--t1) transition-all active:scale-95"
                 >
-                Редагувати команду
+                {t.teamProfile.editBtn}
                 </button>
                 </div>
             )}
@@ -709,6 +709,7 @@ export default function TeamProfilePage() {
 
 function MemberRow({ member, isCaptain, onClick }: { member: TeamMember; isCaptain?: boolean; onClick?: () => void }) {
     const letter = (member.username || member.login || "?").charAt(0).toUpperCase();
+    const { t } = useLanguage();
     return (
         <div
         className="flex items-center gap-4 cursor-pointer group"
@@ -736,7 +737,7 @@ function MemberRow({ member, isCaptain, onClick }: { member: TeamMember; isCapta
         {member.role}
         </span>
         {member.status === "active" && (
-            <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" title="Активний" />
+            <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" title={t.teamProfile.statusActive} />
         )}
         <ChevronRight size={14} className="text-(--t2) group-hover:text-blue-600 transition-colors" />
         </div>
