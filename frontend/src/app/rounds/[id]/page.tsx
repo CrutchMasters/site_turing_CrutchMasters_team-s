@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase, authedSupabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/hooks/useTheme";
 import Sidebar from "@/components/Sidebar";
@@ -264,7 +264,7 @@ function isFullUrl(url: string): boolean {
 export default function RoundPage() {
     const params = useParams();
     const router = useRouter();
-    const { user }  = useAuth();
+    const { user, isLoading: authLoading }  = useAuth();
     const { dark }  = useTheme();
     const id = params?.id as string;
 
@@ -283,7 +283,9 @@ export default function RoundPage() {
 
     const countdown = useCountdown(round?.end_at);
 
-    useEffect(() => { if (id) fetchRound(); }, [id]);
+    // FIX (критичний): чекаємо поки user завантажиться перед fetchRound.
+    // Раніше authLoading міг бути false але user ще null → isInvitedJury не встановлювався.
+    useEffect(() => { if (id && !authLoading && user !== undefined) fetchRound(); }, [id, authLoading, user?.id, user?.role]);
     // FIX (високий): залежимо від round щоб мати tournament_id при виклику fetchUserTeam
     useEffect(() => { if (user && round) fetchUserTeam(); }, [user, round?.tournament_id]);
 
@@ -294,18 +296,28 @@ export default function RoundPage() {
             if (error) throw error;
             setRound(data);
 
-            if ((user?.role === "jury") && data?.tournament_id) {
-                const { data: inv } = await supabase
-                    .from("jury_tournament_invitations")
-                    .select("id")
-                    .eq("tournament_id", data.tournament_id)
-                    .eq("jury_id", user.id)
-                    .eq("status", "accepted")
-                    .single();
-                setIsInvitedJury(!!inv);
-} else {
-    setIsInvitedJury(false);
-}
+            if ((user?.role === "jury" || user?.role === "admin" || user?.role === "superadmin") && data?.tournament_id) {
+                // ВИПРАВЛЕННЯ: використовуємо authedSupabase з JWT токеном.
+                // Раніше використовувався анонімний supabase — без токена auth.uid() = null,
+                // тому RLS policy "jury_id = auth.uid()" завжди поверала false.
+                try {
+                    const tkn = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+                    const authedClient = await authedSupabase(tkn);
+                    const { data: inv, error: invErr } = await authedClient
+                        .from("jury_tournament_invitations")
+                        .select("id")
+                        .eq("tournament_id", data.tournament_id)
+                        .eq("jury_id", user.id)
+                        .eq("status", "accepted")
+                        .maybeSingle();
+                    if (!invErr) setIsInvitedJury(!!inv);
+                    else setIsInvitedJury(false);
+                } catch {
+                    setIsInvitedJury(false);
+                }
+            } else {
+                setIsInvitedJury(false);
+            }
 
             if (userTeamId) fetchSubmission(data.id, userTeamId);
         } catch (e) { console.error(e); }
@@ -748,7 +760,12 @@ export default function RoundPage() {
         )}
 
         {isJury ? (
-        isInvitedJury ? (
+        isInvitedJury === null ? (
+            /* ── Завантаження перевірки доступу ── */
+            <div className="flex items-center justify-center gap-2 px-6 py-4">
+            <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+        ) : isInvitedJury ? (
             /* ── Запрошений журі — кнопка оцінювання ── */
             <button
             onClick={() => router.push(`/jury/rounds/${round.id}/evaluate`)}
