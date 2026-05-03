@@ -299,8 +299,9 @@ function TeamAvatarModal({
     )}
     </div>
     </div>
-);
-
+  );
+}
+    
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function TeamProfilePage() {
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
