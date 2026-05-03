@@ -157,6 +157,18 @@ export default function RegisterTourney() {
     if (!startDate)          { setSubmitError("Дата старту турніру є обов'язковою"); return; }
     setIsSubmitting(true);
     try {
+      // Перевірка дублікату назви
+      const { data: existing, error: checkError } = await supabase
+      .from("tournaments")
+      .select("id")
+      .ilike("name", tourneyName.trim())
+      .limit(1);
+      if (!checkError && existing && existing.length > 0) {
+        setSubmitError(`Турнір з назвою "${tourneyName.trim()}" вже існує. Оберіть іншу назву.`);
+        setIsSubmitting(false);
+        return;
+      }
+
       // Формуємо масив раундів — файли спочатку завантажуємо в Storage
       const roundsPayload = await Promise.all(
         Array.from({ length: roundCount }, async (_, i) => {

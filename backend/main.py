@@ -1460,8 +1460,40 @@ async def respond_invitation(payload: RespondInvitation, authorization: str = He
         raise HTTPException(status_code=404, detail="Приглашение не найдено")
     if inv["invitee_id"] != caller["id"]:
         raise HTTPException(status_code=403, detail="Это приглашение не для вас")
+    def get_user_current_team(user_id: str, exclude_team_id: str) -> str | None:
+        """Повертає назву команди де юзер є капітаном або учасником (крім exclude_team_id)."""
+        # Перевіряємо members_ids
+        member_res = supabase.table("teams").select("id, name").contains("members_ids", json.dumps([user_id])).execute()
+        # Перевіряємо captain_id
+        captain_res = supabase.table("teams").select("id, name").eq("captain_id", user_id).execute()
+        all_teams = (member_res.data or []) + (captain_res.data or [])
+        # Дедуплікуємо та виключаємо цільову команду
+        seen = set()
+        for t in all_teams:
+            if t["id"] != exclude_team_id and t["id"] not in seen:
+                seen.add(t["id"])
+                return t.get("name", "іншу команду")
+        return None
+
+    # Якщо запрошення вже оброблене — перевіряємо чи справа в тому що юзер вже в команді
     if inv["status"] != "pending":
-        raise HTTPException(status_code=400, detail=f"Приглашение уже {inv['status']}")
+        if payload.accept:
+            existing_team_name = get_user_current_team(caller["id"], inv["team_id"])
+            if existing_team_name:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Ви вже є членом команди \u00ab{existing_team_name}\u00bb. Спочатку покиньте поточну команду, щоб приєднатися до іншої."
+                )
+        raise HTTPException(status_code=400, detail="Це запрошення вже було оброблено раніше.")
+
+    # Перевірка: якщо користувач приймає — він не повинен вже бути в іншій команді
+    if payload.accept:
+        existing_team_name = get_user_current_team(caller["id"], inv["team_id"])
+        if existing_team_name:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ви вже є членом команди \u00ab{existing_team_name}\u00bb. Спочатку покиньте поточну команду, щоб приєднатися до іншої."
+            )
 
     new_status = "accepted" if payload.accept else "declined"
 
