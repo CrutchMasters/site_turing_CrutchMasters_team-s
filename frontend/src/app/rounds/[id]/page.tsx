@@ -321,7 +321,7 @@ export default function RoundPage() {
         <main className="flex-1 flex flex-col items-center justify-center gap-4">
         <AlertCircle size={28} className="text-(--t2)" />
         <p className="text-(--t2) font-bold">Раунд не знайдено</p>
-        <button onClick={() => router.push(`/tournaments/${round.tournament_id}`)}
+        <button onClick={() => router.push(round?.tournament_id ? `/tournaments/${round.tournament_id}` : "/tournaments")}
         className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm bg-(--card) border border-(--brd) text-(--t1) hover:border-blue-600/40 hover:text-blue-600 transition-all font-bold">
         <ChevronLeft size={16} /> Назад
         </button>
