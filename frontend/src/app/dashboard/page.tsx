@@ -157,6 +157,7 @@ interface AnnouncementModalProps {
 }
 
 function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps) {
+  const { t } = useT();
   const [title,    setTitle]    = useState(initial?.title    ?? "");
   const [body,     setBody]     = useState(initial?.body     ?? "");
   const [linkUrl,  setLinkUrl]  = useState(initial?.link_url ?? "");
@@ -220,7 +221,7 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
     <Megaphone className="text-blue-600" size={16} />
     </div>
     <h2 className="font-black text-sm uppercase tracking-widest text-(--t1)">
-    {initial ? "Редагувати оголошення" : "Нове оголошення"}
+    {initial ? t.mainPage.announcementsEdit : t.mainPage.announcementsNewTitle}
     </h2>
     </div>
     <button
@@ -237,12 +238,12 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
     {/* Title */}
     <div>
     <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-2">
-    Заголовок *
+    {t.mainPage.announcementsLabelTitle}
     </label>
     <input
     value={title}
     onChange={e => setTitle(e.target.value)}
-    placeholder="Наприклад: Конференція WebSummit 2025"
+    placeholder={t.mainPage.announcementsTitlePlaceholder}
     className="w-full px-4 py-3 rounded-xl bg-(--bg) border border-(--brd) text-sm font-bold text-(--t1) placeholder:text-(--t2)/50 focus:outline-none focus:border-blue-600/60 transition-colors"
     />
     </div>
@@ -250,12 +251,12 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
     {/* Body */}
     <div>
     <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-2">
-    Опис
+    {t.mainPage.announcementsLabelBody}
     </label>
     <RichTextEditor
     value={body}
     onChange={setBody}
-    placeholder="Детальний опис події, умови участі, дедлайни..."
+    placeholder={t.mainPage.announcementsBodyPlaceholder}
     rows={4}
     />
     </div>
@@ -263,7 +264,7 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
     {/* Link URL */}
     <div>
     <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-2">
-    Посилання (конференція, відео, сайт)
+    {t.mainPage.announcementsLabelLink}
     </label>
     <div className="relative">
     <Link2 size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-(--t2)" />
@@ -281,7 +282,7 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
       <div className="rounded-2xl border border-(--brd) overflow-hidden bg-(--bg)">
       <div className="px-4 py-2 border-b border-(--brd) flex items-center gap-2">
       <Eye size={11} className="text-(--t2)" />
-      <span className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Передогляд посилання</span>
+      <span className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{t.mainPage.announcementsLinkPreview}</span>
       {preview.loading && <Loader size={10} className="text-blue-600 animate-spin ml-auto" />}
       </div>
 
@@ -304,7 +305,7 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
       ) : (
         <div className="p-4 flex items-center gap-2 text-(--t2)">
         <ImageOff size={14} />
-        <span className="text-xs font-bold">Не вдалось отримати передогляд</span>
+        <span className="text-xs font-bold">{t.mainPage.announcementsNoPreview}</span>
         </div>
       )}
       </div>
@@ -319,7 +320,7 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
     <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${isPinned ? "translate-x-5" : ""}`} />
     </div>
     <span className="text-xs font-bold text-(--t2) group-hover:text-(--t1) transition-colors">
-    Закріпити оголошення
+    {t.mainPage.announcementsPin}
     </span>
     </label>
     </div>
@@ -330,7 +331,7 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
     onClick={onClose}
     className="px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest text-(--t2) border border-(--brd) hover:bg-(--bg) transition-colors"
     >
-    Скасувати
+    {t.mainPage.announcementsCancel}
     </button>
     <button
     onClick={handleSave}
@@ -338,7 +339,7 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
     className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-blue-600/25 transition-all active:scale-95"
     >
     {saving && <Loader size={12} className="animate-spin" />}
-    {saving ? "Зберігаємо..." : initial ? "Оновити" : "Опублікувати"}
+    {saving ? t.mainPage.announcementsSaving : initial ? t.mainPage.announcementsUpdate : t.mainPage.announcementsPublish}
     </button>
     </div>
     </div>
@@ -403,6 +404,7 @@ interface AnnouncementCardProps {
 }
 
 function AnnouncementCard({ a, isAdmin, onDelete, onEdit, onTogglePin }: AnnouncementCardProps) {
+  const { t } = useT();
   return (
     <div className={`rounded-2xl border overflow-hidden bg-(--card) transition-shadow hover:shadow-md ${a.is_pinned ? "border-blue-600/40" : "border-(--brd)"}`}>
     {/* Card header */}
@@ -414,7 +416,7 @@ function AnnouncementCard({ a, isAdmin, onDelete, onEdit, onTogglePin }: Announc
     <div className="flex items-center gap-2 flex-wrap mb-0.5">
     {a.is_pinned && (
       <span className="text-[8px] font-black uppercase tracking-widest bg-blue-600/10 text-blue-600 border border-blue-600/20 px-2 py-0.5 rounded-full">
-      📌 Закріплено
+      {t.mainPage.announcementsPinned}
       </span>
     )}
     <span className="text-[9px] font-bold text-(--t2)">{fmtDateTime(a.created_at)}</span>
@@ -431,21 +433,21 @@ function AnnouncementCard({ a, isAdmin, onDelete, onEdit, onTogglePin }: Announc
       <button
       onClick={() => onTogglePin(a)}
       className={`p-1.5 rounded-lg transition-colors ${a.is_pinned ? "text-blue-600 bg-blue-600/10 hover:bg-blue-600/20" : "text-(--t2) hover:bg-(--bg)"}`}
-      title={a.is_pinned ? "Відкріпити" : "Закріпити"}
+      title={a.is_pinned ? t.mainPage.announcementsUnpin : t.mainPage.announcementsPinAction}
       >
       {a.is_pinned ? <PinOff size={13} /> : <Pin size={13} />}
       </button>
       <button
       onClick={() => onEdit(a)}
       className="p-1.5 rounded-lg text-(--t2) hover:bg-(--bg) hover:text-(--t1) transition-colors"
-      title="Редагувати"
+      title={t.mainPage.announcementsEditAction}
       >
       <Edit3 size={13} />
       </button>
       <button
       onClick={() => onDelete(a.id)}
       className="p-1.5 rounded-lg text-(--t2) hover:bg-red-500/10 hover:text-red-500 transition-colors"
-      title="Видалити"
+      title={t.mainPage.announcementsDeleteAction}
       >
       <Trash2 size={13} />
       </button>
@@ -573,7 +575,7 @@ export default function DashboardPage() {
     };
 
     const handleDeleteAnnouncement = async (id: string) => {
-      if (!confirm("Видалити оголошення?")) return;
+      if (!confirm(t.mainPage.announcementsDelete)) return;
       await (await authedSupabase(token)).from("announcements").delete().eq("id", id);
       setAnnouncements(prev => prev.filter(a => a.id !== id));
     };
@@ -727,7 +729,7 @@ export default function DashboardPage() {
       <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
       <Megaphone className="text-amber-500" size={16} />
       </div>
-      <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">Оголошення</h2>
+      <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">{t.mainPage.announcements}</h2>
       {announcements.length > 0 && (
         <span className="text-[9px] font-black bg-amber-500/10 text-amber-600 border border-amber-500/20 px-2 py-0.5 rounded-full">
         {announcements.length}
@@ -740,7 +742,7 @@ export default function DashboardPage() {
         className="flex items-center justify-center gap-2 bg-amber-500 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl px-5 py-3 hover:bg-amber-600 shadow-lg shadow-amber-500/20 active:scale-95 transition-all w-full sm:w-auto group"
         >
         <Plus size={14} className="group-hover:rotate-90 transition-transform duration-300" />
-        Нове оголошення
+        {t.mainPage.announcementsNew}
         </button>
       )}
       </div>
@@ -754,13 +756,13 @@ export default function DashboardPage() {
       ) : announcements.length === 0 ? (
         <div className="py-10 text-center">
         <Megaphone className="w-10 h-10 text-(--t2) opacity-20 mx-auto mb-3" />
-        <p className="text-sm font-bold text-(--t2)">Оголошень поки немає</p>
+        <p className="text-sm font-bold text-(--t2)">{t.mainPage.announcementsEmpty}</p>
         {isAdmin && (
           <button
           onClick={() => { setEditAnnouncement(undefined); setModalOpen(true); }}
           className="mt-3 text-xs font-black text-blue-600 hover:underline"
           >
-          + Додати перше оголошення
+          {t.mainPage.announcementsAddFirst}
           </button>
         )}
         </div>
@@ -803,14 +805,14 @@ export default function DashboardPage() {
       ) : filteredTournaments.length === 0 ? (
         <div className="py-16 text-center">
         <Trophy className="w-12 h-12 text-(--t2) opacity-30 mx-auto mb-3" />
-        <p className="text-sm font-bold text-(--t2)">Турнірів не знайдено</p>
+        <p className="text-sm font-bold text-(--t2)">{t.mainPage.noTournaments}</p>
         </div>
       ) : (
         <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse min-w-[500px]">
         <thead>
         <tr className="bg-(--bg)/50 border-b border-(--brd)">
-        {[t.mainPage.colTournament, t.mainPage.colStatus, t.mainPage.colStart, "Команди", t.mainPage.colActions].map(h => (
+        {[t.mainPage.colTournament, t.mainPage.colStatus, t.mainPage.colStart, t.mainPage.colTeams, t.mainPage.colActions].map(h => (
           <th key={h} className="px-4 sm:px-6 py-4 text-[10px] font-black uppercase tracking-widest text-(--t2) last:text-right">{h}</th>
         ))}
         </tr>
@@ -858,7 +860,7 @@ export default function DashboardPage() {
       onClick={() => router.push("/tournaments")}
       className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline"
       >
-      Всі турніри →
+      {t.mainPage.allTournaments}
       </button>
       </div>
       </section>
