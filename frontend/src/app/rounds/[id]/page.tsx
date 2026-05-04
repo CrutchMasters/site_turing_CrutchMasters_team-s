@@ -587,7 +587,7 @@ export default function RoundPage() {
 
         {/* back */}
         <button
-        onClick={() => router.push(`/tournaments/${round.tournament_id}`)}
+        onClick={() => router.back()}
         className="mb-6 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors group"
         >
         <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
