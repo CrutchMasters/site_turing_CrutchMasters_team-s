@@ -1842,11 +1842,10 @@ async def submit_work(
     if not team:
         raise HTTPException(status_code=404, detail="Команду не знайдено або ви не зареєстровані в цьому турнірі")
 
-    members    = team.get("members_ids") or []
     is_captain = team["captain_id"] == caller["id"]
-    is_member  = caller["id"] in members
-    if not is_captain and not is_member:
-        raise HTTPException(status_code=403, detail="Ви не є членом цієї команди")
+    # Тільки капітан команди може здавати та оновлювати роботу
+    if not is_captain:
+        raise HTTPException(status_code=403, detail="Тільки капітан команди може здавати роботу")
 
     if team.get("tournament_id") != tournament_id:
         raise HTTPException(status_code=403, detail="Ваша команда не зареєстрована в цьому турнірі")
@@ -1899,10 +1898,21 @@ async def submit_work(
     # ── Шукаємо існуючий сабміт і об'єднуємо file_paths ────────────────────
     existing = fetch_one(
         supabase.table("submissions")
-            .select("id, file_paths")
+            .select("id, file_paths, is_draft, status")
             .eq("round_id", round_id)
             .eq("team_id", team_id)
     )
+
+    # FIX (критичний): не дозволяємо відкатити вже фінально зданий сабміт в чернетку.
+    # Якщо робота вже submitted/closed/reviewed — забороняємо будь-які зміни через цей ендпоінт.
+    if existing and not existing.get("is_draft", True):
+        locked_statuses = {"closed", "reviewed"}
+        if existing.get("status") in locked_statuses or is_draft:
+            raise HTTPException(
+                status_code=409,
+                detail="Роботу вже здано фінально. Зміни неможливі." if not is_draft
+                       else "Неможливо зберегти чернетку: роботу вже здано фінально."
+            )
 
     # Зберігаємо попередні файли + додаємо нові
     existing_files: list[dict] = []
@@ -2011,8 +2021,12 @@ async def save_jury_evaluation(
         )
 
     # FIX (критичний): перевіряємо що журі призначено до цього раунду через jury_assignments.
-    # Якщо запис відсутній але журі прийняв запрошення (раунди були створені пізніше) — створюємо автоматично.
+    # Перевіряємо що журі:
+    # 1. Є журі цього турніру (jury_assignments)
+    # 2. Цю конкретну роботу призначено даному журі (jury_submission_assignments),
+    #    або призначень ще немає (до першого redistribute — дозволяємо всім журі)
     if caller_role == "jury":
+        # Перевірка 1: чи журі взагалі належить до цього раунду
         assignment = fetch_one(
             supabase.table("jury_assignments")
                 .select("id")
@@ -2033,7 +2047,6 @@ async def save_jury_evaluation(
                         .eq("status", "accepted")
                 )
                 if accepted:
-                    # Автоматично створюємо jury_assignment (раунди були створені після прийняття запрошення)
                     try:
                         supabase.table("jury_assignments").insert({
                             "jury_id":       caller["id"],
@@ -2045,12 +2058,35 @@ async def save_jury_evaluation(
                 else:
                     raise HTTPException(
                         status_code=403,
-                        detail="Ви не призначені журі для цього раунду"
+                        detail="Ви не є журі цього турніру"
                     )
             else:
                 raise HTTPException(
                     status_code=403,
-                    detail="Ви не призначені журі для цього раунду"
+                    detail="Ви не є журі цього турніру"
+                )
+
+        # Перевірка 2: чи цю роботу призначено даному журі
+        # Якщо jury_submission_assignments порожній для раунду — розподіл ще не робився,
+        # дозволяємо оцінювати всім журі раунду
+        any_assigned_res = supabase.table("jury_submission_assignments") \
+            .select("id") \
+            .eq("round_id", round_id) \
+            .limit(1) \
+            .execute()
+        has_any_assignments = bool(any_assigned_res.data)
+
+        if has_any_assignments:
+            sub_assigned = fetch_one(
+                supabase.table("jury_submission_assignments")
+                    .select("id")
+                    .eq("jury_id", caller["id"])
+                    .eq("submission_id", payload.submission_id)
+            )
+            if not sub_assigned:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Ця робота не призначена вам для оцінювання. Зверніться до адміністратора для перерозподілу."
                 )
 
     record = {
@@ -2078,6 +2114,8 @@ async def save_jury_evaluation(
 # POST /api/rounds/{round_id}/redistribute
 # Тільки admin/superadmin. Очищує старі jury_submission_assignments і
 # рівномірно ділить подані роботи між запрошеними журі.
+# УВАГА: НЕ чіпаємо jury_assignments (зв'язок журі↔раунд).
+#        Працюємо з окремою таблицею jury_submission_assignments (jury↔submission).
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/api/rounds/{round_id}/redistribute")
@@ -2085,6 +2123,8 @@ async def redistribute_submissions(round_id: str, authorization: str = Header(..
     """
     Рівномірно перерозподілити submissions між журі цього раунду.
     Тільки admin або superadmin.
+    Використовує окрему таблицю jury_submission_assignments для розподілу конкретних
+    робіт між журі. jury_assignments (зв'язок журі↔раунд) НЕ змінюється.
     """
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not initialized")
@@ -2119,38 +2159,53 @@ async def redistribute_submissions(round_id: str, authorization: str = Header(..
     subs_res = supabase.table("submissions") \
         .select("id") \
         .eq("round_id", round_id) \
-        .neq("status", "draft") \
+        .eq("is_draft", False) \
         .execute()
     sub_ids = [s["id"] for s in (subs_res.data or [])]
 
     if not sub_ids:
         raise HTTPException(status_code=400, detail="Немає поданих робіт для розподілу")
 
-    # 4. Видаляємо старі jury_assignments для цього раунду
+    # 4. Очищуємо ТІЛЬКИ jury_submission_assignments для цього раунду
+    #    НЕ чіпаємо jury_assignments — вони відповідають за доступ журі до раунду
     try:
-        supabase.table("jury_assignments") \
+        supabase.table("jury_submission_assignments") \
             .delete() \
             .eq("round_id", round_id) \
             .execute()
     except Exception as e:
-        print(f"[REDISTRIBUTE] Не вдалося очистити jury_assignments: {e}", flush=True)
+        print(f"[REDISTRIBUTE] Не вдалося очистити jury_submission_assignments: {e}", flush=True)
 
     # 5. Рівномірно розподіляємо submissions між журі (round-robin)
+    #    Кожна робота оцінюється мінімум 2 журі (якщо журі >= 2)
     assignments = []
+    min_evaluators = min(2, len(jury_ids))  # кожну роботу оцінює min(2, кількість журі) членів журі
+
     for i, sub_id in enumerate(sub_ids):
-        jury_id = jury_ids[i % len(jury_ids)]
-        assignments.append({
-            "jury_id":       jury_id,
-            "round_id":      round_id,
-            "tournament_id": tournament_id,
-            "submission_id": sub_id,
-        })
+        # Призначаємо min_evaluators журі для кожної роботи, зсуваючись циклічно
+        for offset in range(min_evaluators):
+            jury_id = jury_ids[(i + offset) % len(jury_ids)]
+            assignments.append({
+                "jury_id":       jury_id,
+                "round_id":      round_id,
+                "tournament_id": tournament_id,
+                "submission_id": sub_id,
+            })
+
+    # Дедублікуємо на випадок якщо журі < min_evaluators
+    seen = set()
+    unique_assignments = []
+    for a in assignments:
+        key = (a["jury_id"], a["submission_id"])
+        if key not in seen:
+            seen.add(key)
+            unique_assignments.append(a)
 
     try:
         # Вставляємо партіями по 100
         batch_size = 100
-        for i in range(0, len(assignments), batch_size):
-            supabase.table("jury_assignments").insert(assignments[i:i+batch_size]).execute()
+        for i in range(0, len(unique_assignments), batch_size):
+            supabase.table("jury_submission_assignments").insert(unique_assignments[i:i+batch_size]).execute()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Помилка при збереженні розподілу: {e}")
 
@@ -2159,8 +2214,184 @@ async def redistribute_submissions(round_id: str, authorization: str = Header(..
         "success":      True,
         "submissions":  len(sub_ids),
         "jury_count":   len(jury_ids),
-        "assignments":  len(assignments),
+        "assignments":  len(unique_assignments),
+        "min_evaluators_per_work": min_evaluators,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/rounds/{round_id}/distribution
+# Тільки admin/superadmin. Повертає матрицю розподілу: список журі та список
+# submissions, з інформацією про те, хто яку роботу оцінює.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/rounds/{round_id}/distribution")
+async def get_distribution(round_id: str, authorization: str | None = Header(None)):
+    """
+    Повертає повну матрицю розподілу робіт між журі для адмін-сторінки.
+    Відповідь:
+    {
+      jury: [{ id, username, avatar_url }],
+      submissions: [{ id, team_name, team_org }],
+      assignments: [{ jury_id, submission_id }]   // поточні призначення
+    }
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header missing")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    try:
+        caller = get_caller(token)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[distribution] auth error: {e}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Auth error: {str(e)}")
+
+    if caller.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки адміністратор може переглядати розподіл")
+
+    # 1. Раунд → tournament_id
+    try:
+        round_ = fetch_one(
+            supabase.table("rounds").select("id, tournament_id").eq("id", round_id)
+        )
+    except Exception as e:
+        print(f"[distribution] rounds query error: {e}", flush=True)
+        raise HTTPException(status_code=500, detail=f"DB error (rounds): {str(e)}")
+    if not round_:
+        raise HTTPException(status_code=404, detail="Раунд не знайдено")
+
+    tournament_id = round_["tournament_id"]
+
+    # 2. Прийняті журі турніру
+    jury_inv = supabase.table("jury_tournament_invitations") \
+        .select("jury_id") \
+        .eq("tournament_id", tournament_id) \
+        .eq("status", "accepted") \
+        .execute()
+    jury_ids = [r["jury_id"] for r in (jury_inv.data or [])]
+
+    jury_list = []
+    if jury_ids:
+        jury_res = supabase.table("account") \
+            .select("id, username, login, avatar_url") \
+            .in_("id", jury_ids) \
+            .execute()
+        jury_list = jury_res.data or []
+
+    # 3. Submissions раунду (тільки фінальні)
+    subs_res = supabase.table("submissions") \
+        .select("id, team_id, submitted_at") \
+        .eq("round_id", round_id) \
+        .eq("is_draft", False) \
+        .execute()
+    sub_rows = subs_res.data or []
+
+    # Збагачуємо назвами команд
+    team_ids = list({s["team_id"] for s in sub_rows if s.get("team_id")})
+    teams_map: dict = {}
+    if team_ids:
+        teams_res = supabase.table("teams") \
+            .select("id, name, organization") \
+            .in_("id", team_ids) \
+            .execute()
+        teams_map = {t["id"]: t for t in (teams_res.data or [])}
+
+    submissions = [
+        {
+            "id":        s["id"],
+            "team_name": teams_map.get(s["team_id"], {}).get("name", "—"),
+            "team_org":  teams_map.get(s["team_id"], {}).get("organization"),
+            "submitted_at": s.get("submitted_at"),
+        }
+        for s in sub_rows
+    ]
+
+    # 4. Поточні призначення
+    assign_res = supabase.table("jury_submission_assignments") \
+        .select("jury_id, submission_id") \
+        .eq("round_id", round_id) \
+        .execute()
+    assignments = [
+        {"jury_id": a["jury_id"], "submission_id": a["submission_id"]}
+        for a in (assign_res.data or [])
+    ]
+
+    return {
+        "jury":        jury_list,
+        "submissions": submissions,
+        "assignments": assignments,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /api/rounds/{round_id}/assign
+# Тільки admin/superadmin. Додає або видаляє одне призначення журі ↔ submission.
+# Body: { jury_id, submission_id, action: "add" | "remove" }
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ManualAssignPayload(BaseModel):
+    jury_id:       str
+    submission_id: str
+    action:        str  # "add" | "remove"
+
+@app.post("/api/rounds/{round_id}/assign")
+async def manual_assign(round_id: str, payload: ManualAssignPayload, authorization: str = Header(...)):
+    """
+    Ручне додавання або видалення одного призначення журі ↔ submission.
+    action="add"    — призначити, якщо ще не призначено
+    action="remove" — зняти призначення
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    if caller.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки адміністратор може змінювати розподіл")
+
+    if payload.action not in ("add", "remove"):
+        raise HTTPException(status_code=400, detail="action має бути 'add' або 'remove'")
+
+    # Отримуємо tournament_id для запису
+    round_ = fetch_one(
+        supabase.table("rounds").select("id, tournament_id").eq("id", round_id)
+    )
+    if not round_:
+        raise HTTPException(status_code=404, detail="Раунд не знайдено")
+
+    tournament_id = round_["tournament_id"]
+
+    if payload.action == "add":
+        # Перевіряємо чи вже існує
+        existing = supabase.table("jury_submission_assignments") \
+            .select("id") \
+            .eq("jury_id",       payload.jury_id) \
+            .eq("submission_id", payload.submission_id) \
+            .eq("round_id",      round_id) \
+            .execute()
+        if not (existing.data or []):
+            supabase.table("jury_submission_assignments").insert({
+                "jury_id":       payload.jury_id,
+                "submission_id": payload.submission_id,
+                "round_id":      round_id,
+                "tournament_id": tournament_id,
+            }).execute()
+        return {"success": True, "action": "added"}
+
+    else:  # remove
+        supabase.table("jury_submission_assignments") \
+            .delete() \
+            .eq("jury_id",       payload.jury_id) \
+            .eq("submission_id", payload.submission_id) \
+            .eq("round_id",      round_id) \
+            .execute()
+        return {"success": True, "action": "removed"}
 
 
 @app.get("/api/rounds/{round_id}/submission")
@@ -2295,12 +2526,37 @@ async def get_round_submissions(round_id: str, authorization: str = Header(...))
             except Exception as ja_err:
                 print(f"[SUBMISSIONS] Не вдалося створити jury_assignment: {ja_err}", flush=True)
 
-    # Отримуємо всі submissions для цього раунду (тільки фінальні, не чернетки)
-    subs_res = supabase.table("submissions") \
-        .select("*") \
-        .eq("round_id", round_id) \
-        .neq("status", "draft") \
-        .execute()
+    # Отримуємо submissions для цього раунду
+    # Журі бачить тільки роботи призначені йому через jury_submission_assignments
+    # Адмін/superadmin бачить всі роботи
+    if caller.get("role") == "jury":
+        # Отримуємо id submissions призначених цьому журі
+        assigned_res = supabase.table("jury_submission_assignments") \
+            .select("submission_id") \
+            .eq("round_id", round_id) \
+            .eq("jury_id", caller["id"]) \
+            .execute()
+        assigned_sub_ids = [r["submission_id"] for r in (assigned_res.data or [])]
+
+        if not assigned_sub_ids:
+            # Якщо немає призначень — показуємо всі (до першого redistribute)
+            subs_res = supabase.table("submissions") \
+                .select("*") \
+                .eq("round_id", round_id) \
+                .eq("is_draft", False) \
+                .execute()
+        else:
+            subs_res = supabase.table("submissions") \
+                .select("*") \
+                .in_("id", assigned_sub_ids) \
+                .execute()
+    else:
+        # Адмін бачить всі фінальні роботи
+        subs_res = supabase.table("submissions") \
+            .select("*") \
+            .eq("round_id", round_id) \
+            .eq("is_draft", False) \
+            .execute()
 
     submissions = subs_res.data or []
 

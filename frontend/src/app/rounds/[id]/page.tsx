@@ -352,7 +352,7 @@ export default function RoundPage() {
                 className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest border border-blue-500/30 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 active:scale-[0.98] transition-all">
                 <Send size={15} /> Здати роботу
                 </button>
-                <button onClick={() => router.push(`/rounds/${id}/assign`)}
+                <button onClick={() => router.push(`/jury/rounds/${id}/distribute`)}
                 className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest border border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 active:scale-[0.98] transition-all">
                 <Users size={15} /> Розподілити завдання
                 </button>
@@ -380,7 +380,7 @@ export default function RoundPage() {
                     className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all">
                     <Edit3 size={15} /> Редагувати раунд
                     </button>
-                    <button onClick={() => router.push(`/rounds/${id}/assign`)}
+                    <button onClick={() => router.push(`/jury/rounds/${id}/distribute`)}
                     className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest border border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 active:scale-[0.98] transition-all">
                     <Users size={15} /> Розподілити завдання
                     </button>

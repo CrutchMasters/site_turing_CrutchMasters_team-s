@@ -34,7 +34,7 @@ interface SubmissionWork {
     round_id: string;
     submitted_at: string;
     github_url?: string;
-    video_url?: string;
+    youtube_url?: string;
     files?: { name: string; path: string; url: string | null }[];
     status: "not_evaluated" | "in_progress" | "evaluated";
     // filled after evaluation load
@@ -260,6 +260,10 @@ export default function JuryEvaluationPage() {
     const isAdmin    = user?.role === "admin" || user?.role === "superadmin";
     const canAccess  = isJury || isAdmin;
 
+    const API_URL = typeof window !== "undefined" && window.location.hostname === "localhost"
+        ? "http://localhost:8000"
+        : "https://site-turing-crutchmasters-team-s.onrender.com";
+
     // ── Access guard ──────────────────────────────────────────────────────────
     useEffect(() => {
         if (!authLoading && !user) { router.push("/login"); return; }
@@ -271,9 +275,6 @@ export default function JuryEvaluationPage() {
         if (!roundId || !user) return;
         setPageLoading(true);
 
-        const API_URL = window.location.hostname === "localhost"
-        ? "http://localhost:8000"
-        : "https://turing-backend.onrender.com";
 
         try {
             // 1. Round info (через Supabase — публічні дані)
@@ -351,7 +352,7 @@ export default function JuryEvaluationPage() {
                     round_id: s.round_id,
                     submitted_at: s.submitted_at,
                     github_url: s.github_url,
-                    video_url: s.video_url,
+                    youtube_url: s.youtube_url,
                     files: s.files ?? [],
                     status,
                     criteria,
@@ -427,9 +428,6 @@ export default function JuryEvaluationPage() {
                 // відправляємо на бекенд-ендпоінт з JWT-авторизацією.
                 // Це запобігає маніпуляціям через DevTools (обхід перевірки журі).
                 const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
-                const API_URL = window.location.hostname === "localhost"
-                ? "http://localhost:8000"
-                : "https://site-turing-crutchmasters-team-s.onrender.com";
 
                 const res = await fetch(`${API_URL}/api/rounds/${work.round_id}/evaluate`, {
                     method: "POST",
@@ -480,9 +478,6 @@ export default function JuryEvaluationPage() {
             setSaveMsg(null);
             try {
                 const freshToken = (typeof window !== "undefined" ? localStorage.getItem("access_token") : null) ?? "";
-                const API_URL = window.location.hostname === "localhost"
-                ? "http://localhost:8000"
-                : "https://site-turing-crutchmasters-team-s.onrender.com";
                 const res = await fetch(`${API_URL}/api/rounds/${roundId}/redistribute`, {
                     method: "POST",
                     headers: { Authorization: `Bearer ${freshToken}` },
@@ -629,15 +624,21 @@ export default function JuryEvaluationPage() {
                     </div>
                     {/* Admin redistribute */}
                     {isAdmin && (
-                        <div className="px-4 pb-4">
+                        <div className="px-4 pb-4 flex flex-col gap-2">
+                        <button
+                        onClick={() => router.push(`/jury/rounds/${roundId}/distribute`)}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-blue-600/30 bg-blue-600/10 text-blue-600 font-black text-[10px] uppercase tracking-widest hover:bg-blue-600/20 active:scale-95 transition-all"
+                        >
+                        <Shuffle size={12} /> Ручний розподіл робіт
+                        </button>
                         <button
                         onClick={handleRedistribute}
                         disabled={redistributing}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all disabled:opacity-50"
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-orange-500/40 hover:text-orange-500 active:scale-95 transition-all disabled:opacity-50"
                         >
                         {redistributing
                             ? <><Loader size={12} className="animate-spin" /> Розподіл...</>
-                            : <><Shuffle size={12} /> Перерозподілити роботи вручну</>
+                            : <><RefreshCw size={12} /> Авто-перерозподіл</>
                         }
                         </button>
                         </div>
@@ -725,9 +726,9 @@ export default function JuryEvaluationPage() {
                             <Github size={12} /> GitHub
                             </a>
                         )}
-                        {activeWork.video_url && (
+                        {activeWork.youtube_url && (
                             <a
-                            href={activeWork.video_url}
+                            href={activeWork.youtube_url}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"
@@ -748,7 +749,7 @@ export default function JuryEvaluationPage() {
                             📎 {f.name || "Файл"}
                             </a>
                         ) : null)}
-                        {!activeWork.github_url && !activeWork.video_url && !(activeWork.files?.some(f => f.url)) && (
+                        {!activeWork.github_url && !activeWork.youtube_url && !(activeWork.files?.some(f => f.url)) && (
                             <span className="text-[10px] font-bold text-(--t2) opacity-50 italic">Посилання не додані</span>
                         )}
                         <span className="ml-auto text-[9px] font-bold text-(--t2) opacity-50 self-center">
