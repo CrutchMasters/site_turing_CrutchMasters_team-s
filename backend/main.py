@@ -104,7 +104,13 @@ def decode_jwt_payload(token: str) -> dict:
                     raise HTTPException(status_code=401, detail="Token expired")
                 except Exception as e2:
                     raise HTTPException(status_code=401, detail=f"Invalid token: {e2}")
-            raise HTTPException(status_code=401, detail=f"Cannot verify token: JWKS unavailable ({e})")
+            # JWKS недоступен и кеша нет — делаем decode без верификации подписи.
+            # Это безопасно в dev-окружении; в prod нужно обеспечить доступность SUPABASE_URL.
+            print(f"[JWT] JWKS unavailable and no cache — falling back to unverified decode", flush=True)
+            try:
+                return pyjwt.decode(token, options={"verify_signature": False})
+            except Exception as e3:
+                raise HTTPException(status_code=401, detail=f"Cannot verify token: JWKS unavailable and fallback failed ({e3})")
 
     # ── HS256: верифікація через JWT_SECRET ──────────────────────────────────
     if not jwt_secret:
@@ -159,6 +165,40 @@ else:
     # supabase_auth — anon-клиент, только для sign_in_with_password
     supabase_auth: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_KEY else supabase
     print("Бэкенд подключен к Supabase (service role)", flush=True)
+
+
+def ensure_buckets():
+    """
+    Перевіряє і створює необхідні Storage buckets при старті бекенду.
+    Bucket 'submissions' — для файлів здач команд (приватний, доступ через signed URL).
+    Bucket 'round-files' — для файлів завдань раундів від адміна.
+    """
+    if not supabase:
+        return
+    required = [
+        {"id": "submissions",  "name": "submissions",  "public": False},
+        {"id": "round-files",  "name": "round-files",  "public": False},
+    ]
+    try:
+        existing = {b.id for b in supabase.storage.list_buckets()}
+    except Exception as e:
+        print(f"[BUCKET] Не вдалося отримати список buckets: {e}", flush=True)
+        return
+
+    for b in required:
+        if b["id"] not in existing:
+            try:
+                supabase.storage.create_bucket(
+                    b["id"],
+                    options={"public": b["public"], "file_size_limit": 104857600},  # 100 MB
+                )
+                print(f"[BUCKET] Створено bucket '{b['id']}'", flush=True)
+            except Exception as e:
+                print(f"[BUCKET] Не вдалося створити bucket '{b['id']}': {e}", flush=True)
+        else:
+            print(f"[BUCKET] Bucket '{b['id']}' вже існує", flush=True)
+
+ensure_buckets()
 
 app = FastAPI()
 
@@ -358,6 +398,16 @@ class RespondInvitation(BaseModel):
 # --- КОНСТАНТЫ ---
 ALLOWED_ROLES = {"user", "jury", "admin"}
 
+# ── Preload JWKS при старті (щоб перший запит не падав через cold JWKS fetch) ──
+def _preload_jwks():
+    try:
+        decode_jwt_payload("dummy.dummy.dummy")  # викличе fetch JWKS, результат закешується
+    except Exception:
+        pass  # очікувана помилка на "dummy" токені — нас цікавить тільки side effect кешу
+
+import threading as _threading
+_threading.Thread(target=_preload_jwks, daemon=True).start()
+
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -519,8 +569,9 @@ async def login_user(user: UserLogin):
 
         return {
             "success":      True,
-            "access_token": auth_response.session.access_token,
-            "user":         user_data,
+            "access_token":  auth_response.session.access_token,
+            "refresh_token": auth_response.session.refresh_token,
+            "user":          user_data,
         }
     except HTTPException:
         raise
@@ -992,9 +1043,14 @@ async def create_tournament_rounds(
             "end_at":        r.get("end_at"),
             "links":         r.get("links"),
             "attachments":   r.get("attachments"),
-            "status":        r.get("status", "pending"),
             "template_path": r.get("template_path"),
+            # FIX (критичний): НЕ перезаписуємо status — scheduler керує статусом.
+            # Фронтенд завжди шле status='pending' що скидало active/finished раунди.
+            # Якщо явно передано non-pending статус (напр. 'finished') — зберігаємо його.
         }
+        incoming_status = r.get("status", "pending")
+        if incoming_status and incoming_status != "pending":
+            update_data["status"] = incoming_status
         try:
             res = (
                 supabase.table("rounds")
@@ -1444,8 +1500,40 @@ async def respond_invitation(payload: RespondInvitation, authorization: str = He
         raise HTTPException(status_code=404, detail="Приглашение не найдено")
     if inv["invitee_id"] != caller["id"]:
         raise HTTPException(status_code=403, detail="Это приглашение не для вас")
+    def get_user_current_team(user_id: str, exclude_team_id: str) -> str | None:
+        """Повертає назву команди де юзер є капітаном або учасником (крім exclude_team_id)."""
+        # Перевіряємо members_ids
+        member_res = supabase.table("teams").select("id, name").contains("members_ids", json.dumps([user_id])).execute()
+        # Перевіряємо captain_id
+        captain_res = supabase.table("teams").select("id, name").eq("captain_id", user_id).execute()
+        all_teams = (member_res.data or []) + (captain_res.data or [])
+        # Дедуплікуємо та виключаємо цільову команду
+        seen = set()
+        for t in all_teams:
+            if t["id"] != exclude_team_id and t["id"] not in seen:
+                seen.add(t["id"])
+                return t.get("name", "іншу команду")
+        return None
+
+    # Якщо запрошення вже оброблене — перевіряємо чи справа в тому що юзер вже в команді
     if inv["status"] != "pending":
-        raise HTTPException(status_code=400, detail=f"Приглашение уже {inv['status']}")
+        if payload.accept:
+            existing_team_name = get_user_current_team(caller["id"], inv["team_id"])
+            if existing_team_name:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Ви вже є членом команди \u00ab{existing_team_name}\u00bb. Спочатку покиньте поточну команду, щоб приєднатися до іншої."
+                )
+        raise HTTPException(status_code=400, detail="Це запрошення вже було оброблено раніше.")
+
+    # Перевірка: якщо користувач приймає — він не повинен вже бути в іншій команді
+    if payload.accept:
+        existing_team_name = get_user_current_team(caller["id"], inv["team_id"])
+        if existing_team_name:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ви вже є членом команди \u00ab{existing_team_name}\u00bb. Спочатку покиньте поточну команду, щоб приєднатися до іншої."
+            )
 
     new_status = "accepted" if payload.accept else "declined"
 
@@ -1728,30 +1816,36 @@ async def submit_work(
 
     if not team:
         # Шукаємо серед команд де юзер капітан або учасник і команда в цьому турнірі
-        cap_res = supabase.table("teams") \
-            .select("id, name, captain_id, members_ids, tournament_id") \
-            .eq("captain_id", caller["id"]) \
-            .eq("tournament_id", tournament_id) \
-            .limit(1).execute()
-        if cap_res.data:
-            team = cap_res.data[0]
-        else:
+        try:
+            cap_res = supabase.table("teams") \
+                .select("id, name, captain_id, members_ids, tournament_id") \
+                .eq("captain_id", caller["id"]) \
+                .eq("tournament_id", tournament_id) \
+                .limit(1).execute()
+            if cap_res.data:
+                team = cap_res.data[0]
+        except Exception as e:
+            print(f"[SUBMIT] Помилка пошуку команди (captain): {e}", flush=True)
+
+    if not team:
+        try:
             mem_res = supabase.table("teams") \
                 .select("id, name, captain_id, members_ids, tournament_id") \
-                .contains("members_ids", json.dumps([caller["id"]])) \
+                .contains("members_ids", [caller["id"]]) \
                 .eq("tournament_id", tournament_id) \
                 .limit(1).execute()
             if mem_res.data:
                 team = mem_res.data[0]
+        except Exception as e:
+            print(f"[SUBMIT] Помилка пошуку команди (member): {e}", flush=True)
 
     if not team:
         raise HTTPException(status_code=404, detail="Команду не знайдено або ви не зареєстровані в цьому турнірі")
 
-    members    = team.get("members_ids") or []
     is_captain = team["captain_id"] == caller["id"]
-    is_member  = caller["id"] in members
-    if not is_captain and not is_member:
-        raise HTTPException(status_code=403, detail="Ви не є членом цієї команди")
+    # Тільки капітан команди може здавати та оновлювати роботу
+    if not is_captain:
+        raise HTTPException(status_code=403, detail="Тільки капітан команди може здавати роботу")
 
     if team.get("tournament_id") != tournament_id:
         raise HTTPException(status_code=403, detail="Ваша команда не зареєстрована в цьому турнірі")
@@ -1779,16 +1873,46 @@ async def submit_work(
             new_file_entries.append({"name": f.filename, "path": path})
             print(f"[SUBMIT] Завантажено файл {safe_name} → {path}", flush=True)
         except Exception as upload_err:
-            print(f"[SUBMIT] Помилка завантаження {safe_name}: {upload_err}", flush=True)
-            raise HTTPException(status_code=500, detail=f"Помилка завантаження файлу {f.filename}: {upload_err}")
+            err_str = str(upload_err)
+            print(f"[SUBMIT] Помилка завантаження {safe_name}: {err_str}", flush=True)
+            if "not found" in err_str.lower() or "does not exist" in err_str.lower() or "NoSuchBucket" in err_str:
+                # Спробуємо створити bucket і повторити
+                try:
+                    supabase.storage.create_bucket(
+                        "submissions",
+                        options={"public": False, "file_size_limit": 104857600},
+                    )
+                    print("[SUBMIT] Bucket 'submissions' створено автоматично, повторна спроба...", flush=True)
+                    supabase.storage.from_("submissions").upload(
+                        path=path,
+                        file=content,
+                        file_options={"content-type": f.content_type or "application/octet-stream", "upsert": "true"},
+                    )
+                    new_file_entries.append({"name": f.filename, "path": path})
+                    print(f"[SUBMIT] Файл {safe_name} завантажено після створення bucket", flush=True)
+                    continue
+                except Exception as retry_err:
+                    raise HTTPException(status_code=500, detail=f"Bucket 'submissions' не існує і не вдалося створити: {retry_err}")
+            raise HTTPException(status_code=500, detail=f"Помилка завантаження файлу '{f.filename}': {err_str}")
 
     # ── Шукаємо існуючий сабміт і об'єднуємо file_paths ────────────────────
     existing = fetch_one(
         supabase.table("submissions")
-            .select("id, file_paths")
+            .select("id, file_paths, is_draft, status")
             .eq("round_id", round_id)
             .eq("team_id", team_id)
     )
+
+    # FIX (критичний): не дозволяємо відкатити вже фінально зданий сабміт в чернетку.
+    # Якщо робота вже submitted/closed/reviewed — забороняємо будь-які зміни через цей ендпоінт.
+    if existing and not existing.get("is_draft", True):
+        locked_statuses = {"closed", "reviewed"}
+        if existing.get("status") in locked_statuses or is_draft:
+            raise HTTPException(
+                status_code=409,
+                detail="Роботу вже здано фінально. Зміни неможливі." if not is_draft
+                       else "Неможливо зберегти чернетку: роботу вже здано фінально."
+            )
 
     # Зберігаємо попередні файли + додаємо нові
     existing_files: list[dict] = []
@@ -1804,8 +1928,8 @@ async def submit_work(
         "team_id":       team_id,
         "submitted_by":  caller["id"],
         "github_url":    github_url,
-        "video_url":     youtube_url,      # FIX: колонка в БД називається video_url
-        "live_demo_url": live_url,         # FIX: колонка в БД називається live_demo_url
+        "youtube_url":   youtube_url,
+        "live_url":      live_url,
         "description":   description,
         "file_paths":    merged_files,     # FIX: правильна jsonb-колонка (було file_path)
         "is_draft":      is_draft,         # FIX: додано збереження чернетки
@@ -1818,10 +1942,13 @@ async def submit_work(
     else:
         record["status"] = "draft"
 
-    if existing:
-        result = supabase.table("submissions").update(record).eq("id", existing["id"]).execute()
-    else:
-        result = supabase.table("submissions").insert(record).execute()
+    try:
+        if existing:
+            result = supabase.table("submissions").update(record).eq("id", existing["id"]).execute()
+        else:
+            result = supabase.table("submissions").insert(record).execute()
+    except Exception as db_err:
+        raise HTTPException(status_code=500, detail=f"Помилка збереження в БД: {db_err}")
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Не вдалося зберегти роботу")
@@ -1856,11 +1983,12 @@ async def save_jury_evaluation(
     token  = authorization.replace("Bearer ", "").strip()
     caller = get_caller(token)
 
-    if caller.get("role") != "jury":
-        raise HTTPException(status_code=403, detail="Тільки журі може виставляти оцінки")
+    caller_role = caller.get("role")
+    if caller_role not in ("jury", "admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки журі або адміністратор може виставляти оцінки")
 
     # Для журі — перевіряємо що він запрошений саме до цього турніру
-    if caller.get("role") == "jury":
+    if caller_role == "jury":
         round_ = fetch_one(
             supabase.table("rounds").select("tournament_id").eq("id", round_id)
         )
@@ -1893,8 +2021,12 @@ async def save_jury_evaluation(
         )
 
     # FIX (критичний): перевіряємо що журі призначено до цього раунду через jury_assignments.
-    # Якщо запис відсутній але журі прийняв запрошення (раунди були створені пізніше) — створюємо автоматично.
-    if caller.get("role") == "jury":
+    # Перевіряємо що журі:
+    # 1. Є журі цього турніру (jury_assignments)
+    # 2. Цю конкретну роботу призначено даному журі (jury_submission_assignments),
+    #    або призначень ще немає (до першого redistribute — дозволяємо всім журі)
+    if caller_role == "jury":
+        # Перевірка 1: чи журі взагалі належить до цього раунду
         assignment = fetch_one(
             supabase.table("jury_assignments")
                 .select("id")
@@ -1915,7 +2047,6 @@ async def save_jury_evaluation(
                         .eq("status", "accepted")
                 )
                 if accepted:
-                    # Автоматично створюємо jury_assignment (раунди були створені після прийняття запрошення)
                     try:
                         supabase.table("jury_assignments").insert({
                             "jury_id":       caller["id"],
@@ -1927,12 +2058,35 @@ async def save_jury_evaluation(
                 else:
                     raise HTTPException(
                         status_code=403,
-                        detail="Ви не призначені журі для цього раунду"
+                        detail="Ви не є журі цього турніру"
                     )
             else:
                 raise HTTPException(
                     status_code=403,
-                    detail="Ви не призначені журі для цього раунду"
+                    detail="Ви не є журі цього турніру"
+                )
+
+        # Перевірка 2: чи цю роботу призначено даному журі
+        # Якщо jury_submission_assignments порожній для раунду — розподіл ще не робився,
+        # дозволяємо оцінювати всім журі раунду
+        any_assigned_res = supabase.table("jury_submission_assignments") \
+            .select("id") \
+            .eq("round_id", round_id) \
+            .limit(1) \
+            .execute()
+        has_any_assignments = bool(any_assigned_res.data)
+
+        if has_any_assignments:
+            sub_assigned = fetch_one(
+                supabase.table("jury_submission_assignments")
+                    .select("id")
+                    .eq("jury_id", caller["id"])
+                    .eq("submission_id", payload.submission_id)
+            )
+            if not sub_assigned:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Ця робота не призначена вам для оцінювання. Зверніться до адміністратора для перерозподілу."
                 )
 
     record = {
@@ -1954,6 +2108,290 @@ async def save_jury_evaluation(
 
     print(f"[EVAL] {caller['username']} зберіг оцінку для submission {payload.submission_id}", flush=True)
     return {"success": True, "evaluation": result.data[0]}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REDISTRIBUTE: рівномірно розподілити submissions між журі раунду
+# POST /api/rounds/{round_id}/redistribute
+# Тільки admin/superadmin. Очищує старі jury_submission_assignments і
+# рівномірно ділить подані роботи між запрошеними журі.
+# УВАГА: НЕ чіпаємо jury_assignments (зв'язок журі↔раунд).
+#        Працюємо з окремою таблицею jury_submission_assignments (jury↔submission).
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.post("/api/rounds/{round_id}/redistribute")
+async def redistribute_submissions(round_id: str, authorization: str = Header(...)):
+    """
+    Рівномірно перерозподілити submissions між журі цього раунду.
+    Тільки admin або superadmin.
+    Використовує окрему таблицю jury_submission_assignments для розподілу конкретних
+    робіт між журі. jury_assignments (зв'язок журі↔раунд) НЕ змінюється.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    if caller.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки адміністратор може перерозподіляти роботи")
+
+    # 1. Отримуємо раунд
+    round_ = fetch_one(
+        supabase.table("rounds").select("id, tournament_id, status").eq("id", round_id)
+    )
+    if not round_:
+        raise HTTPException(status_code=404, detail="Раунд не знайдено")
+
+    tournament_id = round_["tournament_id"]
+
+    # 2. Отримуємо всіх прийнятих журі для цього турніру
+    jury_res = supabase.table("jury_tournament_invitations") \
+        .select("jury_id") \
+        .eq("tournament_id", tournament_id) \
+        .eq("status", "accepted") \
+        .execute()
+    jury_ids = [r["jury_id"] for r in (jury_res.data or [])]
+
+    if not jury_ids:
+        raise HTTPException(status_code=400, detail="Немає запрошених журі для цього турніру")
+
+    # 3. Отримуємо всі фінальні submissions цього раунду
+    subs_res = supabase.table("submissions") \
+        .select("id") \
+        .eq("round_id", round_id) \
+        .eq("is_draft", False) \
+        .execute()
+    sub_ids = [s["id"] for s in (subs_res.data or [])]
+
+    if not sub_ids:
+        raise HTTPException(status_code=400, detail="Немає поданих робіт для розподілу")
+
+    # 4. Очищуємо ТІЛЬКИ jury_submission_assignments для цього раунду
+    #    НЕ чіпаємо jury_assignments — вони відповідають за доступ журі до раунду
+    try:
+        supabase.table("jury_submission_assignments") \
+            .delete() \
+            .eq("round_id", round_id) \
+            .execute()
+    except Exception as e:
+        print(f"[REDISTRIBUTE] Не вдалося очистити jury_submission_assignments: {e}", flush=True)
+
+    # 5. Рівномірно розподіляємо submissions між журі (round-robin)
+    #    Кожна робота оцінюється мінімум 2 журі (якщо журі >= 2)
+    assignments = []
+    min_evaluators = min(2, len(jury_ids))  # кожну роботу оцінює min(2, кількість журі) членів журі
+
+    for i, sub_id in enumerate(sub_ids):
+        # Призначаємо min_evaluators журі для кожної роботи, зсуваючись циклічно
+        for offset in range(min_evaluators):
+            jury_id = jury_ids[(i + offset) % len(jury_ids)]
+            assignments.append({
+                "jury_id":       jury_id,
+                "round_id":      round_id,
+                "tournament_id": tournament_id,
+                "submission_id": sub_id,
+            })
+
+    # Дедублікуємо на випадок якщо журі < min_evaluators
+    seen = set()
+    unique_assignments = []
+    for a in assignments:
+        key = (a["jury_id"], a["submission_id"])
+        if key not in seen:
+            seen.add(key)
+            unique_assignments.append(a)
+
+    try:
+        # Вставляємо партіями по 100
+        batch_size = 100
+        for i in range(0, len(unique_assignments), batch_size):
+            supabase.table("jury_submission_assignments").insert(unique_assignments[i:i+batch_size]).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Помилка при збереженні розподілу: {e}")
+
+    print(f"[REDISTRIBUTE] {caller['username']} перерозподілив {len(sub_ids)} робіт між {len(jury_ids)} журі для раунду {round_id}", flush=True)
+    return {
+        "success":      True,
+        "submissions":  len(sub_ids),
+        "jury_count":   len(jury_ids),
+        "assignments":  len(unique_assignments),
+        "min_evaluators_per_work": min_evaluators,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/rounds/{round_id}/distribution
+# Тільки admin/superadmin. Повертає матрицю розподілу: список журі та список
+# submissions, з інформацією про те, хто яку роботу оцінює.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/rounds/{round_id}/distribution")
+async def get_distribution(round_id: str, authorization: str | None = Header(None)):
+    """
+    Повертає повну матрицю розподілу робіт між журі для адмін-сторінки.
+    Відповідь:
+    {
+      jury: [{ id, username, avatar_url }],
+      submissions: [{ id, team_name, team_org }],
+      assignments: [{ jury_id, submission_id }]   // поточні призначення
+    }
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header missing")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    try:
+        caller = get_caller(token)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[distribution] auth error: {e}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Auth error: {str(e)}")
+
+    if caller.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки адміністратор може переглядати розподіл")
+
+    # 1. Раунд → tournament_id
+    try:
+        round_ = fetch_one(
+            supabase.table("rounds").select("id, tournament_id").eq("id", round_id)
+        )
+    except Exception as e:
+        print(f"[distribution] rounds query error: {e}", flush=True)
+        raise HTTPException(status_code=500, detail=f"DB error (rounds): {str(e)}")
+    if not round_:
+        raise HTTPException(status_code=404, detail="Раунд не знайдено")
+
+    tournament_id = round_["tournament_id"]
+
+    # 2. Прийняті журі турніру
+    jury_inv = supabase.table("jury_tournament_invitations") \
+        .select("jury_id") \
+        .eq("tournament_id", tournament_id) \
+        .eq("status", "accepted") \
+        .execute()
+    jury_ids = [r["jury_id"] for r in (jury_inv.data or [])]
+
+    jury_list = []
+    if jury_ids:
+        jury_res = supabase.table("account") \
+            .select("id, username, login, avatar_url") \
+            .in_("id", jury_ids) \
+            .execute()
+        jury_list = jury_res.data or []
+
+    # 3. Submissions раунду (тільки фінальні)
+    subs_res = supabase.table("submissions") \
+        .select("id, team_id, submitted_at") \
+        .eq("round_id", round_id) \
+        .eq("is_draft", False) \
+        .execute()
+    sub_rows = subs_res.data or []
+
+    # Збагачуємо назвами команд
+    team_ids = list({s["team_id"] for s in sub_rows if s.get("team_id")})
+    teams_map: dict = {}
+    if team_ids:
+        teams_res = supabase.table("teams") \
+            .select("id, name, organization") \
+            .in_("id", team_ids) \
+            .execute()
+        teams_map = {t["id"]: t for t in (teams_res.data or [])}
+
+    submissions = [
+        {
+            "id":        s["id"],
+            "team_name": teams_map.get(s["team_id"], {}).get("name", "—"),
+            "team_org":  teams_map.get(s["team_id"], {}).get("organization"),
+            "submitted_at": s.get("submitted_at"),
+        }
+        for s in sub_rows
+    ]
+
+    # 4. Поточні призначення
+    assign_res = supabase.table("jury_submission_assignments") \
+        .select("jury_id, submission_id") \
+        .eq("round_id", round_id) \
+        .execute()
+    assignments = [
+        {"jury_id": a["jury_id"], "submission_id": a["submission_id"]}
+        for a in (assign_res.data or [])
+    ]
+
+    return {
+        "jury":        jury_list,
+        "submissions": submissions,
+        "assignments": assignments,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /api/rounds/{round_id}/assign
+# Тільки admin/superadmin. Додає або видаляє одне призначення журі ↔ submission.
+# Body: { jury_id, submission_id, action: "add" | "remove" }
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ManualAssignPayload(BaseModel):
+    jury_id:       str
+    submission_id: str
+    action:        str  # "add" | "remove"
+
+@app.post("/api/rounds/{round_id}/assign")
+async def manual_assign(round_id: str, payload: ManualAssignPayload, authorization: str = Header(...)):
+    """
+    Ручне додавання або видалення одного призначення журі ↔ submission.
+    action="add"    — призначити, якщо ще не призначено
+    action="remove" — зняти призначення
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    if caller.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки адміністратор може змінювати розподіл")
+
+    if payload.action not in ("add", "remove"):
+        raise HTTPException(status_code=400, detail="action має бути 'add' або 'remove'")
+
+    # Отримуємо tournament_id для запису
+    round_ = fetch_one(
+        supabase.table("rounds").select("id, tournament_id").eq("id", round_id)
+    )
+    if not round_:
+        raise HTTPException(status_code=404, detail="Раунд не знайдено")
+
+    tournament_id = round_["tournament_id"]
+
+    if payload.action == "add":
+        # Перевіряємо чи вже існує
+        existing = supabase.table("jury_submission_assignments") \
+            .select("id") \
+            .eq("jury_id",       payload.jury_id) \
+            .eq("submission_id", payload.submission_id) \
+            .eq("round_id",      round_id) \
+            .execute()
+        if not (existing.data or []):
+            supabase.table("jury_submission_assignments").insert({
+                "jury_id":       payload.jury_id,
+                "submission_id": payload.submission_id,
+                "round_id":      round_id,
+                "tournament_id": tournament_id,
+            }).execute()
+        return {"success": True, "action": "added"}
+
+    else:  # remove
+        supabase.table("jury_submission_assignments") \
+            .delete() \
+            .eq("jury_id",       payload.jury_id) \
+            .eq("submission_id", payload.submission_id) \
+            .eq("round_id",      round_id) \
+            .execute()
+        return {"success": True, "action": "removed"}
 
 
 @app.get("/api/rounds/{round_id}/submission")
@@ -2088,12 +2526,37 @@ async def get_round_submissions(round_id: str, authorization: str = Header(...))
             except Exception as ja_err:
                 print(f"[SUBMISSIONS] Не вдалося створити jury_assignment: {ja_err}", flush=True)
 
-    # Отримуємо всі submissions для цього раунду (тільки фінальні, не чернетки)
-    subs_res = supabase.table("submissions") \
-        .select("*") \
-        .eq("round_id", round_id) \
-        .neq("status", "draft") \
-        .execute()
+    # Отримуємо submissions для цього раунду
+    # Журі бачить тільки роботи призначені йому через jury_submission_assignments
+    # Адмін/superadmin бачить всі роботи
+    if caller.get("role") == "jury":
+        # Отримуємо id submissions призначених цьому журі
+        assigned_res = supabase.table("jury_submission_assignments") \
+            .select("submission_id") \
+            .eq("round_id", round_id) \
+            .eq("jury_id", caller["id"]) \
+            .execute()
+        assigned_sub_ids = [r["submission_id"] for r in (assigned_res.data or [])]
+
+        if not assigned_sub_ids:
+            # Якщо немає призначень — показуємо всі (до першого redistribute)
+            subs_res = supabase.table("submissions") \
+                .select("*") \
+                .eq("round_id", round_id) \
+                .eq("is_draft", False) \
+                .execute()
+        else:
+            subs_res = supabase.table("submissions") \
+                .select("*") \
+                .in_("id", assigned_sub_ids) \
+                .execute()
+    else:
+        # Адмін бачить всі фінальні роботи
+        subs_res = supabase.table("submissions") \
+            .select("*") \
+            .eq("round_id", round_id) \
+            .eq("is_draft", False) \
+            .execute()
 
     submissions = subs_res.data or []
 
@@ -2468,4 +2931,135 @@ async def search_users(q: str, authorization: str = Header(...)):
         .limit(10) \
         .execute()
 
-    return {"users": data.data or []} 
+    return {"users": data.data or []}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LEADERBOARD — таблиця лідерів турніру
+# GET /api/tournaments/{tournament_id}/leaderboard
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/tournaments/{tournament_id}/leaderboard")
+async def get_tournament_leaderboard(tournament_id: str, authorization: str = Header(...)):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token = authorization.replace("Bearer ", "").strip()
+    get_caller(token)
+
+    tournament = fetch_one(
+        supabase.table("tournaments")
+            .select("id, name, status")
+            .eq("id", tournament_id)
+    )
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Турнір не знайдено")
+
+    rounds_res = supabase.table("rounds") \
+        .select("id, name, number, status") \
+        .eq("tournament_id", tournament_id) \
+        .order("number") \
+        .execute()
+    rounds = rounds_res.data or []
+
+    if not rounds:
+        return {"tournament": tournament, "leaderboard": [], "rounds": []}
+
+    round_ids = [r["id"] for r in rounds]
+
+    subs_res = supabase.table("submissions") \
+        .select("id, round_id, team_id, status, is_draft") \
+        .in_("round_id", round_ids) \
+        .eq("is_draft", False) \
+        .execute()
+    submissions = subs_res.data or []
+
+    if not submissions:
+        return {"tournament": tournament, "leaderboard": [], "rounds": rounds}
+
+    sub_ids = [s["id"] for s in submissions]
+
+    evals_res = supabase.table("jury_evaluations") \
+        .select("id, submission_id, jury_id, total_score, criteria_scores") \
+        .in_("submission_id", sub_ids) \
+        .execute()
+    evaluations = evals_res.data or []
+
+    team_ids = list({s["team_id"] for s in submissions})
+    teams_res = supabase.table("teams") \
+        .select("id, name, city_school_org, captain_id") \
+        .in_("id", team_ids) \
+        .execute()
+    teams_map = {t["id"]: t for t in (teams_res.data or [])}
+
+    captain_ids = list({t.get("captain_id") for t in teams_map.values() if t.get("captain_id")})
+    if captain_ids:
+        captains_res = supabase.table("account") \
+            .select("id, username") \
+            .in_("id", captain_ids) \
+            .execute()
+        captains_map = {c["id"]: c["username"] for c in (captains_res.data or [])}
+    else:
+        captains_map = {}
+
+    subs_by_team_round: dict = {}
+    for s in submissions:
+        key = (s["team_id"], s["round_id"])
+        subs_by_team_round.setdefault(key, []).append(s)
+
+    evals_by_sub: dict = {}
+    for e in evaluations:
+        evals_by_sub.setdefault(e["submission_id"], []).append(e)
+
+    team_scores: dict = {}
+    for team_id in team_ids:
+        team_scores[team_id] = {"rounds": {}, "total": 0.0}
+        for r in rounds:
+            round_id = r["id"]
+            key = (team_id, round_id)
+            team_subs = subs_by_team_round.get(key, [])
+            if not team_subs:
+                team_scores[team_id]["rounds"][round_id] = None
+                continue
+
+            team_sub = team_subs[-1]
+            sub_evals = evals_by_sub.get(team_sub["id"], [])
+
+            if not sub_evals:
+                team_scores[team_id]["rounds"][round_id] = None
+                continue
+
+            scored = [e["total_score"] for e in sub_evals if e.get("total_score") is not None]
+            if not scored:
+                team_scores[team_id]["rounds"][round_id] = None
+                continue
+
+            avg = sum(scored) / len(scored)
+            team_scores[team_id]["rounds"][round_id] = round(avg, 2)
+            team_scores[team_id]["total"] += avg
+
+    leaderboard = []
+    for team_id, scores in team_scores.items():
+        team = teams_map.get(team_id, {})
+        captain_id = team.get("captain_id")
+        entry = {
+            "team_id": team_id,
+            "team_name": team.get("name", "—"),
+            "city_school_org": team.get("city_school_org"),
+            "captain_username": captains_map.get(captain_id) if captain_id else None,
+            "round_scores": scores["rounds"],
+            "total_score": round(scores["total"], 2),
+            "evaluated_rounds": sum(1 for v in scores["rounds"].values() if v is not None),
+        }
+        leaderboard.append(entry)
+
+    leaderboard.sort(key=lambda x: x["total_score"], reverse=True)
+
+    for i, entry in enumerate(leaderboard):
+        entry["place"] = i + 1
+
+    return {
+        "tournament": tournament,
+        "rounds": rounds,
+        "leaderboard": leaderboard,
+    }

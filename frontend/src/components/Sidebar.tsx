@@ -120,7 +120,11 @@ export default function Sidebar({}: SidebarProps) {
     setResponding(prev => ({ ...prev, [notif.id]: accept ? "accept" : "decline" }));
     try {
       const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
-      const res = await fetch(`${API_URL}/api/invitations/respond`, {
+      // Вибираємо правильний endpoint залежно від типу запрошення
+      const endpoint = notif.type === "jury_invitation"
+        ? `${API_URL}/api/jury-invitations/respond`
+        : `${API_URL}/api/invitations/respond`;
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ invitation_id: invitationId, accept }),
@@ -275,7 +279,9 @@ export default function Sidebar({}: SidebarProps) {
             ) : (
               <div className="divide-y divide-(--brd)">
               {notifications.map(n => {
-                const isInvite = n.type === "team_invitation";
+                const isTeamInvite = n.type === "team_invitation";
+                const isJuryInvite = n.type === "jury_invitation";
+                const isInvite = isTeamInvite || isJuryInvite;
                 const res = responded[n.id];
                 const rsp = responding[n.id];
                 return (
@@ -293,7 +299,7 @@ export default function Sidebar({}: SidebarProps) {
                     <button
                     onClick={() => respondInvitation(n, true)}
                     disabled={!!rsp}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-600 text-white font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50"
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-white font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all disabled:opacity-50 ${isJuryInvite ? "bg-amber-500 hover:bg-amber-600" : "bg-blue-600 hover:bg-blue-700"}`}
                     >
                     {rsp === "accept"
                       ? <><span className="w-2.5 h-2.5 border border-white border-t-transparent rounded-full animate-spin inline-block" /> {t.sidebar.notifAccepting}</>
