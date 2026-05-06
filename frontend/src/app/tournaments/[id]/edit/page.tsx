@@ -14,7 +14,7 @@ import JuryInvitePanel from "@/components/JuryInvitePanel";
 import { DatePicker, TimePicker } from "@/components/DateTimePicker";
 import {
     Trophy, ChevronRight, Save, AlertCircle,
-    CheckCircle, Clock, Layers, Zap, Users, ArrowLeft,
+    CheckCircle, Clock, Layers, Zap, Users, ArrowLeft, Trash2,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/RichTextEditor";
 
@@ -105,6 +105,8 @@ export default function TournamentEditPage() {
     const [error, setError]       = useState("");
     const [success, setSuccess]   = useState("");
     const [tourney, setTourney]   = useState<Tournament | null>(null);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deleting, setDeleting]               = useState(false);
 
     const [name, setName]               = useState("");
     const [rules, setRules]             = useState("");
@@ -229,8 +231,8 @@ export default function TournamentEditPage() {
             e.preventDefault();
             setError(""); setSuccess("");
 
-            if (!name.trim()) { setError("Назва обов'язкова"); return; }
-            if (!startDate)   { setError("Дата старту обов'язкова"); return; }
+            if (!name.trim()) { setError(t.editTourney?.errNameRequired ?? "Назва обов'язкова"); return; }
+            if (!startDate)   { setError(t.editTourney?.errStartRequired ?? "Дата старту обов'язкова"); return; }
 
             setSaving(true);
             try {
@@ -328,7 +330,7 @@ export default function TournamentEditPage() {
                 );
 
                 if (roundsPayload.length > 8) {
-                    throw new Error("Максимальна кількість раундів — 8");
+                    throw new Error(t.editTourney?.errMaxRounds ?? "Максимальна кількість раундів — 8");
                 }
 
                 const roundsRes = await fetch(`${API_URL}/api/tournaments/${id}/rounds`, {
@@ -349,7 +351,7 @@ export default function TournamentEditPage() {
                     throw new Error(`Турнір збережено, але раунди не оновлено: ${errMsg}`);
                 }
 
-                setSuccess("Зміни збережено ✓");
+                setSuccess(t.editTourney?.successSaved ?? "Зміни збережено ✓");
                 await fetchTourney();
             } catch (e: any) {
                 const msg: string = e?.message ?? "";
@@ -360,6 +362,29 @@ export default function TournamentEditPage() {
                 }
             } finally {
                 setSaving(false);
+            }
+        };
+
+        const handleDelete = async () => {
+            setDeleting(true);
+            setError("");
+            try {
+                const token = await getToken();
+                if (!token) throw new Error("Не вдалося отримати токен авторизації.");
+                const res = await fetch(`${API_URL}/api/tournaments/${id}`, {
+                    method: "DELETE",
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.detail ?? `Помилка видалення: ${res.statusText}`);
+                }
+                router.push("/tournaments");
+            } catch (e: any) {
+                setError(e?.message ?? (t.editTourney?.deleteError ?? "Не вдалося видалити турнір"));
+                setShowDeleteModal(false);
+            } finally {
+                setDeleting(false);
             }
         };
 
@@ -375,8 +400,8 @@ export default function TournamentEditPage() {
             return (
                 <div className="min-h-screen bg-(--bg) flex items-center justify-center flex-col gap-4">
                 <Trophy size={48} className="text-(--t2) opacity-30" />
-                <p className="font-black text-(--t1) uppercase">Турнір не знайдено</p>
-                <button onClick={() => router.push("/tournaments")} className="text-blue-600 text-sm font-bold">← До турнірів</button>
+                <p className="font-black text-(--t1) uppercase">{t.editTourney?.errNotFound ?? "Турнір не знайдено"}</p>
+                <button onClick={() => router.push("/tournaments")} className="text-blue-600 text-sm font-bold">{t.editTourney?.backToTournaments ?? "← До турнірів"}</button>
                 </div>
             );
         }
@@ -409,7 +434,7 @@ export default function TournamentEditPage() {
                 <main className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
                 <MobileHeader
                 onOpenSidebar={() => setIsMobileSidebarOpen(true)}
-                title="Редагування турніру"
+                title={t.editTourney?.mobileTitle ?? "Редагування турніру"}
                 icon={<Trophy size={18} className="text-blue-600" />}
                 />
 
@@ -418,19 +443,19 @@ export default function TournamentEditPage() {
                 <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2) flex-wrap">
                 <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">{t.nav?.home ?? "Головна"}</button>
                 <ChevronRight size={10} />
-                <button onClick={() => router.push("/tournaments")} className="hover:text-blue-600 transition-colors">Турніри</button>
+                <button onClick={() => router.push("/tournaments")} className="hover:text-blue-600 transition-colors">{t.editTourney?.breadcrumbTournaments ?? "Турніри"}</button>
                 <ChevronRight size={10} />
                 <button onClick={() => router.push(`/tournaments/${id}`)} className="hover:text-blue-600 transition-colors truncate max-w-[120px]">{tourney.name}</button>
                 <ChevronRight size={10} />
-                <span className="text-(--t1)">Редагування</span>
+                <span className="text-(--t1)">{t.editTourney?.breadcrumbEdit ?? "Редагування"}</span>
                 </nav>
 
                 <button onClick={() => router.back()} className="mb-6 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
-                <ArrowLeft size={14} /> Назад
+                <ArrowLeft size={14} /> {t.editTourney?.back ?? "Назад"}
                 </button>
 
                 <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-(--t1) mb-8">
-                Редагування турніру
+                {t.editTourney?.pageTitle ?? "Редагування турніру"}
                 </h1>
 
                 <form className="space-y-5" onSubmit={handleSave}>
@@ -445,30 +470,30 @@ export default function TournamentEditPage() {
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
                 <Trophy size={16} />
                 </div>
-                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">1. Загальна інформація</span>
+                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">{ t.editTourney?.block1 ?? "1. Загальна інформація"}</span>
                 </div>
                 <div className="p-6 sm:p-8 space-y-5">
                 <div>
                 <div className="flex items-center justify-between mb-2">
-                <label className={label10}>Назва турніру</label>
+                <label className={label10}>{t.editTourney?.nameLabel ?? "Назва турніру"}</label>
                 <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1">
-                <Zap className="w-2.5 h-2.5 fill-red-500" /> Обов&apos;язково
+                <Zap className="w-2.5 h-2.5 fill-red-500" /> {t.editTourney?.required ?? "Обов'язково"}
                 </span>
                 </div>
                 <input
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder="Назва турніру..."
+                placeholder={t.editTourney?.namePlaceholder ?? "Назва турніру..."}
                 className={inp}
                 />
                 </div>
                 <div>
-                <label className={`block ${label10} mb-2`}>Опис / Правила</label>
+                <label className={`block ${label10} mb-2`}>{t.editTourney?.rulesLabel ?? "Опис / Правила"}</label>
                 <RichTextEditor
                 value={rules}
                 onChange={setRules}
-                placeholder="Введіть опис та правила турніру..."
+                placeholder={t.editTourney?.rulesPlaceholder ?? "Введіть опис та правила турніру..."}
                 rows={7}
                 />
                 </div>
@@ -483,12 +508,12 @@ export default function TournamentEditPage() {
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white flex-shrink-0">
                 <Users size={16} />
                 </div>
-                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">Реєстрація команд</span>
+                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">{t.editTourney?.block2regTeams ?? "Реєстрація команд"}</span>
                 </div>
                 <div className="p-6 space-y-4 flex-1">
-                <DateTimePair label="Початок реєстрації" dateVal={regFromDate} onDate={setRegFromDate} timeVal={regFromTime} onTime={setRegFromTime} />
+                <DateTimePair label={t.editTourney?.regStart ?? "Початок реєстрації"} dateVal={regFromDate} onDate={setRegFromDate} timeVal={regFromTime} onTime={setRegFromTime} />
                 <div className="border-t border-(--brd)" />
-                <DateTimePair label="Кінець реєстрації" dateVal={regToDate} onDate={setRegToDate} timeVal={regToTime} onTime={setRegToTime} />
+                <DateTimePair label={t.editTourney?.regEnd ?? "Кінець реєстрації"} dateVal={regToDate} onDate={setRegToDate} timeVal={regToTime} onTime={setRegToTime} />
                 </div>
                 </div>
 
@@ -497,12 +522,12 @@ export default function TournamentEditPage() {
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
                 <Clock size={16} />
                 </div>
-                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">Дати старту</span>
+                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">{t.editTourney?.block2startDates ?? "Дати старту"}</span>
                 </div>
                 <div className="p-6 space-y-4 flex-1">
-                <DateTimePair label="Початок турніру" dateVal={startDate} onDate={setStartDate} timeVal={startTime} onTime={setStartTime} required />
+                <DateTimePair label={t.editTourney?.tourStart ?? "Початок турніру"} dateVal={startDate} onDate={setStartDate} timeVal={startTime} onTime={setStartTime} required />
                 <div className="border-t border-(--brd)" />
-                <DateTimePair label="Кінець турніру" dateVal={endDate} onDate={setEndDate} timeVal={endTime} onTime={setEndTime} />
+                <DateTimePair label={t.editTourney?.tourEnd ?? "Кінець турніру"} dateVal={endDate} onDate={setEndDate} timeVal={endTime} onTime={setEndTime} />
                 </div>
                 </div>
                 </section>
@@ -515,17 +540,21 @@ export default function TournamentEditPage() {
                 <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
                 <Layers size={14} />
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">3. Формат</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">{t.editTourney?.block3format ?? "3. Формат"}</span>
                 <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1 whitespace-nowrap">
-                <Zap className="w-2 h-2 fill-red-500" /> Обов&apos;язково
+                <Zap className="w-2 h-2 fill-red-500" /> {t.editTourney?.required ?? "Обов'язково"}
                 </span>
                 </div>
                 <div className="p-5 flex flex-col gap-3 flex-1">
                 <div className="flex items-center justify-between">
-                <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Кількість раундів</p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{t.editTourney?.roundCountLabel ?? "Кількість раундів"}</p>
                 <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">
-                Вибрано: <span className="text-blue-500">{roundCount}</span>{" "}
-                {roundCount === 1 ? "раунд" : roundCount < 5 ? "раунди" : "раундів"}
+                {t.editTourney?.roundSelected ?? "Вибрано:"} <span className="text-blue-500">{roundCount}</span>{" "}
+                {roundCount === 1
+                    ? (t.editTourney?.roundWord_1 ?? "раунд")
+                    : roundCount < 5
+                    ? (t.editTourney?.roundWord_2 ?? "раунди")
+                    : (t.editTourney?.roundWord_5 ?? "раундів")}
                 </p>
                 </div>
                 <div className="grid grid-cols-4 gap-1.5">
@@ -551,11 +580,11 @@ export default function TournamentEditPage() {
                 <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
                 <Users size={14} />
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">Команди</span>
-                <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full">Опціонально</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">{t.editTourney?.teamsBlock ?? "Команди"}</span>
+                <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full">{t.editTourney?.optional ?? "Опціонально"}</span>
                 </div>
                 <div className="p-5 flex flex-col gap-3 flex-1">
-                <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Кількість команд</p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{t.editTourney?.teamCountLabel ?? "Кількість команд"}</p>
                 <div className="flex items-center justify-center gap-3 flex-1">
                 <button type="button" onClick={() => setMaxTeams(Math.max(0, maxTeams - 1))}
                 className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">−</button>
@@ -577,7 +606,7 @@ export default function TournamentEditPage() {
                         ? "bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/30"
                         : "bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600"
                     }`}>
-                    {n === 0 ? "Без ліміту" : n}
+                    {n === 0 ? (t.editTourney?.noLimit ?? "Без ліміту") : n}
                     </button>
                 ))}
                 </div>
@@ -606,13 +635,17 @@ export default function TournamentEditPage() {
                 <button type="submit" disabled={saving}
                 className="flex-1 flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed">
                 {saving
-                    ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Збереження...</>
-                    : <><Save size={15} /> Зберегти зміни</>
+                    ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {t.editTourney?.saving ?? "Збереження..."}</>
+                    : <><Save size={15} /> {t.editTourney?.saveBtn ?? "Зберегти зміни"}</>
                 }
                 </button>
                 <button type="button" onClick={() => router.push(`/tournaments/${id}`)} disabled={saving}
                 className="flex-1 px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60">
-                Скасувати
+                {t.editTourney?.cancelBtn ?? "Скасувати"}
+                </button>
+                <button type="button" onClick={() => setShowDeleteModal(true)} disabled={saving || deleting}
+                className="flex items-center justify-center gap-2 px-6 py-4 bg-red-500/10 border border-red-500/30 text-red-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-500/20 hover:border-red-500/50 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
+                <Trash2 size={15} /> {t.editTourney?.deleteBtn ?? "Видалити"}
                 </button>
                 </div>
 
@@ -634,6 +667,48 @@ export default function TournamentEditPage() {
                 </form>
                 </div>
                 </main>
+
+                {/* ── DELETE CONFIRMATION MODAL ── */}
+                {showDeleteModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="bg-(--card) border border-(--brd) rounded-3xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-5 animate-[cardDrop_300ms_cubic-bezier(.22,1,.36,1)_both]">
+                    <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center flex-shrink-0">
+                    <Trash2 size={18} className="text-red-500" />
+                    </div>
+                    <h2 className="text-base font-black uppercase tracking-widest text-(--t1)">
+                    {t.editTourney?.deleteConfirmTitle ?? "Видалити турнір?"}
+                    </h2>
+                    </div>
+                    <p className="text-sm text-(--t2) leading-relaxed">
+                    {t.editTourney?.deleteConfirmText ?? "Цю дію неможливо скасувати. Всі раунди та реєстрації команд будуть видалені назавжди."}
+                    </p>
+                    <div className="px-4 py-3 bg-(--bg) border border-(--brd) rounded-2xl">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1">{t.editTourney?.deleteConfirmName ?? "Турнір:"}</p>
+                    <p className="text-sm font-black text-(--t1) truncate">{tourney?.name}</p>
+                    </div>
+                    <div className="flex gap-3">
+                    <button
+                    type="button"
+                    onClick={() => setShowDeleteModal(false)}
+                    disabled={deleting}
+                    className="flex-1 px-5 py-3 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60">
+                    {t.editTourney?.deleteCancelBtn ?? "Скасувати"}
+                    </button>
+                    <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="flex-1 flex items-center justify-center gap-2 px-5 py-3 bg-red-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-700 active:scale-95 transition-all shadow-lg shadow-red-600/25 disabled:opacity-60 disabled:cursor-not-allowed">
+                    {deleting
+                        ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {t.editTourney?.deleteConfirming ?? "Видалення..."}</>
+                        : <><Trash2 size={14} /> {t.editTourney?.deleteConfirmBtn ?? "Так, видалити"}</>
+                    }
+                    </button>
+                    </div>
+                    </div>
+                    </div>
+                )}
                 </div>
         );
 }
