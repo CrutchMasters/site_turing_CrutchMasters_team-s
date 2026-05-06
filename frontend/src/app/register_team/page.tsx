@@ -9,9 +9,10 @@ import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
+import AvatarEditorModal from "@/components/AvatarEditorModal";
 import {
   Users, ChevronRight, Crown, Search, X, Plus,
-  Send, Mail, Check, Loader, AlertCircle,
+  Send, Mail, Check, Loader, AlertCircle, Camera,
 } from "lucide-react";
 
 const API_URL =
@@ -82,16 +83,16 @@ function UserAvatar({ user, variant = "md" }: { user: SearchedUser; variant?: "s
   if (user.avatar_url && !imgError) {
     return (
       <img
-        src={user.avatar_url}
-        alt={user.username}
-        onError={() => setImgError(true)}
-        className={`${sizeClass} rounded-full object-cover flex-shrink-0 border border-blue-600/25`}
+      src={user.avatar_url}
+      alt={user.username}
+      onError={() => setImgError(true)}
+      className={`${sizeClass} rounded-full object-cover flex-shrink-0 border border-blue-600/25`}
       />
     );
   }
   return (
     <div className={`${sizeClass} rounded-full bg-blue-600 flex items-center justify-center text-white font-black flex-shrink-0`}>
-      {initial}
+    {initial}
     </div>
   );
 }
@@ -208,7 +209,7 @@ function UserSearchDropdown({
       <Loader className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-600 w-4 h-4 animate-spin z-10" />
     )}
 
-    {/* Portal dropdown — rendered at body, above all panels */}
+    {/* Portal dropdown - rendered at body, above all panels */}
     <PortalDropdown anchorRef={wrapperRef} open={showDropdown}>
     <div
     style={{
@@ -351,6 +352,11 @@ export default function RegisterTeamPage() {
   const [submitting, setSubmitting]     = useState(false);
   const [submitted, setSubmitted]       = useState(false);
 
+  // ── Avatar state ──
+  const [teamAvatarUrl, setTeamAvatarUrl] = useState<string | null>(null);
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [avatarTempTeamId, setAvatarTempTeamId] = useState<string | null>(null);
+
   // ── Auto-save draft on every change ──
   useEffect(() => {
     saveDraft({ teamName, organization, contactEmail, showDiscord, showTelegram, discordLink, telegramLink, captain, members });
@@ -409,7 +415,7 @@ export default function RegisterTeamPage() {
 
       try {
         const token =
-          (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+        (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
 
         // 1. Створити команду через бекенд (не напряму в Supabase)
         const teamRes = await fetch(`${API_URL}/api/teams`, {
@@ -420,9 +426,9 @@ export default function RegisterTeamPage() {
           },
           body: JSON.stringify({
             name:            teamName.trim(),
-            city_school_org: organization.trim() || null,
-            telegram_url:    telegramLink.trim() || null,
-            discord_url:     discordLink.trim()  || null,
+                               city_school_org: organization.trim() || null,
+                               telegram_url:    telegramLink.trim() || null,
+                               discord_url:     discordLink.trim()  || null,
           }),
         });
 
@@ -440,14 +446,14 @@ export default function RegisterTeamPage() {
         if (members.length > 0) {
           const inviteResults = await Promise.allSettled(
             members.map(m =>
-              fetch(`${API_URL}/api/invitations/send`, {
-                method:  "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization:  `Bearer ${token}`,
-                },
-                body: JSON.stringify({ team_id: teamId, invitee_id: m.id }),
-              })
+            fetch(`${API_URL}/api/invitations/send`, {
+              method:  "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization:  `Bearer ${token}`,
+              },
+              body: JSON.stringify({ team_id: teamId, invitee_id: m.id }),
+            })
             )
           );
 
@@ -458,8 +464,18 @@ export default function RegisterTeamPage() {
         }
 
         clearDraft();
-        setSubmitted(true);
-        setTimeout(() => router.push("/teams"), 2000);
+
+        // 3. If avatar was selected — save it; otherwise go to avatar step
+        if (teamAvatarUrl) {
+          await supabase.from("teams").update({ avatar_url: teamAvatarUrl }).eq("id", teamId);
+          setSubmitted(true);
+          setTimeout(() => router.push("/teams"), 2000);
+        } else {
+          // Open avatar editor for newly created team
+          setAvatarTempTeamId(teamId);
+          setShowAvatarModal(true);
+          setSubmitting(false);
+        }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Невідома помилка";
         setSubmitError(`Помилка збереження: ${msg}`);
@@ -478,7 +494,7 @@ export default function RegisterTeamPage() {
 
     return (
       <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
-      <style jsx global>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         @keyframes fadeUp   { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
         @keyframes cardDrop { from{opacity:0;transform:translateY(-16px) scale(.98)} to{opacity:1;transform:none} }
         @keyframes fadeIn   { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
@@ -495,7 +511,7 @@ export default function RegisterTeamPage() {
         .dropdown-scroll { scrollbar-width: thin; scrollbar-color: var(--brd) transparent; }
         .dropdown-scroll::-webkit-scrollbar { width: 4px; }
         .dropdown-scroll::-webkit-scrollbar-thumb { background: var(--brd); border-radius: 4px; }
-        `}</style>
+        `}} />
 
         {/* Watermark */}
         <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
@@ -550,6 +566,39 @@ export default function RegisterTeamPage() {
         <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) shadow-xl">
         <SectionHeader num="1" title="Загальна інформація" />
         <div className="p-6 sm:p-8 space-y-5">
+
+        {/* Avatar picker */}
+        <div className="flex items-center gap-5">
+        <div className="relative flex-shrink-0">
+        <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-(--brd) bg-(--bg) flex items-center justify-center">
+        {teamAvatarUrl
+          ? <img src={teamAvatarUrl} alt="team avatar" className="w-full h-full object-cover" />
+          : <Users size={28} className="text-(--t2) opacity-40" />
+        }
+        </div>
+        <button
+        type="button"
+        onClick={() => setShowAvatarModal(true)}
+        className="absolute -bottom-2 -right-2 w-7 h-7 rounded-full bg-blue-600 border-2 border-(--card) flex items-center justify-center text-white hover:bg-blue-700 transition-all active:scale-95 shadow-lg"
+        >
+        <Camera size={12} />
+        </button>
+        </div>
+        <div>
+        <p className="text-xs font-black text-(--t1) uppercase tracking-widest">Аватар команди</p>
+        <p className="text-[10px] text-(--t2) font-medium mt-0.5">PNG, JPG, WEBP - необов&apos;язково</p>
+        {teamAvatarUrl && (
+          <button
+          type="button"
+          onClick={() => setTeamAvatarUrl(null)}
+          className="text-[10px] font-black uppercase tracking-widest text-red-500 hover:text-red-400 mt-1 transition-colors"
+          >
+          Видалити
+          </button>
+        )}
+        </div>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="flex flex-col gap-1.5">
         <label className="text-[10px] font-black text-(--t2) uppercase tracking-[0.15em] ml-1">
@@ -635,7 +684,7 @@ export default function RegisterTeamPage() {
         <SectionHeader num="2" title="Капітан" right={<Crown size={15} className="text-amber-500" />} />
         <div className="p-6 sm:p-8 overflow-visible">
         <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest mb-4">
-        За замовчуванням — ваш акаунт. Можна змінити через пошук.
+        За замовчуванням - ваш акаунт. Можна змінити через пошук.
         </p>
         <UserSearchDropdown
         label="Капітан команди *"
@@ -685,12 +734,12 @@ export default function RegisterTeamPage() {
 
         {members.length === 0 && (
           <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest opacity-60">
-          Команда може бути без учасників — додайте їх пізніше
+          Команда може бути без учасників - додайте їх пізніше
           </p>
         )}
         {members.length > 0 && (
           <p className="text-[10px] font-bold text-blue-500/70 uppercase tracking-widest flex items-center gap-1">
-          📨 Запрошення буде надіслано — учасники потраплять до команди після підтвердження
+          📨 Запрошення буде надіслано - учасники потраплять до команди після підтвердження
           </p>
         )}
         </div>
@@ -720,6 +769,39 @@ export default function RegisterTeamPage() {
         </form>
         </div>
         </main>
+
+        {/* Avatar editor - pre-upload (before submit, stores to tmp bucket path only) */}
+        {showAvatarModal && !avatarTempTeamId && (
+          <AvatarEditorModal
+          userId={`team_preview_${user?.id ?? "anon"}`}
+          supabase={supabase}
+          tableConfig={{ table: "teams", idColumn: "id" }}
+          onSave={(url) => { setTeamAvatarUrl(url); setShowAvatarModal(false); }}
+          onClose={() => setShowAvatarModal(false)}
+          />
+        )}
+
+        {/* Avatar editor - post-creation (team already exists, update it directly) */}
+        {showAvatarModal && avatarTempTeamId && (
+          <AvatarEditorModal
+          userId={avatarTempTeamId}
+          supabase={supabase}
+          tableConfig={{ table: "teams", idColumn: "id" }}
+          onSave={async (url) => {
+            setShowAvatarModal(false);
+            clearDraft();
+            setSubmitted(true);
+            setTimeout(() => router.push("/teams"), 2000);
+          }}
+          onClose={() => {
+            // Skip avatar, still go to teams
+            setShowAvatarModal(false);
+            clearDraft();
+            setSubmitted(true);
+            setTimeout(() => router.push("/teams"), 2000);
+          }}
+          />
+        )}
         </div>
     );
 }
