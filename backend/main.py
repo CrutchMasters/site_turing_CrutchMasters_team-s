@@ -345,6 +345,7 @@ _ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:8000",
     "https://site-turing-crutchmasters-team-s.pages.dev",
+    "https://siteturingcrutchmastersteam-s.crutch-mastersss.workers.dev",
 ]
 # Дополнительные origins из .env (через запятую), например для staging-окружений
 _extra = os.getenv("CORS_EXTRA_ORIGINS", "")
