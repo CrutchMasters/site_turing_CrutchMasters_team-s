@@ -986,6 +986,48 @@ async def update_tournament(
     return {"success": True, "tournament": result.data[0] if result.data else None}
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DELETE /api/tournaments/{id} — видалення турніру (тільки admin/superadmin)
+# Каскадно видаляє rounds, jury_assignments, jury_tournament_invitations,
+# jury_submission_assignments. Команди залишаються (tournament_id → NULL).
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.delete("/api/tournaments/{tournament_id}", status_code=204)
+async def delete_tournament(
+    tournament_id: str,
+    authorization: str = Header(...),
+):
+    """
+    Видаляє турнір. Тільки admin/superadmin.
+    superadmin може видалити будь-який турнір,
+    admin — лише власний (created_by == caller.id).
+    Cascade на рівні БД видаляє rounds, jury_assignments тощо.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    if caller.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки адміністратор може видалити турнір")
+
+    tournament = fetch_one(
+        supabase.table("tournaments").select("id, name, created_by").eq("id", tournament_id)
+    )
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Турнір не знайдено")
+
+    if caller.get("role") != "superadmin" and tournament.get("created_by") != caller["id"]:
+        raise HTTPException(status_code=403, detail="Ви не є власником цього турніру")
+
+    supabase.table("tournaments").delete().eq("id", tournament_id).execute()
+
+    print(f"[TOURNAMENT] {caller['username']} видалив турнір {tournament_id} ({tournament.get('name')})", flush=True)
+    return
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/api/tournaments/{tournament_id}/rounds")
