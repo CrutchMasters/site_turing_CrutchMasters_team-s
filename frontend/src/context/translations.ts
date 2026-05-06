@@ -269,6 +269,7 @@ const def = {
       errAddMember: "Failed to add member",
       errRemoveMember: "Failed to remove member",
       errSave: "Failed to save changes",
+      socialLinks: "Social links",
     },
     editTourney: {
       pageTitle: "Tournament editing",
@@ -591,6 +592,7 @@ const def = {
       errAddMember: "Не удалось добавить участника",
       errRemoveMember: "Не удалось удалить участника",
       errSave: "Не удалось сохранить изменения",
+      socialLinks: "Социальные ссылки",
     },
     editTourney: {
       pageTitle: "Редактирование турнира",
@@ -912,6 +914,7 @@ const def = {
       errAddMember: "Не вдалося додати учасника",
       errRemoveMember: "Не вдалося видалити учасника",
       errSave: "Не вдалося зберегти зміни",
+      socialLinks: "Соціальні посилання",
     },
     editTourney: {
       pageTitle: "Редагування турніру",
