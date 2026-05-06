@@ -29,6 +29,7 @@ interface Tournament {
     registration_to?: string;
     max_teams?: number;
     rounds?: number;
+    jury_per_submission?: number;
     created_by?: string;
 }
 
@@ -118,7 +119,8 @@ export default function TournamentEditPage() {
     const [regFromTime, setRegFromTime] = useState("");
     const [regToDate, setRegToDate]     = useState("");
     const [regToTime, setRegToTime]     = useState("");
-    const [maxTeams, setMaxTeams]       = useState(0);
+    const [maxTeams, setMaxTeams]             = useState(0);
+    const [juryPerSubmission, setJuryPerSubmission] = useState(1);
     const [roundCount, setRoundCount]   = useState<number>(1);
 
     const [selectedRoundTab, setSelectedRoundTab]   = useState<number>(1);
@@ -160,6 +162,7 @@ export default function TournamentEditPage() {
                 setRegToDate(toDateStr(data.registration_to));
                 setRegToTime(toTimeStr(data.registration_to));
                 setMaxTeams(data.max_teams ?? 0);
+                setJuryPerSubmission(data.jury_per_submission ?? 1);
                 setRoundCount(data.rounds ?? 1);
 
                 const { data: roundRows, error: roundErr } = await supabase
@@ -246,7 +249,8 @@ export default function TournamentEditPage() {
                     end_at:            toIso(endDate, endTime) || null,
                     registration_from: toIso(regFromDate, regFromTime),
                     registration_to:   toIso(regToDate, regToTime),
-                    max_teams:         maxTeams > 0 ? maxTeams : null,
+                    max_teams:              maxTeams > 0 ? maxTeams : null,
+                    jury_per_submission:    juryPerSubmission >= 1 ? juryPerSubmission : 1,
                     rounds:            roundCount,
                 };
 
@@ -607,6 +611,47 @@ export default function TournamentEditPage() {
                         : "bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600"
                     }`}>
                     {n === 0 ? (t.editTourney?.noLimit ?? "Без ліміту") : n}
+                    </button>
+                ))}
+                </div>
+                </div>
+                </div>
+                </section>
+
+                {/* Jury per submission block */}
+                <section className="flex flex-col gap-4">
+                <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
+                <div className="flex items-center gap-3 px-5 py-4 border-b border-(--brd) bg-(--bg)/50">
+                <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">Оцінювання журі</span>
+                <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full">Розподіл робіт</span>
+                </div>
+                <div className="p-5 flex flex-col gap-3 flex-1">
+                <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Журі на роботу (K)</p>
+                <p className="text-[10px] text-(--t2)/70">Скільки членів журі оцінює кожну подану роботу</p>
+                <div className="flex items-center justify-center gap-3 flex-1">
+                <button type="button" onClick={() => setJuryPerSubmission(Math.max(1, juryPerSubmission - 1))}
+                className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-amber-600 hover:border-amber-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">−</button>
+                <input
+                type="number" min={1}
+                value={juryPerSubmission}
+                onChange={e => { const v = parseInt(e.target.value, 10); setJuryPerSubmission(isNaN(v) || v < 1 ? 1 : v); }}
+                className="w-16 text-center text-2xl font-black bg-transparent outline-none text-(--t1) border-b-2 border-(--brd) focus:border-amber-500 transition-colors tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <button type="button" onClick={() => setJuryPerSubmission(juryPerSubmission + 1)}
+                className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-amber-600 hover:border-amber-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">+</button>
+                </div>
+                <div className="flex gap-1.5 flex-wrap justify-center">
+                {[1, 2, 3, 5].map(n => (
+                    <button key={n} type="button" onClick={() => setJuryPerSubmission(n)}
+                    className={`text-[10px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest transition-all active:scale-95 ${
+                        juryPerSubmission === n
+                        ? "bg-amber-500 border-amber-500 text-white shadow-sm shadow-amber-500/30"
+                        : "bg-(--bg) border-(--brd) text-(--t2) hover:border-amber-500/50 hover:text-amber-600"
+                    }`}>
+                    {n === 1 ? "1 — швидко" : n === 2 ? "2 — стандарт" : n === 3 ? "3 — суворо" : `${n}`}
                     </button>
                 ))}
                 </div>

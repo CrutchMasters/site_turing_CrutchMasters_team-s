@@ -380,9 +380,10 @@ class TournamentUpdate(BaseModel):
     end_at:            str | None = None   # FIX: було відсутнє — кінець турніру не зберігався
     registration_from: str | None = None
     registration_to:   str | None = None
-    max_teams:         int | None = None
-    rounds:            int | None = None
-    status:            str | None = None
+    max_teams:              int | None = None
+    rounds:                 int | None = None
+    status:                 str | None = None
+    jury_per_submission:    int | None = None  # скільки журі оцінює кожну роботу (K)
 
 class ChangeRole(BaseModel):
     target_user_id: str
@@ -985,48 +986,6 @@ async def update_tournament(
 
     print(f"[TOURNAMENT] {caller['username']} оновив турнір {tournament_id}: {list(update_data.keys())}", flush=True)
     return {"success": True, "tournament": result.data[0] if result.data else None}
-
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DELETE /api/tournaments/{id} — видалення турніру (тільки admin/superadmin)
-# Каскадно видаляє rounds, jury_assignments, jury_tournament_invitations,
-# jury_submission_assignments. Команди залишаються (tournament_id → NULL).
-# ─────────────────────────────────────────────────────────────────────────────
-
-@app.delete("/api/tournaments/{tournament_id}", status_code=204)
-async def delete_tournament(
-    tournament_id: str,
-    authorization: str = Header(...),
-):
-    """
-    Видаляє турнір. Тільки admin/superadmin.
-    superadmin може видалити будь-який турнір,
-    admin — лише власний (created_by == caller.id).
-    Cascade на рівні БД видаляє rounds, jury_assignments тощо.
-    """
-    if not supabase:
-        raise HTTPException(status_code=500, detail="Supabase not initialized")
-
-    token  = authorization.replace("Bearer ", "").strip()
-    caller = get_caller(token)
-
-    if caller.get("role") not in ("admin", "superadmin"):
-        raise HTTPException(status_code=403, detail="Тільки адміністратор може видалити турнір")
-
-    tournament = fetch_one(
-        supabase.table("tournaments").select("id, name, created_by").eq("id", tournament_id)
-    )
-    if not tournament:
-        raise HTTPException(status_code=404, detail="Турнір не знайдено")
-
-    if caller.get("role") != "superadmin" and tournament.get("created_by") != caller["id"]:
-        raise HTTPException(status_code=403, detail="Ви не є власником цього турніру")
-
-    supabase.table("tournaments").delete().eq("id", tournament_id).execute()
-
-    print(f"[TOURNAMENT] {caller['username']} видалив турнір {tournament_id} ({tournament.get('name')})", flush=True)
-    return
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2187,7 +2146,15 @@ async def redistribute_submissions(round_id: str, authorization: str = Header(..
 
     tournament_id = round_["tournament_id"]
 
-    # 2. Отримуємо всіх прийнятих журі для цього турніру
+    # 2. Отримуємо налаштування турніру (jury_per_submission = K)
+    tour_res = supabase.table("tournaments") \
+        .select("jury_per_submission") \
+        .eq("id", tournament_id) \
+        .execute()
+    tour_data = (tour_res.data or [{}])[0]
+    k_setting = tour_data.get("jury_per_submission") or 1  # default: 1 журі на роботу
+
+    # 3. Отримуємо всіх прийнятих журі для цього турніру
     jury_res = supabase.table("jury_tournament_invitations") \
         .select("jury_id") \
         .eq("tournament_id", tournament_id) \
@@ -2198,18 +2165,23 @@ async def redistribute_submissions(round_id: str, authorization: str = Header(..
     if not jury_ids:
         raise HTTPException(status_code=400, detail="Немає запрошених журі для цього турніру")
 
-    # 3. Отримуємо всі фінальні submissions цього раунду
+    # K не може перевищувати кількість журі
+    k = min(k_setting, len(jury_ids))
+
+    # 4. Отримуємо всі фінальні submissions цього раунду
+    import random
     subs_res = supabase.table("submissions") \
         .select("id") \
         .eq("round_id", round_id) \
         .eq("is_draft", False) \
         .execute()
     sub_ids = [s["id"] for s in (subs_res.data or [])]
+    random.shuffle(sub_ids)
 
     if not sub_ids:
         raise HTTPException(status_code=400, detail="Немає поданих робіт для розподілу")
 
-    # 4. Очищуємо ТІЛЬКИ jury_submission_assignments для цього раунду
+    # 5. Очищуємо старі призначення для цього раунду
     #    НЕ чіпаємо jury_assignments — вони відповідають за доступ журі до раунду
     try:
         supabase.table("jury_submission_assignments") \
@@ -2219,14 +2191,13 @@ async def redistribute_submissions(round_id: str, authorization: str = Header(..
     except Exception as e:
         print(f"[REDISTRIBUTE] Не вдалося очистити jury_submission_assignments: {e}", flush=True)
 
-    # 5. Рівномірно розподіляємо submissions між журі (round-robin)
-    #    Кожна робота оцінюється мінімум 2 журі (якщо журі >= 2)
+    # 6. Рівномірний round-robin розподіл з параметром K
+    #    Кожну роботу отримують K різних журі, зсув циклічний.
+    #    Журі перемішуємо для рандому.
+    random.shuffle(jury_ids)
     assignments = []
-    min_evaluators = min(2, len(jury_ids))  # кожну роботу оцінює min(2, кількість журі) членів журі
-
     for i, sub_id in enumerate(sub_ids):
-        # Призначаємо min_evaluators журі для кожної роботи, зсуваючись циклічно
-        for offset in range(min_evaluators):
+        for offset in range(k):
             jury_id = jury_ids[(i + offset) % len(jury_ids)]
             assignments.append({
                 "jury_id":       jury_id,
@@ -2235,7 +2206,7 @@ async def redistribute_submissions(round_id: str, authorization: str = Header(..
                 "submission_id": sub_id,
             })
 
-    # Дедублікуємо на випадок якщо журі < min_evaluators
+    # Дедублікуємо (актуально коли k >= len(jury_ids))
     seen = set()
     unique_assignments = []
     for a in assignments:
@@ -2245,20 +2216,19 @@ async def redistribute_submissions(round_id: str, authorization: str = Header(..
             unique_assignments.append(a)
 
     try:
-        # Вставляємо партіями по 100
         batch_size = 100
         for i in range(0, len(unique_assignments), batch_size):
             supabase.table("jury_submission_assignments").insert(unique_assignments[i:i+batch_size]).execute()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Помилка при збереженні розподілу: {e}")
 
-    print(f"[REDISTRIBUTE] {caller['username']} перерозподілив {len(sub_ids)} робіт між {len(jury_ids)} журі для раунду {round_id}", flush=True)
+    print(f"[REDISTRIBUTE] {caller['username']} перерозподілив {len(sub_ids)} робіт між {len(jury_ids)} журі (K={k}) для раунду {round_id}", flush=True)
     return {
-        "success":      True,
-        "submissions":  len(sub_ids),
-        "jury_count":   len(jury_ids),
-        "assignments":  len(unique_assignments),
-        "min_evaluators_per_work": min_evaluators,
+        "success":              True,
+        "submissions":          len(sub_ids),
+        "jury_count":           len(jury_ids),
+        "assignments":          len(unique_assignments),
+        "jury_per_submission":  k,
     }
 
 
@@ -2339,7 +2309,7 @@ async def get_distribution(round_id: str, authorization: str | None = Header(Non
     teams_map: dict = {}
     if team_ids:
         teams_res = supabase.table("teams") \
-            .select("id, name, organization") \
+            .select("id, name") \
             .in_("id", team_ids) \
             .execute()
         teams_map = {t["id"]: t for t in (teams_res.data or [])}
@@ -2348,7 +2318,6 @@ async def get_distribution(round_id: str, authorization: str | None = Header(Non
         {
             "id":        s["id"],
             "team_name": teams_map.get(s["team_id"], {}).get("name", "—"),
-            "team_org":  teams_map.get(s["team_id"], {}).get("organization"),
             "submitted_at": s.get("submitted_at"),
         }
         for s in sub_rows
