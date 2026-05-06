@@ -263,7 +263,7 @@ export default function DistributePage() {
 
                     {/* Breadcrumb */}
                     <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2) flex-wrap">
-                        <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
+                        <button data-href="/" onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
                         <ChevronRight size={10} />
                         <button onClick={() => round && router.push(`/tournaments/${round.tournament_id}`)} className="hover:text-blue-600 transition-colors truncate max-w-[100px]">
                             {round?.tournament_name ?? "Турнір"}

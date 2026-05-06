@@ -515,9 +515,9 @@ export default function RegisterTeamPage() {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
 
         <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-        <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
+        <button data-href="/" onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
         <ChevronRight size={10} />
-        <button onClick={() => router.push("/teams")} className="hover:text-blue-600 transition-colors">Команди</button>
+        <button data-href="/teams" onClick={() => router.push("/teams")} className="hover:text-blue-600 transition-colors">Команди</button>
         <ChevronRight size={10} />
         <span className="text-(--t1)">Реєстрація</span>
         </nav>
@@ -705,7 +705,7 @@ export default function RegisterTeamPage() {
         >
         {submitting ? <><Loader size={14} className="animate-spin" /> Створення...</> : <><Users size={14} /> Створити команду</>}
         </button>
-        <button type="button" onClick={() => router.push("/teams")}
+        <button type="button" data-href="/teams" onClick={() => router.push("/teams")}
         className="px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) bg-(--bg) text-(--t2) hover:bg-(--card) hover:text-(--t1) transition-all active:scale-95">
         Скасувати
         </button>

@@ -387,8 +387,8 @@ export default function RegisterTourney() {
         <p className="fade-up-1 text-lg sm:text-2xl font-black uppercase tracking-tight mb-8 text-blue-600">привіт від Білого Кролика 🐇</p>
         <p className="fade-up-2 text-xs font-black uppercase tracking-[0.3em] mb-10 text-(--t2)">Ця сторінка тільки для адміністраторів</p>
         <div className="fade-up-2 flex flex-col sm:flex-row gap-3 justify-center">
-        <button onClick={() => router.push('/dashboard')} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20">← Повернутись на дашборд</button>
-        <button onClick={() => router.push('/')} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) text-(--t2) bg-(--bg) active:scale-95 transition-all hover:opacity-80">На головну</button>
+        <button data-href="/dashboard" onClick={() => router.push('/dashboard')} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20">← Повернутись на дашборд</button>
+        <button data-href="/" onClick={() => router.push('/')} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) text-(--t2) bg-(--bg) active:scale-95 transition-all hover:opacity-80">На головну</button>
         </div>
         </div>
         </div>
@@ -432,9 +432,9 @@ export default function RegisterTourney() {
 
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-      <button onClick={() => router.push('/')} className="hover:text-blue-600 transition-colors">Головна</button>
+      <button data-href="/" onClick={() => router.push('/')} className="hover:text-blue-600 transition-colors">Головна</button>
       <ChevronRight size={10} />
-      <button onClick={() => router.push('/dashboard')} className="hover:text-blue-600 transition-colors">Дашборд</button>
+      <button data-href="/dashboard" onClick={() => router.push('/dashboard')} className="hover:text-blue-600 transition-colors">Дашборд</button>
       <ChevronRight size={10} />
       <span className="text-(--t1)">{t.tourney?.createAdmin ?? 'Створення турніру'}</span>
       </nav>

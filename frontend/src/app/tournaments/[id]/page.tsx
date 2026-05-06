@@ -248,7 +248,7 @@ export default function TournamentPage() {
 
             <div className="p-6 max-w-3xl w-full mx-auto">
             <button
-            onClick={() => router.push("/tournaments")}
+            data-href="/tournaments" onClick={() => router.push("/tournaments")}
             className="mb-5 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors"
             >
             <ArrowLeft size={16} /> Назад до турнірів
@@ -256,7 +256,7 @@ export default function TournamentPage() {
 
             <div className="flex items-start justify-between gap-3 mb-4">
             <h1 className="text-2xl font-black text-(--t1)">{tournament.name}</h1>
-            {isAdmin && (
+            {(isAdmin || tournament.created_by === user?.id) && (
                 <button
                 onClick={() => router.push(`/tournaments/${id}/edit`)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-(--brd) text-(--t2) hover:text-blue-600 hover:border-blue-600/40 text-xs font-bold transition-all"

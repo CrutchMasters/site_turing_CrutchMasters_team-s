@@ -554,7 +554,7 @@ export default function RoundPage() {
             <SectionLabel icon={<Flag size={13} />}>Здача роботи</SectionLabel>
             <InfoBanner icon={<AlertCircle size={16} />}>
             Для участі необхідно{" "}
-            <button onClick={() => router.push("/login")} className="underline font-black">
+            <button data-href="/login" onClick={() => router.push("/login")} className="underline font-black">
             увійти в акаунт
             </button>.
             </InfoBanner>

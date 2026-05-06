@@ -107,7 +107,7 @@ export default function SearchPage() {
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
       <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-      <button onClick={() => router.push("/")} className="hover:text-blue-600">{t.nav.home}</button>
+      <button data-href="/" onClick={() => router.push("/")} className="hover:text-blue-600">{t.nav.home}</button>
       <ChevronRight size={10} />
       <span className="text-(--t1)">{t.search.title}</span>
       </nav>

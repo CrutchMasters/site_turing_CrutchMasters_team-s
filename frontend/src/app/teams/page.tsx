@@ -238,7 +238,7 @@ export default function TeamsPage() {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
         {/* Breadcrumb */}
         <nav className="max-w-6xl mx-auto flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-        <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">
+        <button data-href="/" onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">
         {t.nav.home}
         </button>
         <ChevronRight size={10} />
@@ -372,7 +372,7 @@ export default function TeamsPage() {
 
         {/* Create button — always at the bottom */}
         <button
-        onClick={() => router.push("/register_team")}
+        data-href="/register_team" onClick={() => router.push("/register_team")}
         className="mt-1 flex items-center justify-center gap-2 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl px-5 py-4 hover:bg-blue-700 shadow-lg shadow-blue-600/25 active:scale-95 transition-all w-full group"
         >
         <Plus size={15} className="group-hover:rotate-90 transition-transform duration-300" />

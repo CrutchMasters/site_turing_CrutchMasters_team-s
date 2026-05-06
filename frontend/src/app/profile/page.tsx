@@ -926,7 +926,7 @@ export default function ProfilePage() {
       <div className={`flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10 ${allReady ? "page-ready" : ""}`}>
 
       <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2)">
-      <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
+      <button data-href="/" onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
       <ChevronRight size={10} /><span className="text-(--t1)">Профіль</span>
       </nav>
       <button onClick={() => router.back()} className="mb-5 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
@@ -1040,7 +1040,7 @@ export default function ProfilePage() {
             <div className="text-center py-5">
             <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2"><Users className="w-5 h-5 text-(--t2) opacity-40" /></div>
             <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Не перебуває в жодній команді</p>
-            <button onClick={() => router.push("/register_team")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">Створити команду →</button>
+            <button data-href="/register_team" onClick={() => router.push("/register_team")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">Створити команду →</button>
             </div>
           ) : (
             <div className="space-y-2">
@@ -1086,7 +1086,7 @@ export default function ProfilePage() {
             <div className="text-center py-5">
             <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2"><Trophy className="w-5 h-5 text-(--t2) opacity-40" /></div>
             <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Не бере участь у турнірах</p>
-            <button onClick={() => router.push("/tournaments")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-amber-500 hover:underline">Переглянути турніри →</button>
+            <button data-href="/tournaments" onClick={() => router.push("/tournaments")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-amber-500 hover:underline">Переглянути турніри →</button>
             </div>
           ) : (
             <div className="space-y-2">

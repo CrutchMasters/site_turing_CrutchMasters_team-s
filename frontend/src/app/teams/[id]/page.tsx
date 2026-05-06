@@ -447,15 +447,15 @@ export default function TeamProfilePage() {
 
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-        <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">{t.teamProfile.breadcrumbHome}</button>
+        <button data-href="/" onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">{t.teamProfile.breadcrumbHome}</button>
         <ChevronRight size={10} />
-        <button onClick={() => router.push("/teams")} className="hover:text-blue-600 transition-colors">{t.teamProfile.breadcrumbTeams}</button>
+        <button data-href="/teams" onClick={() => router.push("/teams")} className="hover:text-blue-600 transition-colors">{t.teamProfile.breadcrumbTeams}</button>
         <ChevronRight size={10} />
         <span className="text-(--t1) truncate max-w-[120px]">{isLoading ? t.teamProfile.breadcrumbLoading : team?.name ?? t.teamProfile.breadcrumbFallback}</span>
         </nav>
 
         <button
-        onClick={() => router.push("/teams")}
+        data-href="/teams" onClick={() => router.push("/teams")}
         className="mb-6 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors"
         >
         <ArrowLeft size={14} /> {t.teamProfile.back}
@@ -468,7 +468,7 @@ export default function TeamProfilePage() {
             <p className="text-lg font-black text-(--t1) mb-2">{t.teamProfile.notFound}</p>
             <p className="text-(--t2) text-sm">{error}</p>
             <button
-            onClick={() => router.push("/teams")}
+            data-href="/teams" onClick={() => router.push("/teams")}
             className="mt-6 inline-flex items-center gap-2 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl px-6 py-3 hover:bg-blue-700 transition-all active:scale-95"
             >
             ← До списку команд

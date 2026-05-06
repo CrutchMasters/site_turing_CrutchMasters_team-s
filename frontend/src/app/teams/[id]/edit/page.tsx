@@ -329,9 +329,9 @@ export default function EditTeamPage() {
 
             {/* Breadcrumb */}
             <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-            <button onClick={() => router.push("/dashboard")} className="hover:text-blue-600 transition-colors">{t.editTeam.breadcrumbHome}</button>
+            <button data-href="/dashboard" onClick={() => router.push("/dashboard")} className="hover:text-blue-600 transition-colors">{t.editTeam.breadcrumbHome}</button>
             <ChevronRight size={10} />
-            <button onClick={() => router.push("/teams")} className="hover:text-blue-600 transition-colors">{t.editTeam.breadcrumbTeams}</button>
+            <button data-href="/teams" onClick={() => router.push("/teams")} className="hover:text-blue-600 transition-colors">{t.editTeam.breadcrumbTeams}</button>
             <ChevronRight size={10} />
             <button onClick={() => router.push(`/teams/${teamId}`)} className="hover:text-blue-600 transition-colors truncate max-w-[120px]">{team?.name}</button>
             <ChevronRight size={10} />

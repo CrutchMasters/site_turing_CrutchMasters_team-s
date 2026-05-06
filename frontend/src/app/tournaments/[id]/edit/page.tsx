@@ -124,6 +124,8 @@ export default function TournamentEditPage() {
     const [initialRoundsData, setInitialRoundsData] = useState<Record<number, Partial<RoundData>>>({});
 
     const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+    const isOwner = !!tourney && tourney.created_by === user?.id;
+    const canEdit = isAdmin || isOwner;
 
     const API_URL =
     typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -132,8 +134,8 @@ export default function TournamentEditPage() {
 
     useEffect(() => {
         if (!authLoading && !user) router.push("/login");
-        if (!authLoading && user && !isAdmin) router.push("/tournaments");
-    }, [authLoading, user, isAdmin, router]);
+        if (!authLoading && user && !loading && !canEdit) router.push("/tournaments");
+    }, [authLoading, user, loading, canEdit, router]);
 
         const fetchTourney = useCallback(async () => {
             if (!id) return;
@@ -376,7 +378,7 @@ export default function TournamentEditPage() {
                 <div className="min-h-screen bg-(--bg) flex items-center justify-center flex-col gap-4">
                 <Trophy size={48} className="text-(--t2) opacity-30" />
                 <p className="font-black text-(--t1) uppercase">Турнір не знайдено</p>
-                <button onClick={() => router.push("/tournaments")} className="text-blue-600 text-sm font-bold">← До турнірів</button>
+                <button data-href="/tournaments" onClick={() => router.push("/tournaments")} className="text-blue-600 text-sm font-bold">← До турнірів</button>
                 </div>
             );
         }
@@ -416,9 +418,9 @@ export default function TournamentEditPage() {
                 <div className="flex-1 p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
 
                 <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2) flex-wrap">
-                <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">{t.nav?.home ?? "Головна"}</button>
+                <button data-href="/" onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">{t.nav?.home ?? "Головна"}</button>
                 <ChevronRight size={10} />
-                <button onClick={() => router.push("/tournaments")} className="hover:text-blue-600 transition-colors">Турніри</button>
+                <button data-href="/tournaments" onClick={() => router.push("/tournaments")} className="hover:text-blue-600 transition-colors">Турніри</button>
                 <ChevronRight size={10} />
                 <button onClick={() => router.push(`/tournaments/${id}`)} className="hover:text-blue-600 transition-colors truncate max-w-[120px]">{tourney.name}</button>
                 <ChevronRight size={10} />

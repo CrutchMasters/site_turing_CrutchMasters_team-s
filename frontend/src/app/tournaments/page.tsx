@@ -365,7 +365,7 @@ export default function TournamentsPage() {
 
                     {/* Breadcrumb */}
                     <nav className="fuIn flex items-center gap-2 text-[10px] font-black mb-4 sm:mb-6 uppercase tracking-widest text-(--t2)">
-                        <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">
+                        <button data-href="/" onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">
                             {t.nav?.home ?? "Home"}
                         </button>
                         <ChevronRight size={10} />
@@ -401,7 +401,7 @@ export default function TournamentsPage() {
                                 </div>
                                 {isAdmin && (
                                     <button
-                                        onClick={() => router.push("/register_tourney")}
+                                        data-href="/register_tourney" onClick={() => router.push("/register_tourney")}
                                         className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl sm:rounded-2xl shadow-lg shadow-blue-600/25 active:scale-95 transition-all group flex-shrink-0"
                                     >
                                         <Plus size={13} className="group-hover:rotate-90 transition-transform duration-300" />

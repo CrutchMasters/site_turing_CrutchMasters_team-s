@@ -175,7 +175,7 @@ const def = {
     admin: {
       manageTournaments: "Tournament Management",
       manageTournamentsDesc: "Create new tournaments, manage teams and configure competition settings",
-      createTournament: "+ Create Tournament",
+      createTournament: "Create Tournament",
       statActive: "Active Tournaments",
       statOpen: "Open Registrations",
       statTotal: "Total in Database",
@@ -450,7 +450,7 @@ const def = {
     admin: {
       manageTournaments: "Управление турнирами",
       manageTournamentsDesc: "Создавайте турниры, управляйте командами и настраивайте параметры соревнований",
-      createTournament: "+ Создать турнир",
+      createTournament: "Создать турнир",
       statActive: "Активные турниры",
       statOpen: "Открытые регистрации",
       statTotal: "Всего в базе",
@@ -722,7 +722,7 @@ const def = {
     admin: {
       manageTournaments: "Управління турнірами",
       manageTournamentsDesc: "Створюйте турніри, керуйте командами та налаштовуйте параметри змагань",
-      createTournament: "+ Створити турнір",
+      createTournament: "Створити турнір",
       statActive: "Активні турніри",
       statOpen: "Відкриті реєстрації",
       statTotal: "Всього у базі",
