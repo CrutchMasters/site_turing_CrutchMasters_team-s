@@ -352,10 +352,12 @@ export default function EditTeamPage() {
         <div className="fuIn flex items-center gap-4 mb-6">
         <button
         onClick={() => router.push(`/teams/${teamId}`)}
-        className="w-9 h-9 rounded-xl border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-500 hover:border-blue-500/40 transition-all flex-shrink-0"
+        className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-500 transition-colors flex-shrink-0"
         >
-        <ArrowLeft size={16} />
+        <ArrowLeft size={13} />
+        {t.editTeam.backToTeam ?? "Назад до команди"}
         </button>
+        <div className="w-px h-6 bg-(--brd) flex-shrink-0" />
         <div>
         <h1 className="text-xl sm:text-2xl font-black text-(--t1) tracking-tight uppercase">{t.editTeam.pageTitle}</h1>
         <p className="text-xs text-(--t2) font-medium mt-0.5">{team?.name}</p>
