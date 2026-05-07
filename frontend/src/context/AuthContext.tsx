@@ -57,7 +57,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser]           = useState<User | null>(null);
     const [token, setToken]         = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const timerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // БАГ ФИКС: initRanRef защищает от двойного запуска init() в React 18 StrictMode.
+    // В StrictMode компонент монтируется → размонтируется → монтируется снова.
+    // Без этого флага второй mount запускал init() заново, создавая новый cancelledRef
+    // и отменяя первый — спиннер висел пока второй init() не завершался.
+    // С initRanRef второй mount видит флаг и пропускает init().
+    const initRanRef = useRef(false);
 
     const clearTimer = () => {
         if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
@@ -85,8 +92,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         timerRef.current = setTimeout(() => { doRefresh().then(t => { if (t) scheduleRefresh(t); }); }, delay);
     }, [doRefresh]);
 
-    // БАГ ФИКС: добавили параметр cancelled чтобы refreshRole не обновлял
-    // state после размонтирования компонента (race condition).
     const refreshRole = useCallback(async (u: User, cancelled: { current: boolean }) => {
         try {
             const { data } = await supabaseClient.from("account")
@@ -94,8 +99,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .eq("id", u.id)
             .single();
 
-            // БАГ ФИКС: проверяем cancelled перед setState.
-            // Раньше refreshRole мог записать данные уже после logout/размонтирования.
             if (!data || cancelled.current) return;
 
             const fresh: User = {
@@ -126,19 +129,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [scheduleRefresh]);
 
     useEffect(() => {
-        // БАГ ФИКС: используем объект вместо примитива, чтобы передавать
-        // cancelled по ссылке в refreshRole (избегаем stale closure).
+        // БАГ ФИКС: пропускаем повторный запуск в StrictMode.
+        // При первом cleanup initRanRef НЕ сбрасывается — только cancelledRef.
+        // Это значит что второй mount (StrictMode) видит initRanRef.current = true
+        // и не запускает init() повторно, давая первому завершиться.
+        if (initRanRef.current) return;
+        initRanRef.current = true;
+
         const cancelledRef = { current: false };
 
         const init = async () => {
-            // БАГ ФИКС: весь init обёрнут в try/finally — isLoading
-            // гарантированно станет false даже при неожиданных ошибках.
             try {
                 const savedToken = localStorage.getItem("access_token");
                 const savedUser  = localStorage.getItem("user");
 
                 if (!savedToken || !savedUser) {
-                    return; // finally → setIsLoading(false)
+                    return;
                 }
 
                 let parsedUser: User;
@@ -146,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     parsedUser = JSON.parse(savedUser);
                 } catch {
                     clearStorage();
-                    return; // finally → setIsLoading(false)
+                    return;
                 }
 
                 let activeToken: string;
@@ -161,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             setUser(null);
                             setToken(null);
                         }
-                        return; // finally → setIsLoading(false)
+                        return;
                     }
                     activeToken = refreshed;
                 }
@@ -172,14 +178,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     scheduleRefresh(activeToken);
                 }
 
-                // refreshRole вызываем после setIsLoading(false) (в finally),
-                // передаём cancelledRef чтобы не писать в state после размонтирования.
-                // Специально не await — не блокируем загрузку страницы.
+                // fire-and-forget: не блокируем загрузку страницы
                 refreshRole(parsedUser, cancelledRef);
 
             } finally {
-                // БАГ ФИКС: isLoading становится false ВСЕГДА — даже если
-                // произошла любая неожиданная ошибка внутри init.
                 if (!cancelledRef.current) {
                     setIsLoading(false);
                 }
@@ -191,10 +193,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
             return () => {
+                // БАГ ФИКС: НЕ сбрасываем initRanRef здесь — только cancelledRef и таймер.
+                // Если сбросить initRanRef в cleanup, то при перемонтировании (StrictMode
+                // или hot-reload) init() запустится снова, создаст новый cancelledRef,
+                // а первый cancelledRef станет true — спиннер зависнет снова.
                 cancelledRef.current = true;
                 clearTimer();
             };
-    }, [doRefresh, scheduleRefresh, refreshRole]);
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // пустые зависимости: init() читает актуальные значения через refs и замыкания
 
     const login = useCallback((userData: User, accessToken: string, refreshToken?: string) => {
         setUser(userData);

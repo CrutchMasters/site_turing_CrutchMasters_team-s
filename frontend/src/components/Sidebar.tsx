@@ -76,7 +76,7 @@ export default function Sidebar({}: SidebarProps) {
     .catch(() => setBackendMessage("unavailable"));
   }, []);
 
-  // Fetch notifications when panel opens
+  // Fetch notifications when panel opens, then mark all as read
   useEffect(() => {
     if (!isNotificationsPanelOpen) return;
     setNotifLoading(true);
@@ -87,8 +87,19 @@ export default function Sidebar({}: SidebarProps) {
     .then(r => r.ok ? r.json() : Promise.reject())
     .then(data => {
       const list: Notification[] = data.notifications ?? data ?? [];
-      setNotifications(list);
-      setUnreadCount(list.filter(n => !n.read).length);
+      const hasUnread = list.some((n: Notification) => !n.read);
+      if (hasUnread) {
+        fetch(`${API_URL}/api/notifications/mark-read`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ all: true }),
+        }).catch(() => {});
+        setNotifications(list.map((n: Notification) => ({ ...n, read: true })));
+        setUnreadCount(0);
+      } else {
+        setNotifications(list);
+        setUnreadCount(0);
+      }
     })
     .catch(() => setNotifications([]))
     .finally(() => setNotifLoading(false));
@@ -106,11 +117,36 @@ export default function Sidebar({}: SidebarProps) {
     .catch(() => {});
   }, []);
 
+  const markAllNotificationsRead = async () => {
+    const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+    if (!token) return;
+    try {
+      await fetch(`${API_URL}/api/notifications/mark-read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ all: true }),
+      });
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+    } catch {}
+  };
+
   const handleNotificationsClick = () => {
     if (!collapsed) {
-      setIsNotificationsPanelOpen(p => !p);
+      const opening = !isNotificationsPanelOpen;
+      setIsNotificationsPanelOpen(opening);
       if (isSettingsPanelOpen) setIsSettingsPanelOpen(false);
+      if (opening && unreadCount > 0) {
+        markAllNotificationsRead();
+      }
     }
+  };
+
+  const handleProfileClick = () => {
+    if (unreadCount > 0) {
+      markAllNotificationsRead();
+    }
+    go("/profile");
   };
 
   const respondInvitation = async (notif: Notification, accept: boolean) => {
@@ -122,8 +158,8 @@ export default function Sidebar({}: SidebarProps) {
       const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
       // Вибираємо правильний endpoint залежно від типу запрошення
       const endpoint = notif.type === "jury_invitation"
-        ? `${API_URL}/api/jury-invitations/respond`
-        : `${API_URL}/api/invitations/respond`;
+      ? `${API_URL}/api/jury-invitations/respond`
+      : `${API_URL}/api/invitations/respond`;
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
