@@ -224,9 +224,9 @@ export default function PublicUserProfile() {
 
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
     <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-    <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Home</button>
+    <a href={"/"} onClick={(e) => { e.preventDefault(); router.push("/"); }} className="hover:text-blue-600 transition-colors">Home</a>
     <ChevronRight size={10} />
-    <button onClick={() => router.push("/search")} className="hover:text-blue-600 transition-colors">Search</button>
+    <a href={"/search"} onClick={(e) => { e.preventDefault(); router.push("/search"); }} className="hover:text-blue-600 transition-colors">Search</a>
     <ChevronRight size={10} />
     <span className="text-(--t1)">Profile</span>
     </nav>
@@ -330,7 +330,7 @@ export default function PublicUserProfile() {
           key={team.id}
           team={team}
           userId={profileUser.id}
-          onClick={() => router.push(`/teams/${team.id}`)}
+          href={`/teams/${team.id}`} onClick={(e) => { e.preventDefault(); router.push(`/teams/${team.id}`); }}
           />
         ))}
         </div>
@@ -384,13 +384,7 @@ export default function PublicUserProfile() {
           </section>
       )}
 
-      {!isSuperAdmin && !isOwnProfile && (
-        <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-6 sm:p-8">
-        <p className="text-[10px] font-bold text-(--t2) uppercase tracking-wider">
-        Only superadmin users can change roles
-        </p>
-        </section>
-      )}
+
       </div>
     ) : null}
     </div>

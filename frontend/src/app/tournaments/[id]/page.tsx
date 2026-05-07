@@ -248,22 +248,22 @@ export default function TournamentPage() {
             />
 
             <div className="p-6 max-w-3xl w-full mx-auto">
-            <button
-            onClick={() => router.push("/tournaments")}
+            <a
+            href="/tournaments" onClick={(e) => { e.preventDefault(); router.push("/tournaments"); }}
             className="mb-5 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors"
             >
             <ArrowLeft size={16} /> Назад до турнірів
-            </button>
+            </a>
 
             <div className="flex items-start justify-between gap-3 mb-4">
             <h1 className="text-2xl font-black text-(--t1)">{tournament.name}</h1>
-            {isAdmin && (
-                <button
-                onClick={() => router.push(`/tournaments/${id}/edit`)}
+            {(isAdmin || tournament.created_by === user?.id) && (
+                <a
+                href={`/tournaments/${id}/edit`} onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${id}/edit`); }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-(--brd) text-(--t2) hover:text-blue-600 hover:border-blue-600/40 text-xs font-bold transition-all"
                 >
                 <Edit size={14} /> Редагувати
-                </button>
+                </a>
             )}
             </div>
 
@@ -416,9 +416,8 @@ export default function TournamentPage() {
                     const isRegistered = !!myTeamInTournament;
 
                     return (
-                        <div
-                        key={round.id}
-                        onClick={() => router.push(`/rounds/${round.id}`)}
+                        <a
+                        key={round.id} href={`/rounds/${round.id}`} onClick={(e) => { e.preventDefault(); router.push(`/rounds/${round.id}`); }}
                         className={`flex items-center gap-4 p-4 border rounded-2xl cursor-pointer transition-all group bg-(--card) hover:bg-(--card) ${
                             isActive
                             ? 'border-green-600/50 hover:border-green-600/70'
@@ -458,7 +457,7 @@ export default function TournamentPage() {
                         </div>
 
                         <ChevronRight size={16} className="text-(--t2) group-hover:text-blue-600 transition-colors flex-shrink-0" />
-                        </div>
+                        </a>
                     );
                 })}
                 </div>
@@ -476,9 +475,8 @@ export default function TournamentPage() {
             ) : (
                 <div className="grid gap-2">
                 {tournament.teams.map((team, idx) => (
-                    <div
-                    key={team.id}
-                    onClick={() => router.push(`/teams/${team.id}`)}
+                    <a
+                    key={team.id} href={`/teams/${team.id}`} onClick={(e) => { e.preventDefault(); router.push(`/teams/${team.id}`); }}
                     className="flex items-center gap-3 p-4 border border-(--brd) rounded-2xl bg-(--card) hover:border-blue-600/40 cursor-pointer transition-all group"
                     >
                     <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0">
@@ -493,7 +491,7 @@ export default function TournamentPage() {
                         <p className="text-[11px] text-(--t2) font-bold truncate">{team.city_school_org}</p>
                     )}
                     </div>
-                    </div>
+                    </a>
                 ))}
                 </div>
             )}

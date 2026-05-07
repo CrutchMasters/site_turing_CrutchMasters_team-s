@@ -339,11 +339,11 @@ export default function EditTeamPage() {
 
         {/* Breadcrumb */}
         <nav className="fuIn flex items-center gap-2 text-[11px] font-bold mb-5 text-(--t2) uppercase tracking-wider">
-        <button onClick={() => router.push("/dashboard")} className="hover:text-blue-500 transition-colors">{t.editTeam.breadcrumbHome}</button>
+        <a href={"/dashboard"} onClick={(e) => { e.preventDefault(); router.push("/dashboard"); }} className="hover:text-blue-500 transition-colors">{t.editTeam.breadcrumbHome}</a>
         <ChevronRight size={10} />
-        <button onClick={() => router.push("/teams")} className="hover:text-blue-500 transition-colors">{t.editTeam.breadcrumbTeams}</button>
+        <a href={"/teams"} onClick={(e) => { e.preventDefault(); router.push("/teams"); }} className="hover:text-blue-500 transition-colors">{t.editTeam.breadcrumbTeams}</a>
         <ChevronRight size={10} />
-        <button onClick={() => router.push(`/teams/${teamId}`)} className="hover:text-blue-500 transition-colors truncate max-w-[120px]">{team?.name}</button>
+        <a href={`/teams/${teamId}`} onClick={(e) => { e.preventDefault(); router.push(`/teams/${teamId}`); }} className="hover:text-blue-500 transition-colors truncate max-w-[120px]">{team?.name}</a>
         <ChevronRight size={10} />
         <span className="text-(--t1)">{t.editTeam.breadcrumbEdit}</span>
         </nav>
@@ -351,7 +351,7 @@ export default function EditTeamPage() {
         {/* Back + Title row */}
         <div className="fuIn flex items-center gap-4 mb-6">
         <button
-        onClick={() => router.push(`/teams/${teamId}`)}
+        href={`/teams/${teamId}`} onClick={(e) => { e.preventDefault(); router.push(`/teams/${teamId}`); }}
         className="w-9 h-9 rounded-xl border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-500 hover:border-blue-500/40 transition-all flex-shrink-0"
         >
         <ArrowLeft size={16} />

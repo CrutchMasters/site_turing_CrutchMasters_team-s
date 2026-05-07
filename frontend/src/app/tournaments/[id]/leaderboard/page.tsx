@@ -153,7 +153,7 @@ export default function LeaderboardPage() {
                 <div className="p-6 max-w-5xl w-full mx-auto">
                     {/* back */}
                     <button
-                        onClick={() => router.push(`/tournaments/${id}`)}
+                        href={`/tournaments/${id}`} onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${id}`); }}
                         className="mb-6 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors group"
                     >
                         <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
@@ -265,20 +265,25 @@ export default function LeaderboardPage() {
                                             return (
                                                 <tr
                                                     key={entry.team_id}
-                                                    onClick={() => router.push(`/teams/${entry.team_id}`)}
-                                                    className={`border-b border-(--brd) last:border-0 cursor-pointer transition-colors group
+                                                    className={`border-b border-(--brd) last:border-0 cursor-pointer transition-colors group relative
                                                         ${isFirst ? "bg-yellow-500/5 hover:bg-yellow-500/10" : "hover:bg-(--bg)"}
                                                     `}
                                                 >
                                                     {/* place */}
-                                                    <td className="px-4 py-4 w-12">
-                                                        <div className="flex items-center justify-center w-8 h-8">
+                                                    <td className="px-4 py-4 w-12 relative">
+                                                        <a
+                                                            href={`/teams/${entry.team_id}`}
+                                                            onClick={(e) => { e.preventDefault(); router.push(`/teams/${entry.team_id}`); }}
+                                                            className="absolute inset-0"
+                                                        />
+                                                        <div className="flex items-center justify-center w-8 h-8 relative z-10">
                                                             <PlaceIcon place={entry.place} />
                                                         </div>
                                                     </td>
 
                                                     {/* team info */}
-                                                    <td className="px-4 py-4">
+                                                    <td className="px-4 py-4 relative">
+                                                        <a href={`/teams/${entry.team_id}`} onClick={(e) => { e.preventDefault(); router.push(`/teams/${entry.team_id}`); }} className="absolute inset-0" tabIndex={-1} aria-hidden />
                                                         <div className="flex flex-col gap-0.5">
                                                             <span className={`font-black text-sm group-hover:text-blue-600 transition-colors ${isTop3 ? placeColors[entry.place] || "text-(--t1)" : "text-(--t1)"}`}>
                                                                 {entry.team_name}
@@ -299,21 +304,23 @@ export default function LeaderboardPage() {
                                                     {rounds.map(r => {
                                                         const score = entry.round_scores[r.id];
                                                         return (
-                                                            <td key={r.id} className="px-3 py-4 text-center">
-                                                                {score !== null && score !== undefined ? (
+                                                            <td key={r.id} className="px-3 py-4 text-center relative">
+                                                                <a href={`/teams/${entry.team_id}`} onClick={(e) => { e.preventDefault(); router.push(`/teams/${entry.team_id}`); }} className="absolute inset-0" tabIndex={-1} aria-hidden />
+                                                                <span className="relative z-10">{score !== null && score !== undefined ? (
                                                                     <span className="font-black text-sm text-(--t1)">
                                                                         {score.toFixed(1)}
                                                                     </span>
                                                                 ) : (
                                                                     <span className="text-(--t2) text-xs font-bold">—</span>
-                                                                )}
+                                                                )}</span>
                                                             </td>
                                                         );
                                                     })}
 
                                                     {/* total */}
-                                                    <td className="px-4 py-4 text-right">
-                                                        <span className={`font-black text-base ${isFirst ? "text-yellow-500" : isTop3 ? placeColors[entry.place] : "text-(--t1)"}`}>
+                                                    <td className="px-4 py-4 text-right relative">
+                                                        <a href={`/teams/${entry.team_id}`} onClick={(e) => { e.preventDefault(); router.push(`/teams/${entry.team_id}`); }} className="absolute inset-0" tabIndex={-1} aria-hidden />
+                                                        <span className={`relative z-10 font-black text-base ${isFirst ? "text-yellow-500" : isTop3 ? placeColors[entry.place] : "text-(--t1)"}`}>
                                                             {entry.total_score.toFixed(1)}
                                                         </span>
                                                     </td>

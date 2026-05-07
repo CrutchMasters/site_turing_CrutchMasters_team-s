@@ -186,7 +186,7 @@ export default function NotificationsPage() {
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
         <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-        <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
+        <a href={"/"} onClick={(e) => { e.preventDefault(); router.push("/"); }} className="hover:text-blue-600 transition-colors">Головна</a>
         <ChevronRight size={10} />
         <span className="text-(--t1)">Сповіщення</span>
         </nav>

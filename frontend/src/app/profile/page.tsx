@@ -711,7 +711,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
     ) : (
       <div className="space-y-2">
       {juryTournaments.map(t => (
-        <button key={t.id} onClick={() => router.push(`/tournaments/${t.id}`)}
+        <a href={`/tournaments/${t.id}`} key={t.id} onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${t.id}`); }}
         className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group text-left">
         <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 flex-shrink-0"><Trophy size={15} /></div>
         <div className="flex-1 min-w-0">
@@ -724,7 +724,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
         {t.start_at && <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">Start: {new Date(t.start_at).toLocaleDateString("en-US")}</p>}
         </div>
         <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-        </button>
+        </a>
       ))}
       </div>
     )}
@@ -740,7 +740,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
       </div>
       <div className="p-5 sm:p-7 space-y-2">
       {juryRounds.map(r => (
-        <button key={r.id} onClick={() => router.push(`/jury/rounds/${r.id}/evaluate`)}
+        <a href={`/jury/rounds/${r.id}/evaluate`} key={r.id} onClick={(e) => { e.preventDefault(); router.push(`/jury/rounds/${r.id}/evaluate`); }}
         className="w-full flex items-center gap-3 p-3 rounded-xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group text-left">
         <div className="w-7 h-7 rounded-lg bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-xs flex-shrink-0">{r.number}</div>
         <div className="flex-1 min-w-0">
@@ -749,7 +749,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
         </div>
         {r.status && <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${roundStatusStyle[r.status] ?? roundStatusStyle.pending}`}>{r.status === "active" ? "Active" : r.status === "finished" ? "Finished" : "Pending"}</span>}
         <ExternalLink size={12} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-        </button>
+        </a>
       ))}
       </div>
       </section>
@@ -764,7 +764,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
       </div>
       <div className="p-5 sm:p-7 space-y-2">
       {jurySubmissions.map(s => (
-        <button key={s.id} onClick={() => router.push(`/jury/rounds/${s.round_id}/evaluate`)}
+        <a href={`/jury/rounds/${s.round_id}/evaluate`} key={s.id} onClick={(e) => { e.preventDefault(); router.push(`/jury/rounds/${s.round_id}/evaluate`); }}
         className="w-full flex items-center gap-3 p-3 rounded-xl border border-(--brd) bg-(--bg) hover:border-purple-500/40 hover:bg-purple-500/5 transition-all group text-left">
         <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-500 flex-shrink-0"><FileText size={12} /></div>
         <div className="flex-1 min-w-0">
@@ -775,7 +775,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
         {s.status === "submitted" ? "Submitted" : s.status}
         </span>
         <ExternalLink size={12} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-        </button>
+        </a>
       ))}
       </div>
       </section>
@@ -911,7 +911,7 @@ export default function ProfilePage() {
     <div className={`flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10 ${allReady ? "page-ready" : ""}`}>
 
     <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2)">
-    <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Home</button>
+    <a href={"/"} onClick={(e) => { e.preventDefault(); router.push("/"); }} className="hover:text-blue-600 transition-colors">Home</a>
     <ChevronRight size={10} /><span className="text-(--t1)">Profile</span>
     </nav>
     <button onClick={() => router.back()} className="mb-5 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
@@ -1025,7 +1025,7 @@ export default function ProfilePage() {
           <div className="text-center py-5">
           <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2"><Users className="w-5 h-5 text-(--t2) opacity-40" /></div>
           <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Not a member of any team</p>
-          <button onClick={() => router.push("/register_team")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">Create a team →</button>
+          <a href={"/register_team"} onClick={(e) => { e.preventDefault(); router.push("/register_team"); }} className="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">Create a team →</a>
           </div>
         ) : (
           <div className="space-y-2">
@@ -1071,7 +1071,7 @@ export default function ProfilePage() {
           <div className="text-center py-5">
           <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2"><Trophy className="w-5 h-5 text-(--t2) opacity-40" /></div>
           <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Not participating in any tournaments</p>
-          <button onClick={() => router.push("/tournaments")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-amber-500 hover:underline">View tournaments →</button>
+          <a href={"/tournaments"} onClick={(e) => { e.preventDefault(); router.push("/tournaments"); }} className="mt-3 text-[10px] font-black uppercase tracking-widest text-amber-500 hover:underline">View tournaments →</a>
           </div>
         ) : (
           <div className="space-y-2">
