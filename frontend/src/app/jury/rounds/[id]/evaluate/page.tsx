@@ -31,6 +31,7 @@ interface SubmissionWork {
     team_id: string;
     team_name: string;
     team_org?: string;
+    team_avatar_url?: string;
     round_id: string;
     submitted_at: string;
     github_url?: string;
@@ -193,7 +194,13 @@ function SubmissionCard({
                 : "border-(--brd) bg-(--card) hover:border-blue-600/40 hover:bg-(--bg)"
             }`}
             >
-            <div className="flex items-start justify-between gap-2 mb-2">
+            <div className="flex items-start gap-2 mb-2">
+            <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0 mt-0.5">
+            {work.team_avatar_url
+                ? <img src={work.team_avatar_url} alt={work.team_name} className="w-full h-full object-cover" />
+                : <div className="w-full h-full bg-blue-600/10 text-blue-600 flex items-center justify-center text-xs font-black">{work.team_name.charAt(0).toUpperCase()}</div>
+            }
+            </div>
             <div className="flex-1 min-w-0">
             <p className={`font-black text-sm truncate ${isActive ? "text-blue-600" : "text-(--t1) group-hover:text-blue-600 transition-colors"}`}>
             {work.team_name}
@@ -349,6 +356,7 @@ export default function JuryEvaluationPage() {
                     team_id: s.team_id,
                     team_name: s.team_name ?? "Команда",
                     team_org: s.team_org,
+                    team_avatar_url: s.team_avatar_url ?? undefined,
                     round_id: s.round_id,
                     submitted_at: s.submitted_at,
                     github_url: s.github_url,
@@ -360,6 +368,20 @@ export default function JuryEvaluationPage() {
                     total_score,
                 };
             });
+
+            // Fetch team avatars from Supabase
+            const teamIds = [...new Set(workList.map(w => w.team_id).filter(Boolean))];
+            if (teamIds.length > 0) {
+                const { data: teamsData } = await supabase
+                .from("teams")
+                .select("id, avatar_url")
+                .in("id", teamIds);
+                if (teamsData) {
+                    const avatarMap: Record<string, string> = {};
+                    teamsData.forEach((t: any) => { if (t.avatar_url) avatarMap[t.id] = t.avatar_url; });
+                    workList.forEach(w => { if (avatarMap[w.team_id]) w.team_avatar_url = avatarMap[w.team_id]; });
+                }
+            }
 
             setWorks(workList);
             setStats({
@@ -685,8 +707,11 @@ export default function JuryEvaluationPage() {
                         {/* Work header */}
                         <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm p-5 sm:p-6">
                         <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-xl flex-shrink-0">
-                        {activeWork.team_name.charAt(0).toUpperCase()}
+                        <div className="w-12 h-12 rounded-2xl overflow-hidden flex-shrink-0">
+                        {activeWork.team_avatar_url
+                            ? <img src={activeWork.team_avatar_url} alt={activeWork.team_name} className="w-full h-full object-cover" />
+                            : <div className="w-full h-full bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-xl">{activeWork.team_name.charAt(0).toUpperCase()}</div>
+                        }
                         </div>
                         <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-3 flex-wrap">

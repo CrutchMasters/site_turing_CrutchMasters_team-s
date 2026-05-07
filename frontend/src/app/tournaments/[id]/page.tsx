@@ -33,6 +33,7 @@ interface Team {
     city_school_org?: string;
     captain_id?: string;
     members_ids?: string[];  // Bug 7 fix
+    avatar_url?: string;
 }
 
 interface Tournament {
@@ -91,7 +92,7 @@ export default function TournamentPage() {
                 // Fetch registered teams via teams.tournament_id
                 const { data: teamsData, error: teamsErr } = await supabase
                 .from("teams")
-                .select("id, name, city_school_org, captain_id, members_ids")
+                .select("id, name, city_school_org, captain_id, members_ids, avatar_url")
                 .eq("tournament_id", id);
                 if (teamsErr) throw teamsErr;
 
@@ -480,8 +481,11 @@ export default function TournamentPage() {
                     onClick={() => router.push(`/teams/${team.id}`)}
                     className="flex items-center gap-3 p-4 border border-(--brd) rounded-2xl bg-(--card) hover:border-blue-600/40 cursor-pointer transition-all group"
                     >
-                    <div className="w-8 h-8 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center text-xs font-black flex-shrink-0">
-                    {idx + 1}
+                    <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0">
+                    {team.avatar_url
+                        ? <img src={team.avatar_url} alt={team.name} className="w-full h-full object-cover" />
+                        : <div className="w-full h-full bg-blue-600/10 text-blue-600 flex items-center justify-center text-xs font-black">{idx + 1}</div>
+                    }
                     </div>
                     <div className="flex-1 min-w-0">
                     <p className="font-black text-sm text-(--t1) group-hover:text-blue-600 transition-colors truncate">{team.name}</p>
