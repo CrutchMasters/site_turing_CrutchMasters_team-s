@@ -77,199 +77,236 @@ export default function EditTeamPage() {
     const [telegramUrl, setTelegramUrl] = useState("");
     const [discordUrl, setDiscordUrl] = useState("");
 
-    const [teamAvatarUrl, setTeamAvatarUrl] = useState<string | null>(null);
-    const [showAvatarModal, setShowAvatarModal] = useState(false);
+    // Draft key unique per team
+    const draftKey = teamId ? `team_edit_draft_${teamId}` : null;
 
-    const [memberSearch, setMemberSearch] = useState("");
-    const [searchResults, setSearchResults] = useState<TeamMember[]>([]);
-    const [isSearching, setIsSearching] = useState(false);
-    const [removingId, setRemovingId] = useState<string | null>(null);
-    const [addingId, setAddingId] = useState<string | null>(null);
-    const [confirmRemove, setConfirmRemove] = useState<TeamMember | null>(null);
-    const [inviteSent, setInviteSent] = useState<string | null>(null);
+    const saveDraft = () => {
+        if (!draftKey) return;
+        sessionStorage.setItem(draftKey, JSON.stringify({ name, citySchoolOrg, telegramUrl, discordUrl }));
+    };
 
-    useEffect(() => {
-        if (!authLoading && !user) router.push("/login");
-    }, [authLoading, user, router]);
+    const clearDraft = () => {
+        if (draftKey) sessionStorage.removeItem(draftKey);
+    };
+
+        const [teamAvatarUrl, setTeamAvatarUrl] = useState<string | null>(null);
+        const [showAvatarModal, setShowAvatarModal] = useState(false);
+
+        const [memberSearch, setMemberSearch] = useState("");
+        const [searchResults, setSearchResults] = useState<TeamMember[]>([]);
+        const [isSearching, setIsSearching] = useState(false);
+        const [removingId, setRemovingId] = useState<string | null>(null);
+        const [addingId, setAddingId] = useState<string | null>(null);
+        const [confirmRemove, setConfirmRemove] = useState<TeamMember | null>(null);
+        const [inviteSent, setInviteSent] = useState<string | null>(null);
 
         useEffect(() => {
-            if (!user || !teamId) return;
-            const fetchTeam = async () => {
-                setIsLoading(true);
+            if (!authLoading && !user) router.push("/login");
+        }, [authLoading, user, router]);
+
+            useEffect(() => {
+                if (!user || !teamId) return;
+                const fetchTeam = async () => {
+                    setIsLoading(true);
+                    try {
+                        // ── Fetch team ──────────────────────────────────────────────
+                        const { data: teamData, error: teamErr } = await supabase
+                        .from("teams")
+                        .select("id, name, city_school_org, captain_id, members_ids, telegram_url, discord_url, created_at, avatar_url")
+                        .eq("id", teamId)
+                        .single(); // teams must exist — .single() is correct here
+
+                        if (teamErr || !teamData) throw new Error(t.editTeam.errLoadTeam);
+
+                        if (teamData.captain_id !== user.id) {
+                            router.push(`/teams/${teamId}`);
+                            return;
+                        }
+
+                        setTeam(teamData);
+                        setTeamAvatarUrl(teamData.avatar_url ?? null);
+
+                        // Restore draft if user navigated back from member profile
+                        const savedDraft = teamId ? sessionStorage.getItem(`team_edit_draft_${teamId}`) : null;
+                        if (savedDraft) {
+                            try {
+                                const draft = JSON.parse(savedDraft);
+                                setName(draft.name ?? teamData.name ?? "");
+                                setCitySchoolOrg(draft.citySchoolOrg ?? teamData.city_school_org ?? "");
+                                setTelegramUrl(draft.telegramUrl ?? teamData.telegram_url ?? "");
+                                setDiscordUrl(draft.discordUrl ?? teamData.discord_url ?? "");
+                            } catch {
+                                setName(teamData.name ?? "");
+                                setCitySchoolOrg(teamData.city_school_org ?? "");
+                                setTelegramUrl(teamData.telegram_url ?? "");
+                                setDiscordUrl(teamData.discord_url ?? "");
+                            }
+                        } else {
+                            setName(teamData.name ?? "");
+                            setCitySchoolOrg(teamData.city_school_org ?? "");
+                            setTelegramUrl(teamData.telegram_url ?? "");
+                            setDiscordUrl(teamData.discord_url ?? "");
+                        }
+
+                        // ── Fetch members ───────────────────────────────────────────
+                        // Uses .in() — safe, never throws PGRST116 even if some rows missing
+                        const allIds: string[] = [];
+                        if (teamData.captain_id) allIds.push(teamData.captain_id);
+                        if (teamData.members_ids?.length) allIds.push(...teamData.members_ids);
+                        const uniqueIds = [...new Set(allIds)];
+
+                        if (uniqueIds.length > 0) {
+                            const { data: accounts, error: accountsErr } = await supabase
+                            .from("account")
+                            .select("id, username, login, email, role, avatar_url, status")
+                            .in("id", uniqueIds);
+                            // .in() never throws 406 — missing rows are just absent from results.
+                            // We intentionally ignore accountsErr here: if some accounts are missing
+                            // (PGRST116 source), we still render the rest of the team gracefully.
+                            if (accountsErr) {
+                                console.warn("[EditTeamPage] Some account rows missing:", accountsErr.message);
+                            }
+
+                            const accountMap: Record<string, TeamMember> = {};
+                            (accounts ?? []).forEach(a => { accountMap[a.id] = a; });
+
+                            if (teamData.captain_id && accountMap[teamData.captain_id]) {
+                                setCaptain(accountMap[teamData.captain_id]);
+                            }
+                            const memberList = (teamData.members_ids ?? [])
+                            .map((id: string) => accountMap[id])
+                            .filter(Boolean);
+                            setMembers(memberList);
+                        }
+                    } catch (e: any) {
+                        setError(e.message ?? t.editTeam.errLoadFailed);
+                    } finally {
+                        setIsLoading(false);
+                    }
+                };
+                fetchTeam();
+            }, [user, teamId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+            const handleSearch = useCallback(async (forceQuery?: string) => {
+                const q = (forceQuery ?? memberSearch).trim();
+                if (!q) { setSearchResults([]); return; }
+                setIsSearching(true);
                 try {
-                    // ── Fetch team ──────────────────────────────────────────────
-                    const { data: teamData, error: teamErr } = await supabase
-                    .from("teams")
-                    .select("id, name, city_school_org, captain_id, members_ids, telegram_url, discord_url, created_at, avatar_url")
-                    .eq("id", teamId)
-                    .single(); // teams must exist — .single() is correct here
-
-                    if (teamErr || !teamData) throw new Error(t.editTeam.errLoadTeam);
-
-                    if (teamData.captain_id !== user.id) {
-                        router.push(`/teams/${teamId}`);
-                        return;
-                    }
-
-                    setTeam(teamData);
-                    setTeamAvatarUrl(teamData.avatar_url ?? null);
-                    setName(teamData.name ?? "");
-                    setCitySchoolOrg(teamData.city_school_org ?? "");
-                    setTelegramUrl(teamData.telegram_url ?? "");
-                    setDiscordUrl(teamData.discord_url ?? "");
-
-                    // ── Fetch members ───────────────────────────────────────────
-                    // Uses .in() — safe, never throws PGRST116 even if some rows missing
-                    const allIds: string[] = [];
-                    if (teamData.captain_id) allIds.push(teamData.captain_id);
-                    if (teamData.members_ids?.length) allIds.push(...teamData.members_ids);
-                    const uniqueIds = [...new Set(allIds)];
-
-                    if (uniqueIds.length > 0) {
-                        const { data: accounts, error: accountsErr } = await supabase
-                        .from("account")
-                        .select("id, username, login, email, role, avatar_url, status")
-                        .in("id", uniqueIds);
-                        // .in() never throws 406 — missing rows are just absent from results.
-                        // We intentionally ignore accountsErr here: if some accounts are missing
-                        // (PGRST116 source), we still render the rest of the team gracefully.
-                        if (accountsErr) {
-                            console.warn("[EditTeamPage] Some account rows missing:", accountsErr.message);
-                        }
-
-                        const accountMap: Record<string, TeamMember> = {};
-                        (accounts ?? []).forEach(a => { accountMap[a.id] = a; });
-
-                        if (teamData.captain_id && accountMap[teamData.captain_id]) {
-                            setCaptain(accountMap[teamData.captain_id]);
-                        }
-                        const memberList = (teamData.members_ids ?? [])
-                        .map((id: string) => accountMap[id])
-                        .filter(Boolean);
-                        setMembers(memberList);
-                    }
-                } catch (e: any) {
-                    setError(e.message ?? t.editTeam.errLoadFailed);
+                    const token = localStorage.getItem("access_token");
+                    const res = await fetch(
+                        `${API_URL}/api/users/search?q=${encodeURIComponent(q)}`,
+                                            { headers: { Authorization: `Bearer ${token}` } }
+                    );
+                    if (!res.ok) throw new Error("Search failed");
+                    const json = await res.json();
+                    const currentIds = new Set([team?.captain_id, ...(team?.members_ids ?? [])]);
+                    setSearchResults((json.users ?? []).filter((u: TeamMember) => !currentIds.has(u.id)));
+                } catch (e) {
+                    console.error(e);
+                    setSearchResults([]);
                 } finally {
-                    setIsLoading(false);
+                    setIsSearching(false);
+                }
+            }, [memberSearch, team]);
+
+            useEffect(() => {
+                if (!memberSearch.trim()) { setSearchResults([]); return; }
+                const timer = setTimeout(() => { handleSearch(memberSearch); }, 400);
+                return () => clearTimeout(timer);
+            }, [memberSearch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+            const handleAddMember = async (member: TeamMember) => {
+                if (!team) return;
+                setAddingId(member.id);
+                try {
+                    const token = localStorage.getItem("access_token");
+                    const res = await fetch(`${API_URL}/api/invitations/send`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({ team_id: team.id, invitee_id: member.id }),
+                    });
+                    if (!res.ok) {
+                        const json = await res.json();
+                        throw new Error(json.detail ?? t.editTeam.errAddMember);
+                    }
+                    setInviteSent(member.id);
+                    setSearchResults(prev => prev.filter(u => u.id !== member.id));
+                } catch (e: any) {
+                    setError(e.message ?? t.editTeam.errAddMember);
+                } finally {
+                    setAddingId(null);
                 }
             };
-            fetchTeam();
-        }, [user, teamId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-        const handleSearch = useCallback(async (forceQuery?: string) => {
-            const q = (forceQuery ?? memberSearch).trim();
-            if (!q) { setSearchResults([]); return; }
-            setIsSearching(true);
-            try {
-                const token = localStorage.getItem("access_token");
-                const res = await fetch(
-                    `${API_URL}/api/users/search?q=${encodeURIComponent(q)}`,
-                                        { headers: { Authorization: `Bearer ${token}` } }
-                );
-                if (!res.ok) throw new Error("Search failed");
-                const json = await res.json();
-                const currentIds = new Set([team?.captain_id, ...(team?.members_ids ?? [])]);
-                setSearchResults((json.users ?? []).filter((u: TeamMember) => !currentIds.has(u.id)));
-            } catch (e) {
-                console.error(e);
-                setSearchResults([]);
-            } finally {
-                setIsSearching(false);
-            }
-        }, [memberSearch, team]);
-
-        useEffect(() => {
-            if (!memberSearch.trim()) { setSearchResults([]); return; }
-            const timer = setTimeout(() => { handleSearch(memberSearch); }, 400);
-            return () => clearTimeout(timer);
-        }, [memberSearch]); // eslint-disable-line react-hooks/exhaustive-deps
-
-        const handleAddMember = async (member: TeamMember) => {
-            if (!team) return;
-            setAddingId(member.id);
-            try {
-                const token = localStorage.getItem("access_token");
-                const res = await fetch(`${API_URL}/api/invitations/send`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({ team_id: team.id, invitee_id: member.id }),
-                });
-                if (!res.ok) {
-                    const json = await res.json();
-                    throw new Error(json.detail ?? t.editTeam.errAddMember);
+            const handleRemoveMember = useCallback(async (member: TeamMember) => {
+                if (!team) return;
+                setRemovingId(member.id);
+                try {
+                    const { data, error } = await supabase.rpc("remove_team_member", {
+                        p_team_id: team.id,
+                        p_member_id: member.id,
+                    });
+                    if (error) throw error;
+                    if (data?.error) throw new Error(data.error);
+                    const newIds: string[] = (data.members_ids ?? []);
+                    setTeam(prev => prev ? { ...prev, members_ids: newIds } : prev);
+                    setMembers(prev => prev.filter(m => m.id !== member.id));
+                    setConfirmRemove(null);
+                } catch (e: any) {
+                    setError(e.message ?? t.editTeam.errRemoveMember);
+                } finally {
+                    setRemovingId(null);
                 }
-                setInviteSent(member.id);
-                setSearchResults(prev => prev.filter(u => u.id !== member.id));
-            } catch (e: any) {
-                setError(e.message ?? t.editTeam.errAddMember);
-            } finally {
-                setAddingId(null);
+            }, [team, t]);
+
+            const handleSave = async () => {
+                if (!team || !name.trim()) return;
+                setIsSaving(true);
+                setError(null);
+                try {
+                    const { error } = await supabase
+                    .from("teams")
+                    .update({
+                        name: name.trim(),
+                            city_school_org: citySchoolOrg.trim() || null,
+                            telegram_url: telegramUrl.trim() || null,
+                            discord_url: discordUrl.trim() || null,
+                    })
+                    .eq("id", team.id);
+                    if (error) throw error;
+                    clearDraft();
+                    setSaveSuccess(true);
+                    setTimeout(() => setSaveSuccess(false), 2500);
+                } catch (e: any) {
+                    setError(e.message ?? t.editTeam.errSave);
+                } finally {
+                    setIsSaving(false);
+                }
+            };
+
+            if (authLoading || isLoading) {
+                return (
+                    <div className="min-h-screen bg-(--bg) flex items-center justify-center">
+                    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                );
             }
-        };
 
-        const handleRemoveMember = useCallback(async (member: TeamMember) => {
-            if (!team) return;
-            setRemovingId(member.id);
-            try {
-                const { data, error } = await supabase.rpc("remove_team_member", {
-                    p_team_id: team.id,
-                    p_member_id: member.id,
-                });
-                if (error) throw error;
-                if (data?.error) throw new Error(data.error);
-                const newIds: string[] = (data.members_ids ?? []);
-                setTeam(prev => prev ? { ...prev, members_ids: newIds } : prev);
-                setMembers(prev => prev.filter(m => m.id !== member.id));
-                setConfirmRemove(null);
-            } catch (e: any) {
-                setError(e.message ?? t.editTeam.errRemoveMember);
-            } finally {
-                setRemovingId(null);
-            }
-        }, [team, t]);
+            if (!user) return null;
 
-        const handleSave = async () => {
-            if (!team || !name.trim()) return;
-            setIsSaving(true);
-            setError(null);
-            try {
-                const { error } = await supabase
-                .from("teams")
-                .update({
-                    name: name.trim(),
-                        city_school_org: citySchoolOrg.trim() || null,
-                        telegram_url: telegramUrl.trim() || null,
-                        discord_url: discordUrl.trim() || null,
-                })
-                .eq("id", team.id);
-                if (error) throw error;
-                setSaveSuccess(true);
-                setTimeout(() => setSaveSuccess(false), 2500);
-            } catch (e: any) {
-                setError(e.message ?? t.editTeam.errSave);
-            } finally {
-                setIsSaving(false);
-            }
-        };
-
-        if (authLoading || isLoading) {
-            return (
-                <div className="min-h-screen bg-(--bg) flex items-center justify-center">
-                <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                </div>
-            );
-        }
-
-        if (!user) return null;
-
-        const inputClass = "w-full px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm transition-all placeholder:text-(--t2)/50 font-medium";
+            const inputClass = "w-full px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm transition-all placeholder:text-(--t2)/50 font-medium";
 
     return (
         <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
+        {/* Hidden element to pass current form state to MemberRowDisplay on click */}
+        <div
+        id="team-edit-draft-data"
+        data-draft={JSON.stringify({ name, citySchoolOrg, telegramUrl, discordUrl })}
+        style={{ display: "none" }}
+        />
         <style dangerouslySetInnerHTML={{
             __html: `
             @keyframes fadeUp   { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
@@ -695,10 +732,30 @@ export default function EditTeamPage() {
 }
 
 function MemberRowDisplay({ member, isCaptain }: { member: TeamMember; isCaptain?: boolean }) {
+    const router = useRouter();
     const letter = (member.username || member.login || "?").charAt(0).toUpperCase();
     return (
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-        <div className="w-9 h-9 rounded-full bg-blue-500/10 border-2 border-(--brd) flex items-center justify-center font-black text-blue-500 text-sm flex-shrink-0 overflow-hidden">
+        <button
+        type="button"
+        onClick={() => {
+            if (typeof window !== "undefined" && member.id) {
+                // Get teamId from URL path
+                const pathParts = window.location.pathname.split("/");
+                const tid = pathParts[pathParts.indexOf("teams") + 1];
+                if (tid) {
+                    // We need to save current form state — passed via data attribute
+                    const draftEl = document.getElementById("team-edit-draft-data");
+                    if (draftEl) {
+                        sessionStorage.setItem(`team_edit_draft_${tid}`, draftEl.dataset.draft || "{}");
+                    }
+                }
+            }
+            router.push(`/user/${member.id}`);
+        }}
+        className="flex items-center gap-3 flex-1 min-w-0 text-left group hover:opacity-80 transition-opacity cursor-pointer"
+        title={`Перейти до профілю ${member.username}`}
+        >
+        <div className="w-9 h-9 rounded-full bg-blue-500/10 border-2 border-(--brd) group-hover:border-blue-500/40 transition-colors flex items-center justify-center font-black text-blue-500 text-sm flex-shrink-0 overflow-hidden">
         {member.avatar_url
             ? <img src={member.avatar_url} alt="avatar" className="w-full h-full object-cover" />
             : letter
@@ -706,11 +763,11 @@ function MemberRowDisplay({ member, isCaptain }: { member: TeamMember; isCaptain
         </div>
         <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-        <p className="font-black text-(--t1) text-sm truncate">{member.username}</p>
+        <p className="font-black text-(--t1) text-sm truncate group-hover:text-blue-500 transition-colors">{member.username}</p>
         {isCaptain && <Crown size={10} className="text-amber-500 flex-shrink-0" />}
         </div>
         <p className="text-[10px] font-bold text-(--t2)">@{member.login}</p>
         </div>
-        </div>
+        </button>
     );
 }
