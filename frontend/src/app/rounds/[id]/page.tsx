@@ -586,13 +586,13 @@ export default function RoundPage() {
         <div className="p-6 max-w-5xl w-full mx-auto">
 
         {/* back */}
-        <button
+        <a
         href={`/tournaments/${round!.tournament_id}`} onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${round!.tournament_id}`); }}
         className="mb-6 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors group"
         >
         <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
         Назад до турніру
-        </button>
+        </a>
 
         {/* badges + title */}
         <div className="flex items-center gap-3 flex-wrap mb-4">

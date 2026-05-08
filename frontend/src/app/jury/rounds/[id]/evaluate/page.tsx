@@ -647,12 +647,12 @@ export default function JuryEvaluationPage() {
                     {/* Admin redistribute */}
                     {isAdmin && (
                         <div className="px-4 pb-4 flex flex-col gap-2">
-                        <button
+                        <a
                         href={`/jury/rounds/${roundId}/distribute`} onClick={(e) => { e.preventDefault(); router.push(`/jury/rounds/${roundId}/distribute`); }}
                         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-blue-600/30 bg-blue-600/10 text-blue-600 font-black text-[10px] uppercase tracking-widest hover:bg-blue-600/20 active:scale-95 transition-all"
                         >
                         <Shuffle size={12} /> Ручний розподіл робіт
-                        </button>
+                        </a>
                         <button
                         onClick={handleRedistribute}
                         disabled={redistributing}

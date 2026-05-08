@@ -350,12 +350,12 @@ export default function EditTeamPage() {
 
         {/* Back + Title row */}
         <div className="fuIn flex items-center gap-4 mb-6">
-        <button
+        <a
         href={`/teams/${teamId}`} onClick={(e) => { e.preventDefault(); router.push(`/teams/${teamId}`); }}
         className="w-9 h-9 rounded-xl border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-500 hover:border-blue-500/40 transition-all flex-shrink-0"
         >
         <ArrowLeft size={16} />
-        </button>
+        </a>
         <div>
         <h1 className="text-xl sm:text-2xl font-black text-(--t1) tracking-tight uppercase">{t.editTeam.pageTitle}</h1>
         <p className="text-xs text-(--t2) font-medium mt-0.5">{team?.name}</p>

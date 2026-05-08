@@ -1033,7 +1033,7 @@ export default function ProfilePage() {
             const isCaptain = team.captain_id === profileUser?.id;
             const memberCount = team.members_ids?.length ?? 0;
             return (
-              <button key={team.id} onClick={() => router.push("/teams/" + team.id)}
+              <a key={team.id} href={`/teams/${team.id}`} onClick={(e) => { e.preventDefault(); router.push("/teams/" + team.id); }}
               className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group text-left">
               <div className="w-9 h-9 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-sm flex-shrink-0">{team.name.charAt(0).toUpperCase()}</div>
               <div className="flex-1 min-w-0">
@@ -1047,7 +1047,7 @@ export default function ProfilePage() {
               </div>
               </div>
               <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </button>
+              </a>
             );
           })}
           </div>
@@ -1078,7 +1078,7 @@ export default function ProfilePage() {
           {tournaments.map((t, i) => {
             const st = t.status ?? "upcoming";
             return (
-              <button key={t.id} onClick={() => router.push("/tournaments/" + t.id)}
+              <a key={t.id} href={`/tournaments/${t.id}`} onClick={(e) => { e.preventDefault(); router.push("/tournaments/" + t.id); }}
               className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group text-left" style={{ animationDelay: `${i * 40}ms` }}>
               <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 flex-shrink-0"><Trophy size={15} /></div>
               <div className="flex-1 min-w-0">
@@ -1089,7 +1089,7 @@ export default function ProfilePage() {
               {t.start_at && <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">Start: {new Date(t.start_at).toLocaleDateString("en-US")}</p>}
               </div>
               <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </button>
+              </a>
             );
           })}
           </div>

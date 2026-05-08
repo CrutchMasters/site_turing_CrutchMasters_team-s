@@ -152,13 +152,13 @@ export default function LeaderboardPage() {
 
                 <div className="p-6 max-w-5xl w-full mx-auto">
                     {/* back */}
-                    <button
+                    <a
                         href={`/tournaments/${id}`} onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${id}`); }}
                         className="mb-6 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors group"
                     >
                         <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
                         {tournament?.name || "Назад до турніру"}
-                    </button>
+                    </a>
 
                     {/* header */}
                     <div className="flex items-center gap-3 mb-8">
