@@ -105,7 +105,10 @@ export default function LeaderboardPage() {
     /* ── loading ── */
     if (authLoading || loading) return (
         <div className="flex h-screen bg-(--bg)">
-            <Sidebar />
+            <Sidebar
+            mobileOpen={isMobileSidebarOpen}
+            onMobileClose={() => setIsMobileSidebarOpen(false)}
+          />
             <main className="flex-1 flex items-center justify-center">
                 <Loader2 size={32} className="animate-spin text-(--t2)" />
             </main>
@@ -115,7 +118,10 @@ export default function LeaderboardPage() {
     /* ── error ── */
     if (error) return (
         <div className="flex h-screen bg-(--bg)">
-            <Sidebar />
+            <Sidebar
+            mobileOpen={isMobileSidebarOpen}
+            onMobileClose={() => setIsMobileSidebarOpen(false)}
+          />
             <main className="flex-1 flex flex-col items-center justify-center gap-4">
                 <AlertCircle size={28} className="text-red-500" />
                 <p className="text-(--t2) font-bold">{error}</p>
@@ -139,9 +145,10 @@ export default function LeaderboardPage() {
             </div>
 
             {/* mobile sidebar */}
-            <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
-                <Sidebar />
-            </div>
+            <Sidebar
+        mobileOpen={isMobileSidebarOpen}
+        onMobileClose={() => setIsMobileSidebarOpen(false)}
+      />
 
             <main className="flex-1 flex flex-col overflow-y-auto relative z-10">
                 <MobileHeader

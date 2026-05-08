@@ -399,7 +399,10 @@ export default function SubmitPage() {
         /* ── render ── */
         if (loading) return (
             <div className="flex min-h-screen bg-(--bg)">
-            <Sidebar />
+            <Sidebar
+            mobileOpen={isMobileSidebarOpen}
+            onMobileClose={() => setIsMobileSidebarOpen(false)}
+          />
             <main className="flex-1 flex items-center justify-center">
             <Loader2 size={32} className="animate-spin text-(--t2)" />
             </main>
@@ -408,7 +411,10 @@ export default function SubmitPage() {
 
         if (!round) return (
             <div className="flex min-h-screen bg-(--bg)">
-            <Sidebar />
+            <Sidebar
+            mobileOpen={isMobileSidebarOpen}
+            onMobileClose={() => setIsMobileSidebarOpen(false)}
+          />
             <main className="flex-1 flex flex-col items-center justify-center gap-4">
             <AlertCircle size={28} className="text-(--t2)" />
             <p className="text-(--t2) font-bold">Раунд не знайдено</p>
@@ -427,12 +433,12 @@ export default function SubmitPage() {
             <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] blur-sm ${dark ? "invert" : ""}`} />
             </div>
 
-            <Sidebar />
+            <Sidebar
+            mobileOpen={isMobileSidebarOpen}
+            onMobileClose={() => setIsMobileSidebarOpen(false)}
+          />
 
-            {isMobileSidebarOpen && (
-                <div className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-                onClick={() => setIsMobileSidebarOpen(false)} />
-            )}
+            
 
             <main className="flex-1 flex flex-col overflow-y-auto relative z-10">
             <MobileHeader
