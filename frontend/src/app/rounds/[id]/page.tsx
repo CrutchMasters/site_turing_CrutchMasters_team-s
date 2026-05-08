@@ -344,22 +344,22 @@ export default function RoundPage() {
                 <Crown size={13} className="flex-shrink-0" />
                 Суперадмін — повний доступ до всіх функцій
                 </div>
-                <button onClick={() => router.push(`/jury/rounds/${id}/evaluate`)}
+                <a href={`/jury/rounds/${id}/evaluate`} onClick={(e) => { e.preventDefault(); router.push(`/jury/rounds/${id}/evaluate`); }}
                 className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all">
                 <Gavel size={15} /> Оцінити роботи
-                </button>
-                <button onClick={() => router.push(`/rounds/${id}/submit`)}
+                </a>
+                <a href={`/rounds/${id}/submit`} onClick={(e) => { e.preventDefault(); router.push(`/rounds/${id}/submit`); }}
                 className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest border border-blue-500/30 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 active:scale-[0.98] transition-all">
                 <Send size={15} /> Здати роботу
-                </button>
-                <button onClick={() => router.push(`/jury/rounds/${id}/distribute`)}
+                </a>
+                <a href={`/jury/rounds/${id}/distribute`} onClick={(e) => { e.preventDefault(); router.push(`/jury/rounds/${id}/distribute`); }}
                 className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest border border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 active:scale-[0.98] transition-all">
                 <Users size={15} /> Розподілити завдання
-                </button>
-                <button onClick={() => router.push(`/tournaments/${round.tournament_id}/edit`)}
+                </a>
+                <a href={`/tournaments/${round.tournament_id}/edit`} onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${round.tournament_id}/edit`); }}
                 className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest border border-(--brd) bg-(--card) text-(--t1) hover:border-blue-600/40 hover:text-blue-600 active:scale-[0.98] transition-all">
                 <Edit3 size={15} /> Редагувати турнір
-                </button>
+                </a>
                 </div>
                 </Card>
             );
@@ -376,14 +376,14 @@ export default function RoundPage() {
                     <ShieldAlert size={13} className="flex-shrink-0" />
                     Ви власник цього турніру
                     </div>
-                    <button onClick={() => router.push(`/rounds/${id}/edit`)}
+                    <a href={`/rounds/${id}/edit`} onClick={(e) => { e.preventDefault(); router.push(`/rounds/${id}/edit`); }}
                     className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all">
                     <Edit3 size={15} /> Редагувати раунд
-                    </button>
-                    <button onClick={() => router.push(`/jury/rounds/${id}/distribute`)}
+                    </a>
+                    <a href={`/jury/rounds/${id}/distribute`} onClick={(e) => { e.preventDefault(); router.push(`/jury/rounds/${id}/distribute`); }}
                     className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest border border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 active:scale-[0.98] transition-all">
                     <Users size={15} /> Розподілити завдання
-                    </button>
+                    </a>
                     </div>
                     </Card>
                 );
@@ -424,10 +424,10 @@ export default function RoundPage() {
                     Ви запрошені як журі для цього турніру
                     </div>
                     {roundActive ? (
-                        <button onClick={() => router.push(`/jury/rounds/${id}/evaluate`)}
+                        <a href={`/jury/rounds/${id}/evaluate`} onClick={(e) => { e.preventDefault(); router.push(`/jury/rounds/${id}/evaluate`); }}
                         className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all">
                         <Gavel size={15} /> Оцінити роботи
-                        </button>
+                        </a>
                     ) : (
                         <InfoBanner icon={<Clock size={16} />}>
                         Оцінювання буде доступне після початку активної фази раунду.
@@ -527,11 +527,11 @@ export default function RoundPage() {
                         <CheckCircle2 size={13} className="flex-shrink-0" /> Роботу успішно здано!
                         </div>
                     )}
-                    <button onClick={() => router.push(`/rounds/${id}/submit`)}
+                    <a href={`/rounds/${id}/submit`} onClick={(e) => { e.preventDefault(); router.push(`/rounds/${id}/submit`); }}
                     className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all">
                     <Send size={15} />
                     {mySubmission ? "Оновити здачу" : "Здати роботу"}
-                    </button>
+                    </a>
                     </div>
                     </Card>
                 );
@@ -554,9 +554,9 @@ export default function RoundPage() {
             <SectionLabel icon={<Flag size={13} />}>Здача роботи</SectionLabel>
             <InfoBanner icon={<AlertCircle size={16} />}>
             Для участі необхідно{" "}
-            <button onClick={() => router.push("/login")} className="underline font-black">
+            <a href={"/login"} onClick={(e) => { e.preventDefault(); router.push("/login"); }} className="underline font-black">
             увійти в акаунт
-            </button>.
+            </a>.
             </InfoBanner>
             </Card>
         );
@@ -586,13 +586,13 @@ export default function RoundPage() {
         <div className="p-6 max-w-5xl w-full mx-auto">
 
         {/* back */}
-        <button
-        onClick={() => router.push(`/tournaments/${round!.tournament_id}`)}
+        <a
+        href={`/tournaments/${round!.tournament_id}`} onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${round!.tournament_id}`); }}
         className="mb-6 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors group"
         >
         <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
         Назад до турніру
-        </button>
+        </a>
 
         {/* badges + title */}
         <div className="flex items-center gap-3 flex-wrap mb-4">

@@ -365,9 +365,9 @@ export default function TournamentsPage() {
 
                     {/* Breadcrumb */}
                     <nav className="fuIn flex items-center gap-2 text-[10px] font-black mb-4 sm:mb-6 uppercase tracking-widest text-(--t2)">
-                        <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">
+                        <a href={"/"} onClick={(e) => { e.preventDefault(); router.push("/"); }} className="hover:text-blue-600 transition-colors">
                             {t.nav?.home ?? "Home"}
-                        </button>
+                        </a>
                         <ChevronRight size={10} />
                         <span className="text-(--t1)">{t.tournaments?.title ?? "Турніри"}</span>
                     </nav>

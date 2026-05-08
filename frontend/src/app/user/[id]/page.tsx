@@ -31,14 +31,14 @@ interface UserTeam {
   members_ids?: string[];
 }
 
-function TeamBadge({ team, userId, onClick }: { team: UserTeam; userId: string; onClick: () => void }) {
+function TeamBadge({ team, userId, href, onClick }: { team: UserTeam; userId: string; href?: string; onClick: (e?: any) => void }) {
   const isCaptain = team.captain_id === userId;
   const memberCount = team.members_ids?.length ?? 0;
 
   return (
-    <button
-    type="button"
-    onClick={onClick}
+    <a
+    href={href}
+    onClick={(e) => { e.preventDefault(); onClick && onClick(); }}
     className="w-full flex items-center gap-4 p-4 rounded-2xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group text-left"
     >
     <div className="w-10 h-10 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-base flex-shrink-0">
@@ -65,7 +65,7 @@ function TeamBadge({ team, userId, onClick }: { team: UserTeam; userId: string; 
     </div>
     </div>
     <ExternalLink size={14} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-    </button>
+    </a>
   );
 }
 
@@ -224,9 +224,9 @@ export default function PublicUserProfile() {
 
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
     <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-    <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Home</button>
+    <a href={"/"} onClick={(e) => { e.preventDefault(); router.push("/"); }} className="hover:text-blue-600 transition-colors">Home</a>
     <ChevronRight size={10} />
-    <button onClick={() => router.push("/search")} className="hover:text-blue-600 transition-colors">Search</button>
+    <a href={"/search"} onClick={(e) => { e.preventDefault(); router.push("/search"); }} className="hover:text-blue-600 transition-colors">Search</a>
     <ChevronRight size={10} />
     <span className="text-(--t1)">Profile</span>
     </nav>
@@ -384,13 +384,7 @@ export default function PublicUserProfile() {
           </section>
       )}
 
-      {!isSuperAdmin && !isOwnProfile && (
-        <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-6 sm:p-8">
-        <p className="text-[10px] font-bold text-(--t2) uppercase tracking-wider">
-        Only superadmin users can change roles
-        </p>
-        </section>
-      )}
+
       </div>
     ) : null}
     </div>
