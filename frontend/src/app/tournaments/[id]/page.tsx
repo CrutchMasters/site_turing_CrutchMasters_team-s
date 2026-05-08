@@ -48,6 +48,7 @@ interface Tournament {
     registration_from?: string;
     registration_to?: string;
     teams: Team[];
+    created_by?: string;
 }
 
 function fmtDate(iso?: string) {
