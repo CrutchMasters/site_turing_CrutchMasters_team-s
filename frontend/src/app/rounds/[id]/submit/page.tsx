@@ -429,11 +429,116 @@ export default function SubmitPage() {
                 </div>
             );
 
-            return (
-                <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1)">
-                {/* background logo */}
-                <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
-                <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] blur-sm ${dark ? "invert" : ""}`} />
+        /* ── deadline progress ── */
+        const now = Date.now();
+        const endTs = round?.end_at ? new Date(round.end_at).getTime() : 0;
+        let progressPct = 0;
+        if (endTs > 0) {
+            if (round?.start_at) {
+                const startTs = new Date(round.start_at).getTime();
+                if (endTs > startTs)
+                    progressPct = Math.min(100, Math.max(0, ((now - startTs) / (endTs - startTs)) * 100));
+            } else {
+                progressPct = now >= endTs ? 100 : 0;
+            }
+        }
+        const isUrgent = progressPct > 80;
+
+        const isDraftLocked = existingSubmission?.status === "closed" || existingSubmission?.status === "reviewed";
+        const isAlreadySubmitted = existingSubmission && !existingSubmission.is_draft;
+
+        /* ── render ── */
+        if (loading) return (
+            <div className="flex min-h-screen bg-(--bg)">
+            <Sidebar
+            mobileOpen={isMobileSidebarOpen}
+            onMobileClose={() => setIsMobileSidebarOpen(false)}
+          />
+            <main className="flex-1 flex items-center justify-center">
+            <Loader2 size={32} className="animate-spin text-(--t2)" />
+            </main>
+            </div>
+        );
+
+        if (!round) return (
+            <div className="flex min-h-screen bg-(--bg)">
+            <Sidebar
+            mobileOpen={isMobileSidebarOpen}
+            onMobileClose={() => setIsMobileSidebarOpen(false)}
+          />
+            <main className="flex-1 flex flex-col items-center justify-center gap-4">
+            <AlertCircle size={28} className="text-(--t2)" />
+            <p className="text-(--t2) font-bold">Раунд не знайдено</p>
+            <button onClick={() => router.back()}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm bg-(--card) border border-(--brd) text-(--t1) hover:border-blue-600/40 hover:text-blue-600 transition-all font-bold">
+            <ChevronLeft size={16} /> Назад
+            </button>
+            </main>
+            </div>
+        );
+
+        return (
+            <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1)">
+            {/* background logo */}
+            <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
+            <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] blur-sm ${dark ? "invert" : ""}`} />
+            </div>
+
+            <Sidebar
+            mobileOpen={isMobileSidebarOpen}
+            onMobileClose={() => setIsMobileSidebarOpen(false)}
+          />
+
+            
+
+            <main className="flex-1 flex flex-col overflow-y-auto relative z-10">
+            <MobileHeader
+            onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+            title="Здати роботу"
+            icon={<Flag size={18} className="text-blue-600" />}
+            />
+
+            <div className="p-6 max-w-5xl w-full mx-auto">
+            {/* back */}
+            <button onClick={() => router.back()}
+            className="mb-6 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors group">
+            <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
+            Назад до раунду
+            </button>
+
+            {/* badge + title */}
+            <div className="flex items-center gap-3 flex-wrap mb-4">
+            <span className="text-[11px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl bg-blue-600/10 text-blue-600 border border-blue-600/20">
+            Здача
+            </span>
+            {/* Статус існуючої здачі */}
+            {existingSubmission && (
+                <span className={`text-[11px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl border ${
+                    existingSubmission.is_draft
+                    ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
+                    : existingSubmission.status === "submitted"
+                    ? "bg-green-500/10 text-green-600 border-green-500/20"
+                    : "bg-(--brd) text-(--t2) border-(--brd)"
+                }`}>
+                {existingSubmission.is_draft ? "Чернетка збережена" : `Статус: ${existingSubmission.status}`}
+                </span>
+            )}
+            {loadingDraft && (
+                <span className="flex items-center gap-1.5 text-[11px] text-(--t2) font-bold">
+                <Loader2 size={12} className="animate-spin" /> Завантаження чернетки...
+                </span>
+            )}
+            </div>
+
+            <h1 className="text-2xl font-black text-(--t1) leading-tight mb-8">
+            {round.name}
+            </h1>
+
+            {/* locked warning */}
+            {isDraftLocked && (
+                <div className="mb-6 px-5 py-4 rounded-2xl bg-yellow-500/10 border border-yellow-500/25 text-yellow-600 text-sm font-bold flex items-center gap-2">
+                <AlertCircle size={16} className="flex-shrink-0" />
+                Ваша здача закрита або перевірена. Редагування недоступне.
                 </div>
 
                 <Sidebar />

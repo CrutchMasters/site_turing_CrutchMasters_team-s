@@ -343,15 +343,13 @@ export default function TournamentsPage() {
             </div>
 
             {/* Mobile overlay */}
-            {isMobileSidebarOpen && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
-                     onClick={() => setIsMobileSidebarOpen(false)} />
-            )}
+            
 
             {/* Sidebar */}
-            <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
-                <Sidebar />
-            </div>
+            <Sidebar
+        mobileOpen={isMobileSidebarOpen}
+        onMobileClose={() => setIsMobileSidebarOpen(false)}
+      />
 
             {/* Main */}
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -365,9 +363,9 @@ export default function TournamentsPage() {
 
                     {/* Breadcrumb */}
                     <nav className="fuIn flex items-center gap-2 text-[10px] font-black mb-4 sm:mb-6 uppercase tracking-widest text-(--t2)">
-                        <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">
+                        <a href={"/"} onClick={(e) => { e.preventDefault(); router.push("/"); }} className="hover:text-blue-600 transition-colors">
                             {t.nav?.home ?? "Home"}
-                        </button>
+                        </a>
                         <ChevronRight size={10} />
                         <span className="text-(--t1)">{t.tournaments?.title ?? "Турніри"}</span>
                     </nav>

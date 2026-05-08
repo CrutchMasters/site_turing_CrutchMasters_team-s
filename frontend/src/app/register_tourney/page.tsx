@@ -387,8 +387,8 @@ export default function RegisterTourney() {
         <p className="fade-up-1 text-lg sm:text-2xl font-black uppercase tracking-tight mb-8 text-blue-600">привіт від Білого Кролика 🐇</p>
         <p className="fade-up-2 text-xs font-black uppercase tracking-[0.3em] mb-10 text-(--t2)">Ця сторінка тільки для адміністраторів</p>
         <div className="fade-up-2 flex flex-col sm:flex-row gap-3 justify-center">
-        <button onClick={() => router.push('/dashboard')} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20">← Повернутись на дашборд</button>
-        <button onClick={() => router.push('/')} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) text-(--t2) bg-(--bg) active:scale-95 transition-all hover:opacity-80">На головну</button>
+        <a href={'/dashboard'} onClick={(e) => { e.preventDefault(); router.push('/dashboard'); }} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20">← Повернутись на дашборд</a>
+        <a href={'/'} onClick={(e) => { e.preventDefault(); router.push('/'); }} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) text-(--t2) bg-(--bg) active:scale-95 transition-all hover:opacity-80">На головну</a>
         </div>
         </div>
         </div>
@@ -414,12 +414,11 @@ export default function RegisterTourney() {
       <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
 
-      {isMobileSidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
-      )}
-      <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-      <Sidebar />
-      </div>
+      
+      <Sidebar
+        mobileOpen={isMobileSidebarOpen}
+        onMobileClose={() => setIsMobileSidebarOpen(false)}
+      />
 
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
       <MobileHeader
@@ -432,9 +431,9 @@ export default function RegisterTourney() {
 
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-      <button onClick={() => router.push('/')} className="hover:text-blue-600 transition-colors">Головна</button>
+      <a href={'/'} onClick={(e) => { e.preventDefault(); router.push('/'); }} className="hover:text-blue-600 transition-colors">Головна</a>
       <ChevronRight size={10} />
-      <button onClick={() => router.push('/dashboard')} className="hover:text-blue-600 transition-colors">Дашборд</button>
+      <a href={'/dashboard'} onClick={(e) => { e.preventDefault(); router.push('/dashboard'); }} className="hover:text-blue-600 transition-colors">Дашборд</a>
       <ChevronRight size={10} />
       <span className="text-(--t1)">{t.tourney?.createAdmin ?? 'Створення турніру'}</span>
       </nav>

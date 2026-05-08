@@ -39,8 +39,9 @@ export default function MobileHeader({
         <span className="font-black text-xs uppercase tracking-tighter">{title}</span>
       </div>
 
-      <button
-        onClick={() => router.push("/profile")}
+      <a
+        href="/profile"
+        onClick={(e) => { e.preventDefault(); router.push("/profile"); }}
         className="active:scale-95 transition-transform"
       >
         <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-(--brd) bg-blue-600 flex items-center justify-center">
@@ -54,7 +55,7 @@ export default function MobileHeader({
             <span className="text-white font-bold text-xs">{avatarLetter}</span>
           )}
         </div>
-      </button>
+      </a>
     </header>
   );
 }
