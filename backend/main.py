@@ -2056,7 +2056,7 @@ async def save_jury_evaluation(
         if not invited.data:
             raise HTTPException(status_code=403, detail="Ви не запрошені до журі цього турніру")
 
-    # FIX (критичний): перевіряємо що раунд існує і має статус active або finished
+    # Перевіряємо що раунд існує і має статус finished (оцінювання лише після завершення)
     round_ = fetch_one(
         supabase.table("rounds")
             .select("id, status, tournament_id")
@@ -2064,11 +2064,11 @@ async def save_jury_evaluation(
     )
     if not round_:
         raise HTTPException(status_code=404, detail="Раунд не знайдено")
-    if round_.get("status") not in ("active", "finished"):
+    if round_.get("status") != "finished":
         raise HTTPException(
             status_code=400,
-            detail=f"Оцінювання недоступне: раунд має статус '{round_.get('status')}'. "
-                   "Оцінювання дозволено лише для активних або завершених раундів."
+            detail=f"Оцінювання недоступне: раунд ще не завершено (статус: '{round_.get('status')}'). "
+                   "Оцінювання дозволено лише після завершення раунду."
         )
 
     # FIX (критичний): перевіряємо що журі призначено до цього раунду через jury_assignments.

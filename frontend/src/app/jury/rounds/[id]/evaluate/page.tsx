@@ -549,11 +549,12 @@ export default function JuryEvaluationPage() {
                 </div>
 
                 {/* Mobile sidebar overlay */}
-                
-                <Sidebar
-        mobileOpen={isMobileSidebarOpen}
-        onMobileClose={() => setIsMobileSidebarOpen(false)}
-      />
+                {isMobileSidebarOpen && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+                )}
+                <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+                <Sidebar />
+                </div>
 
                 <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 <MobileHeader
@@ -600,6 +601,29 @@ export default function JuryEvaluationPage() {
                     <div className="flex flex-col items-center gap-3">
                     <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
                     <p className="text-[11px] font-black uppercase tracking-widest text-(--t2)">Завантаження...</p>
+                    </div>
+                    </div>
+                ) : round && round.status !== "finished" ? (
+                    /* Round not finished — block evaluation */
+                    <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2rem] border border-amber-500/30 shadow-sm flex flex-col items-center justify-center py-20 text-center gap-5 px-8">
+                    <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                    <Clock size={30} className="text-amber-500" />
+                    </div>
+                    <div>
+                    <p className="font-black text-(--t1) text-lg uppercase tracking-tight mb-2">
+                    Раунд ще не завершено
+                    </p>
+                    <p className="text-sm text-(--t2) max-w-sm leading-relaxed">
+                    Оцінювання робіт відкриється після закінчення раунду.
+                    {round.end_at && (
+                        <span className="block mt-2 font-bold text-amber-500">
+                        Кінець раунду: {fmtDate(round.end_at)}
+                        </span>
+                    )}
+                    </p>
+                    </div>
+                    <div className="px-5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-500">
+                    Статус раунду: {round.status === "active" ? "Активний" : round.status === "pending" ? "Очікується" : round.status}
                     </div>
                     </div>
                 ) : (
@@ -1051,3 +1075,4 @@ export default function JuryEvaluationPage() {
                 </div>
         );
 }
+
