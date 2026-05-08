@@ -31,14 +31,14 @@ interface UserTeam {
   members_ids?: string[];
 }
 
-function TeamBadge({ team, userId, onClick }: { team: UserTeam; userId: string; onClick: () => void }) {
+function TeamBadge({ team, userId, href, onClick }: { team: UserTeam; userId: string; href?: string; onClick: (e?: any) => void }) {
   const isCaptain = team.captain_id === userId;
   const memberCount = team.members_ids?.length ?? 0;
 
   return (
-    <button
-    type="button"
-    onClick={onClick}
+    <a
+    href={href}
+    onClick={(e) => { e.preventDefault(); onClick && onClick(); }}
     className="w-full flex items-center gap-4 p-4 rounded-2xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group text-left"
     >
     <div className="w-10 h-10 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-base flex-shrink-0">
@@ -65,7 +65,7 @@ function TeamBadge({ team, userId, onClick }: { team: UserTeam; userId: string; 
     </div>
     </div>
     <ExternalLink size={14} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-    </button>
+    </a>
   );
 }
 
@@ -330,7 +330,7 @@ export default function PublicUserProfile() {
           key={team.id}
           team={team}
           userId={profileUser.id}
-          href={`/teams/${team.id}`} onClick={(e) => { e.preventDefault(); router.push(`/teams/${team.id}`); }}
+          onClick={() => router.push(`/teams/${team.id}`)}
           />
         ))}
         </div>
