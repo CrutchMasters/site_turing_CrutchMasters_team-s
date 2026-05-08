@@ -13,7 +13,7 @@ import {
     CheckCircle2, AlertCircle, Github, Video,
     RefreshCw, Star, BarChart2, Shuffle, Users,
     Lock, Unlock, ChevronDown, ChevronUp, Eye,
-    Clock, Shield, Zap, Award,
+    Clock, Shield, Zap, Award, X, FileText,
 } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -36,6 +36,7 @@ interface SubmissionWork {
     submitted_at: string;
     github_url?: string;
     youtube_url?: string;
+    live_url?: string;
     files?: { name: string; path: string; url: string | null }[];
     status: "not_evaluated" | "in_progress" | "evaluated";
     // filled after evaluation load
@@ -91,6 +92,132 @@ function fmtDate(iso?: string) {
     });
 }
 
+// ── Readme Modal ──────────────────────────────────────────────────────────────
+
+function ReadmeModal({ url, onClose }: { url: string; onClose: () => void }) {
+    const [content, setContent] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        setLoading(true);
+        setError(null);
+        fetch(url)
+        .then(r => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.text();
+        })
+        .then(text => { setContent(text); setLoading(false); })
+        .catch(e => { setError(e.message); setLoading(false); });
+    }, [url]);
+
+    // Simple markdown → HTML renderer (no external dep)
+    const renderMarkdown = (md: string): string => {
+        return md
+        // Escape HTML
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        // Code blocks
+        .replace(/```[\w]*\n?([\s\S]*?)```/g, '<pre class="md-pre"><code>$1</code></pre>')
+        // Inline code
+        .replace(/`([^`]+)`/g, '<code class="md-code">$1</code>')
+        // Headings
+        .replace(/^### (.+)$/gm, '<h3 class="md-h3">$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2 class="md-h2">$1</h2>')
+        .replace(/^# (.+)$/gm, '<h1 class="md-h1">$1</h1>')
+        // Bold + italic
+        .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        // Links
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="md-link">$1</a>')
+        // Images
+        .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="md-img" />')
+        // Horizontal rule
+        .replace(/^---$/gm, '<hr class="md-hr" />')
+        // Unordered lists
+        .replace(/^\s*[-*+] (.+)$/gm, '<li class="md-li">$1</li>')
+        .replace(/(<li[\s\S]*?<\/li>)(\s*(?!<li))/g, '<ul class="md-ul">$1</ul>$2')
+        // Ordered lists
+        .replace(/^\d+\. (.+)$/gm, '<li class="md-oli">$1</li>')
+        .replace(/(<li class="md-oli"[\s\S]*?<\/li>)(\s*(?!<li))/g, '<ol class="md-ol">$1</ol>$2')
+        // Blockquotes
+        .replace(/^> (.+)$/gm, '<blockquote class="md-blockquote">$1</blockquote>')
+        // Paragraphs (lines not already wrapped)
+        .replace(/^(?!<[hupoba]|<li|<pre|<blockquote|<hr)(.+)$/gm, '<p class="md-p">$1</p>')
+        // Clean up empty lines
+        .replace(/\n{2,}/g, '\n');
+    };
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+        document.addEventListener("keydown", onKey);
+        return () => document.removeEventListener("keydown", onKey);
+    }, [onClose]);
+
+    return (
+        <div
+        className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+        style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)" }}
+        onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+        >
+        <div
+        className="relative w-full max-w-3xl max-h-[85vh] flex flex-col rounded-[2rem] border border-(--brd) shadow-2xl overflow-hidden"
+        style={{ background: "var(--card)" }}
+        >
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd)" style={{ background: "var(--bg)" }}>
+        <FileText size={16} className="text-blue-600 flex-shrink-0" />
+        <span className="text-[11px] font-black uppercase tracking-widest text-(--t1) flex-1">README</span>
+        <button
+        onClick={onClose}
+        className="w-8 h-8 rounded-xl flex items-center justify-center border border-(--brd) text-(--t2) hover:text-(--t1) hover:border-blue-600/40 transition-all active:scale-95"
+        >
+        <X size={14} />
+        </button>
+        </div>
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto px-8 py-6">
+        {loading && (
+            <div className="flex items-center justify-center py-16">
+            <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+        )}
+        {error && (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <AlertCircle size={28} className="text-red-400" />
+            <p className="text-sm font-bold text-(--t2)">Не вдалося завантажити файл</p>
+            <p className="text-xs text-(--t2) opacity-60">{error}</p>
+            <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-black text-blue-600 hover:underline mt-1">Відкрити напряму ↗</a>
+            </div>
+        )}
+        {!loading && !error && content !== null && (
+            <div
+            className="md-body"
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
+            />
+        )}
+        </div>
+        </div>
+        <style>{`
+            .md-body { color: var(--t1); font-size: 14px; line-height: 1.7; }
+            .md-h1 { font-size: 1.6em; font-weight: 900; margin: 1.2em 0 0.5em; color: var(--t1); }
+            .md-h2 { font-size: 1.3em; font-weight: 900; margin: 1em 0 0.4em; color: var(--t1); border-bottom: 1px solid var(--brd); padding-bottom: 0.3em; }
+            .md-h3 { font-size: 1.1em; font-weight: 800; margin: 0.8em 0 0.3em; color: var(--t1); }
+            .md-p { margin: 0.5em 0; color: var(--t2); }
+            .md-pre { background: var(--bg); border: 1px solid var(--brd); border-radius: 12px; padding: 14px 16px; overflow-x: auto; margin: 0.8em 0; font-size: 12px; line-height: 1.5; }
+            .md-pre code { background: none; padding: 0; border: none; font-family: monospace; }
+            .md-code { background: var(--bg); border: 1px solid var(--brd); border-radius: 6px; padding: 1px 6px; font-size: 12px; font-family: monospace; color: #3b82f6; }
+            .md-link { color: #3b82f6; text-decoration: underline; text-underline-offset: 2px; }
+            .md-img { max-width: 100%; border-radius: 10px; margin: 0.5em 0; }
+            .md-hr { border: none; border-top: 1px solid var(--brd); margin: 1.2em 0; }
+            .md-ul, .md-ol { padding-left: 1.5em; margin: 0.4em 0; }
+            .md-li, .md-oli { margin: 0.2em 0; color: var(--t2); }
+            .md-blockquote { border-left: 3px solid #3b82f6; padding-left: 1em; margin: 0.6em 0; color: var(--t2); opacity: 0.8; font-style: italic; }
+            `}</style>
+            </div>
+    );
+}
+
 // ── Score slider / input ─────────────────────────────────────────────────────
 
 function ScoreInput({
@@ -110,11 +237,14 @@ function ScoreInput({
 
     return (
         <div className="flex items-center gap-3">
-        {/* Track */}
-        <div className="relative flex-1 h-2 rounded-full bg-(--brd) overflow-hidden">
+        {/* Track wrapper */}
+        <div className="relative flex-1 flex items-center" style={{ height: 24 }}>
+        {/* Background track */}
+        <div className="absolute inset-x-0 h-2 rounded-full" style={{ top: "50%", transform: "translateY(-50%)", background: "var(--brd)" }} />
+        {/* Fill track — no transition, syncs with thumb instantly */}
         <div
-        className="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
-        style={{ width: `${num}%`, background: color }}
+        className="absolute left-0 h-2 rounded-full pointer-events-none"
+        style={{ top: "50%", transform: "translateY(-50%)", width: `${num}%`, background: color }}
         />
         <input
         type="range"
@@ -122,8 +252,8 @@ function ScoreInput({
         value={num}
         onChange={e => onChange(Number(e.target.value))}
         disabled={disabled}
-        className="absolute inset-0 w-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-        style={{ height: "100%" }}
+        className="absolute inset-0 w-full cursor-pointer disabled:cursor-not-allowed"
+        style={{ height: "100%", opacity: 1, background: "transparent", WebkitAppearance: "none", appearance: "none" }}
         />
         </div>
         {/* Number input */}
@@ -153,6 +283,7 @@ function ScoreInput({
             borderColor: focused ? color : "var(--brd)",
             color: value !== "" ? color : "var(--t2)",
             boxShadow: focused ? `0 0 0 2px ${color}30` : "none",
+            fontVariantNumeric: "tabular-nums",
             }}
             />
             </div>
@@ -211,15 +342,14 @@ function SubmissionCard({
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
             {statusIcon}
-            {total !== undefined && (
-                <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg border ${
-                    total >= 80 ? "text-green-500 bg-green-500/10 border-green-500/20" :
-                    total >= 50 ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
-                    "text-amber-500 bg-amber-500/10 border-amber-500/20"
-                }`}>
-                {total}
-                </span>
-            )}
+            <span className={`text-[10px] font-black rounded-lg border ${
+                total === undefined ? "text-transparent border-transparent bg-transparent" :
+                total >= 80 ? "text-green-500 bg-green-500/10 border-green-500/20" :
+                total >= 50 ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
+                "text-amber-500 bg-amber-500/10 border-amber-500/20"
+            }`} style={{ width: 40, textAlign: "center", padding: "2px 0", fontVariantNumeric: "tabular-nums", display: "inline-block" }}>
+            {total !== undefined ? total : ""}
+            </span>
             </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -261,6 +391,7 @@ export default function JuryEvaluationPage() {
     const [saveMsg, setSaveMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
     const [redistributing, setRedistributing] = useState(false);
     const [showAllInfo, setShowAllInfo] = useState(false);
+    const [readmeModal, setReadmeModal] = useState<string | null>(null);
     const saveMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const isJury     = user?.role === "jury";
@@ -357,10 +488,12 @@ export default function JuryEvaluationPage() {
                     team_name: s.team_name ?? "Команда",
                     team_org: s.team_org,
                     team_avatar_url: s.team_avatar_url ?? undefined,
+                    team_leader: s.team_leader ?? undefined,
                     round_id: s.round_id,
                     submitted_at: s.submitted_at,
                     github_url: s.github_url,
                     youtube_url: s.youtube_url,
+                    live_url: s.live_url ?? undefined,
                     files: s.files ?? [],
                     status,
                     criteria,
@@ -369,17 +502,40 @@ export default function JuryEvaluationPage() {
                 };
             });
 
-            // Fetch team avatars from Supabase
+            // Fetch team avatars + captain from Supabase
             const teamIds = [...new Set(workList.map(w => w.team_id).filter(Boolean))];
             if (teamIds.length > 0) {
                 const { data: teamsData } = await supabase
                 .from("teams")
-                .select("id, avatar_url")
+                .select("id, avatar_url, captain_id")
                 .in("id", teamIds);
                 if (teamsData) {
                     const avatarMap: Record<string, string> = {};
-                    teamsData.forEach((t: any) => { if (t.avatar_url) avatarMap[t.id] = t.avatar_url; });
-                    workList.forEach(w => { if (avatarMap[w.team_id]) w.team_avatar_url = avatarMap[w.team_id]; });
+                    const captainIdMap: Record<string, string> = {};
+                    teamsData.forEach((t: any) => {
+                        if (t.avatar_url) avatarMap[t.id] = t.avatar_url;
+                        if (t.captain_id) captainIdMap[t.id] = t.captain_id;
+                    });
+                        workList.forEach(w => {
+                            if (avatarMap[w.team_id]) w.team_avatar_url = avatarMap[w.team_id];
+                        });
+
+                            // Fetch captain names from account table
+                            const captainIds = [...new Set(Object.values(captainIdMap).filter(Boolean))];
+                            if (captainIds.length > 0) {
+                                const { data: accountsData } = await supabase
+                                .from("account")
+                                .select("id, username, login")
+                                .in("id", captainIds);
+                                if (accountsData) {
+                                    const nameMap: Record<string, string> = {};
+                                    accountsData.forEach((a: any) => { nameMap[a.id] = a.username || a.login || "—"; });
+                                    workList.forEach(w => {
+                                        const capId = captainIdMap[w.team_id];
+                                        if (capId && nameMap[capId]) (w as any).team_leader = nameMap[capId];
+                                    });
+                                }
+                            }
                 }
             }
 
@@ -540,7 +696,10 @@ export default function JuryEvaluationPage() {
                 .cdIn { animation: cardDrop 380ms cubic-bezier(.22,1,.36,1) both }
                 .score-glow { animation: scoreGlow 2s ease-in-out infinite }
                 input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; }
-                input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--t1); border: 2px solid var(--card); cursor: pointer; }
+                input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--t1); border: 3px solid var(--card); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.25); transition: transform 0.25s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.2s ease; }
+                input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.25); box-shadow: 0 2px 10px rgba(59,130,246,0.45); }
+                input[type=range]:active::-webkit-slider-thumb { transform: scale(0.92); transition: transform 0.12s cubic-bezier(0.34, 1.2, 0.64, 1), box-shadow 0.1s ease; }
+                input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--t1); border: 3px solid var(--card); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.25); transition: transform 0.25s cubic-bezier(0.34, 1.4, 0.64, 1); }
                 `}} />
 
                 {/* Watermark */}
@@ -732,13 +891,15 @@ export default function JuryEvaluationPage() {
                             {activeWork.team_org}
                             </p>
                         )}
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                        <Shield size={11} className="text-(--t2) flex-shrink-0" />
-                        <span className="text-[11px] font-bold text-(--t2) truncate">
-                        {(activeWork as any).team_leader ?? "—"}
-                        </span>
-                        <span className="ml-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-400 border border-orange-500/20">owner</span>
-                        </div>
+                        {(activeWork as any).team_leader && (
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                            <Shield size={11} className="text-(--t2) flex-shrink-0" />
+                            <span className="text-[11px] font-bold text-(--t2) truncate">
+                            {(activeWork as any).team_leader}
+                            </span>
+                            <span className="ml-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-400 border border-orange-500/20">капітан</span>
+                            </div>
+                        )}
                         <div className="flex items-center gap-1.5 mt-0.5">
                         <Clock size={11} className="text-(--t2) flex-shrink-0" />
                         <span className="text-[11px] font-bold text-(--t2)">
@@ -751,8 +912,8 @@ export default function JuryEvaluationPage() {
                         {/* RIGHT — video preview + 3 buttons */}
                         <div className="flex items-stretch border-l border-(--brd)">
 
-                        {/* Video preview — small, framed */}
-                        <div className="flex items-center justify-center p-3 bg-(--bg)/40 border-r border-(--brd)">
+                        {/* Video preview + YouTube button below */}
+                        <div className="flex flex-col items-center justify-center p-3 bg-(--bg)/40 gap-2">
                         <div className="w-28 h-[72px] rounded-xl overflow-hidden border border-(--brd) shadow-sm relative flex-shrink-0">
                         {activeWork.youtube_url ? (
                             <a
@@ -764,10 +925,10 @@ export default function JuryEvaluationPage() {
                             <img
                             src={`https://img.youtube.com/vi/${activeWork.youtube_url.match(/(?:v=|youtu\.be\/)([^&\n?#]+)/)?.[1]}/hqdefault.jpg`}
                             alt="preview"
-                            className="w-full h-full object-cover opacity-60 group-hover:opacity-90 transition-opacity"
+                            className="w-full h-full object-cover"
                             />
                             <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-7 h-7 rounded-full bg-black/60 flex items-center justify-center group-hover:bg-red-600/80 transition-colors">
+                            <div className="w-7 h-7 rounded-full bg-black/60 flex items-center justify-center">
                             <Video size={12} className="text-white ml-0.5" />
                             </div>
                             </div>
@@ -779,9 +940,24 @@ export default function JuryEvaluationPage() {
                             </div>
                         )}
                         </div>
+                        {/* YouTube button below preview */}
+                        {activeWork.youtube_url ? (
+                            <a
+                            href={activeWork.youtube_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-(--bg) border border-(--brd) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 transition-all active:scale-95"
+                            >
+                            <Video size={10} /> YouTube
+                            </a>
+                        ) : (
+                            <span className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-(--brd) text-(--t2) opacity-30 font-black text-[9px] uppercase tracking-widest cursor-not-allowed">
+                            <Video size={10} /> YouTube
+                            </span>
+                        )}
                         </div>
 
-                        {/* 3 action buttons — GitHub / YouTube / README */}
+                        {/* 3 action buttons — GitHub / Live Demo / README */}
                         <div className="flex flex-col justify-center gap-2 px-4 py-4 min-w-[120px]">
                         {/* Button 1 — GitHub */}
                         {activeWork.github_url ? (
@@ -798,34 +974,32 @@ export default function JuryEvaluationPage() {
                             <Github size={11} /> GitHub
                             </span>
                         )}
-                        {/* Button 2 — YouTube (linked to preview) */}
-                        {activeWork.youtube_url ? (
+                        {/* Button 2 — Live Demo */}
+                        {activeWork.live_url ? (
                             <a
-                            href={activeWork.youtube_url}
+                            href={activeWork.live_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 transition-all active:scale-95"
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-green-500/40 hover:text-green-500 transition-all active:scale-95"
                             >
-                            <Video size={11} /> YouTube
+                            <Zap size={11} /> Live Demo
                             </a>
                         ) : (
                             <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed">
-                            <Video size={11} /> YouTube
+                            <Zap size={11} /> Live Demo
                             </span>
                         )}
-                        {/* Button 3 — README (from files or github readme link) */}
+                        {/* Button 3 — README modal */}
                         {(() => {
                             const readmeFile = (activeWork.files ?? []).find(f => f.name?.toLowerCase().includes("readme") && f.url);
-                            const readmeUrl = readmeFile?.url ?? (activeWork.github_url ? `${activeWork.github_url.replace(/\/$/, "")}#readme` : null);
+                            const readmeUrl = readmeFile?.url ?? null;
                             return readmeUrl ? (
-                                <a
-                                href={readmeUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                                <button
+                                onClick={() => setReadmeModal(readmeUrl)}
                                 className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"
                                 >
                                 <Eye size={11} /> README
-                                </a>
+                                </button>
                             ) : (
                                 <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed">
                                 <Eye size={11} /> README
@@ -839,13 +1013,13 @@ export default function JuryEvaluationPage() {
                         </div>
 
                         {/* SCORE ISLAND — separate card */}
-                        <div className="cdIn flex-shrink-0 bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm flex flex-col items-center justify-center px-6 py-5 gap-2 min-w-[110px]">
-                        <div className={`score-glow text-4xl font-black px-4 py-2 rounded-2xl border ${
+                        <div className="flex-shrink-0 bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm flex flex-col items-center justify-center px-6 py-5 gap-2" style={{ width: 140, minWidth: 140 }}>
+                        <div className={`text-4xl font-black rounded-2xl border flex items-center justify-center ${
                             activeTotal >= 80 ? "text-green-500 bg-green-500/10 border-green-500/20" :
                             activeTotal >= 50 ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
                             activeTotal >  0  ? "text-amber-500 bg-amber-500/10 border-amber-500/20" :
                             "text-(--t2) bg-(--bg) border-(--brd)"
-                        }`}>
+                        }`} style={{ width: 104, height: 60, fontVariantNumeric: "tabular-nums" }}>
                         {activeWork.criteria.every(c => c.score !== "") || activeTotal > 0 ? activeTotal : "—"}
                         </div>
                         <span className="text-[8px] font-black uppercase tracking-widest text-(--t2) text-center leading-tight">
@@ -920,27 +1094,17 @@ export default function JuryEvaluationPage() {
                         <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
                         Підсумкова оцінка (авто)
                         </span>
-                        <div className="flex items-center gap-3">
-                        {/* Visual bar */}
-                        <div className="hidden sm:flex items-center gap-2">
-                        <div className="relative w-32 h-2 rounded-full bg-(--brd) overflow-hidden">
-                        <div
-                        className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
-                        style={{
-                            width: `${activeTotal}%`,
-                            background: activeTotal >= 80 ? "#22c55e" : activeTotal >= 50 ? "#3b82f6" : "#f59e0b",
-                        }}
-                        />
-                        </div>
-                        </div>
+                        <div className="flex items-center gap-2">
+                        <div style={{ width: 64, textAlign: "right" }}>
                         <span className={`text-2xl font-black ${
                             !allCriteriaFilled      ? "text-(--t2)" :
                             activeTotal >= 80       ? "text-green-500" :
                             activeTotal >= 50       ? "text-blue-500" :
                             "text-amber-500"
-                        }`}>
+                        }`} style={{ fontVariantNumeric: "tabular-nums" }}>
                         {allCriteriaFilled ? activeTotal : "—"}
                         </span>
+                        </div>
                         <span className="text-[9px] font-bold text-(--t2) uppercase">/ 100</span>
                         </div>
                         </div>
@@ -1049,6 +1213,10 @@ export default function JuryEvaluationPage() {
                 )}
                 </div>
                 </main>
+                {/* README Modal */}
+                {readmeModal && (
+                    <ReadmeModal url={readmeModal} onClose={() => setReadmeModal(null)} />
+                )}
                 </div>
         );
 }
