@@ -268,8 +268,8 @@ export default function JuryEvaluationPage() {
     const canAccess  = isJury || isAdmin;
 
     const API_URL = typeof window !== "undefined" && window.location.hostname === "localhost"
-        ? "http://localhost:8000"
-        : "https://site-turing-crutchmasters-team-s.onrender.com";
+    ? "http://localhost:8000"
+    : "https://site-turing-crutchmasters-team-s.onrender.com";
 
     // ── Access guard ──────────────────────────────────────────────────────────
     useEffect(() => {
@@ -704,30 +704,143 @@ export default function JuryEvaluationPage() {
 
                     {activeWork ? (
                         <>
-                        {/* Work header */}
-                        <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm p-5 sm:p-6">
-                        <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                        <div className="w-12 h-12 rounded-2xl overflow-hidden flex-shrink-0">
+                        {/* ── Work header row: main info card + score island ── */}
+                        <div className="cdIn flex flex-col sm:flex-row gap-3 items-stretch">
+
+                        {/* MAIN INFO CARD */}
+                        <div className="flex-1 min-w-0 bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm overflow-hidden">
+                        <div className="flex items-stretch">
+
+                        {/* LEFT — avatar + team info */}
+                        <div className="flex items-center gap-4 p-5 sm:p-6 flex-1 min-w-0">
+                        {/* Large avatar */}
+                        <div className="flex-shrink-0">
+                        <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-(--brd) shadow-md">
                         {activeWork.team_avatar_url
                             ? <img src={activeWork.team_avatar_url} alt={activeWork.team_name} className="w-full h-full object-cover" />
-                            : <div className="w-full h-full bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-xl">{activeWork.team_name.charAt(0).toUpperCase()}</div>
+                            : <div className="w-full h-full bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-3xl">{activeWork.team_name.charAt(0).toUpperCase()}</div>
                         }
                         </div>
-                        <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-3 flex-wrap">
-                        <div>
-                        <h2 className="font-black text-(--t1) text-base sm:text-lg uppercase tracking-tight">
+                        </div>
+                        {/* Team info */}
+                        <div className="flex flex-col justify-center gap-1 min-w-0">
+                        <h2 className="font-black text-(--t1) text-lg sm:text-xl uppercase tracking-tight truncate">
                         {activeWork.team_name}
                         </h2>
                         {activeWork.team_org && (
-                            <p className="text-[10px] font-bold text-(--t2) uppercase tracking-wider mt-0.5">
+                            <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider truncate">
                             {activeWork.team_org}
                             </p>
                         )}
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                        <Shield size={11} className="text-(--t2) flex-shrink-0" />
+                        <span className="text-[11px] font-bold text-(--t2) truncate">
+                        {(activeWork as any).team_leader ?? "—"}
+                        </span>
+                        <span className="ml-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-400 border border-orange-500/20">owner</span>
                         </div>
-                        {/* Total score display */}
-                        <div className="flex flex-col items-end gap-1">
-                        <div className={`score-glow text-3xl font-black px-4 py-1 rounded-2xl border ${
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                        <Clock size={11} className="text-(--t2) flex-shrink-0" />
+                        <span className="text-[11px] font-bold text-(--t2)">
+                        Здано: {fmtDate(activeWork.submitted_at)}
+                        </span>
+                        </div>
+                        </div>
+                        </div>
+
+                        {/* RIGHT — video preview + 3 buttons */}
+                        <div className="flex items-stretch border-l border-(--brd)">
+
+                        {/* Video preview — small, framed */}
+                        <div className="flex items-center justify-center p-3 bg-(--bg)/40 border-r border-(--brd)">
+                        <div className="w-28 h-[72px] rounded-xl overflow-hidden border border-(--brd) shadow-sm relative flex-shrink-0">
+                        {activeWork.youtube_url ? (
+                            <a
+                            href={activeWork.youtube_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block w-full h-full group"
+                            >
+                            <img
+                            src={`https://img.youtube.com/vi/${activeWork.youtube_url.match(/(?:v=|youtu\.be\/)([^&\n?#]+)/)?.[1]}/hqdefault.jpg`}
+                            alt="preview"
+                            className="w-full h-full object-cover opacity-60 group-hover:opacity-90 transition-opacity"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-7 h-7 rounded-full bg-black/60 flex items-center justify-center group-hover:bg-red-600/80 transition-colors">
+                            <Video size={12} className="text-white ml-0.5" />
+                            </div>
+                            </div>
+                            </a>
+                        ) : (
+                            <div className="w-full h-full bg-(--bg) flex flex-col items-center justify-center gap-1">
+                            <Video size={16} className="text-(--t2) opacity-25" />
+                            <span className="text-[8px] font-black uppercase text-(--t2) opacity-30 text-center leading-tight px-1">Відео відсутнє</span>
+                            </div>
+                        )}
+                        </div>
+                        </div>
+
+                        {/* 3 action buttons — GitHub / YouTube / README */}
+                        <div className="flex flex-col justify-center gap-2 px-4 py-4 min-w-[120px]">
+                        {/* Button 1 — GitHub */}
+                        {activeWork.github_url ? (
+                            <a
+                            href={activeWork.github_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"
+                            >
+                            <Github size={11} /> GitHub
+                            </a>
+                        ) : (
+                            <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed">
+                            <Github size={11} /> GitHub
+                            </span>
+                        )}
+                        {/* Button 2 — YouTube (linked to preview) */}
+                        {activeWork.youtube_url ? (
+                            <a
+                            href={activeWork.youtube_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 transition-all active:scale-95"
+                            >
+                            <Video size={11} /> YouTube
+                            </a>
+                        ) : (
+                            <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed">
+                            <Video size={11} /> YouTube
+                            </span>
+                        )}
+                        {/* Button 3 — README (from files or github readme link) */}
+                        {(() => {
+                            const readmeFile = (activeWork.files ?? []).find(f => f.name?.toLowerCase().includes("readme") && f.url);
+                            const readmeUrl = readmeFile?.url ?? (activeWork.github_url ? `${activeWork.github_url.replace(/\/$/, "")}#readme` : null);
+                            return readmeUrl ? (
+                                <a
+                                href={readmeUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"
+                                >
+                                <Eye size={11} /> README
+                                </a>
+                            ) : (
+                                <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed">
+                                <Eye size={11} /> README
+                                </span>
+                            );
+                        })()}
+                        </div>
+
+                        </div>
+                        </div>
+                        </div>
+
+                        {/* SCORE ISLAND — separate card */}
+                        <div className="cdIn flex-shrink-0 bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm flex flex-col items-center justify-center px-6 py-5 gap-2 min-w-[110px]">
+                        <div className={`score-glow text-4xl font-black px-4 py-2 rounded-2xl border ${
                             activeTotal >= 80 ? "text-green-500 bg-green-500/10 border-green-500/20" :
                             activeTotal >= 50 ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
                             activeTotal >  0  ? "text-amber-500 bg-amber-500/10 border-amber-500/20" :
@@ -735,54 +848,11 @@ export default function JuryEvaluationPage() {
                         }`}>
                         {activeWork.criteria.every(c => c.score !== "") || activeTotal > 0 ? activeTotal : "—"}
                         </div>
-                        <span className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Підсумкова оцінка (авто)</span>
-                        </div>
-                        </div>
-
-                        {/* Submission links */}
-                        <div className="flex flex-wrap gap-2 mt-3">
-                        {activeWork.github_url && (
-                            <a
-                            href={activeWork.github_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"
-                            >
-                            <Github size={12} /> GitHub
-                            </a>
-                        )}
-                        {activeWork.youtube_url && (
-                            <a
-                            href={activeWork.youtube_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"
-                            >
-                            <Video size={12} /> Відео
-                            </a>
-                        )}
-                        {/* Uploaded files */}
-                        {(activeWork.files ?? []).map(f => f.url ? (
-                            <a
-                            key={f.path}
-                            href={f.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            download={f.name}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"
-                            >
-                            📎 {f.name || "Файл"}
-                            </a>
-                        ) : null)}
-                        {!activeWork.github_url && !activeWork.youtube_url && !(activeWork.files?.some(f => f.url)) && (
-                            <span className="text-[10px] font-bold text-(--t2) opacity-50 italic">Посилання не додані</span>
-                        )}
-                        <span className="ml-auto text-[9px] font-bold text-(--t2) opacity-50 self-center">
-                        Здано: {fmtDate(activeWork.submitted_at)}
+                        <span className="text-[8px] font-black uppercase tracking-widest text-(--t2) text-center leading-tight">
+                        Підсумкова<br/>оцінка (авто)
                         </span>
                         </div>
-                        </div>
-                        </div>
+
                         </div>
 
                         {/* Criteria scores */}
