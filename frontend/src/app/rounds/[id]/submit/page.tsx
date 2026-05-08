@@ -489,7 +489,10 @@ export default function SubmitPage() {
             onMobileClose={() => setIsMobileSidebarOpen(false)}
           />
 
-            
+            {isMobileSidebarOpen && (
+                <div className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+                onClick={() => setIsMobileSidebarOpen(false)} />
+            )}
 
             <main className="flex-1 flex flex-col overflow-y-auto relative z-10">
             <MobileHeader
