@@ -12,7 +12,7 @@ import MobileHeader from "@/components/MobileHeader";
 import {
     Users, Search, Plus, ChevronRight, Loader,
     Crown, Star, Send, MessageSquare, Calendar, Pencil, Trash2,
-    AlertCircle,
+    AlertCircle, LogOut,
 } from "lucide-react";
 
 interface Team {
@@ -58,6 +58,13 @@ export default function TeamsPage() {
     const [deleteTarget, setDeleteTarget] = useState<Team | null>(null);
     const [isDeleting, setIsDeleting]     = useState(false);
     const [deleteError, setDeleteError]   = useState("");
+
+    // --- Member Teams state ---
+    const [memberTeams, setMemberTeams]       = useState<Team[]>([]);
+    const [loadingMember, setLoadingMember]   = useState(true);
+    const [leaveTarget, setLeaveTarget]       = useState<Team | null>(null);
+    const [isLeaving, setIsLeaving]           = useState(false);
+    const [leaveError, setLeaveError]         = useState("");
 
     // Auth guard
     useEffect(() => {
@@ -123,6 +130,56 @@ export default function TeamsPage() {
         }
     };
     useEffect(() => { fetchMyTeams(); }, [user]);
+
+    // Fetch teams where user is a member (not captain)
+    const fetchMemberTeams = async () => {
+        if (!user) return;
+        setLoadingMember(true);
+        try {
+            const { data, error } = await supabase
+            .from("teams")
+            .select("id, name, city_school_org, captain_id, members_ids, telegram_url, discord_url, created_at, avatar_url")
+            .order("created_at", { ascending: false });
+            if (error) throw error;
+
+            // Filter client-side: user must be in members_ids AND not be the captain
+            const result = (data ?? []).filter(team =>
+                Array.isArray(team.members_ids) &&
+                team.members_ids.includes(user.id) &&
+                team.captain_id !== user.id
+            );
+            setMemberTeams(result);
+        } catch (e) {
+            console.error("Failed to fetch member teams:", JSON.stringify(e), e);
+        } finally {
+            setLoadingMember(false);
+        }
+    };
+    useEffect(() => { fetchMemberTeams(); }, [user]);
+
+    const handleLeaveTeam = async () => {
+        if (!leaveTarget || !user) return;
+        setIsLeaving(true);
+        setLeaveError("");
+        try {
+            const newMembers = (leaveTarget.members_ids ?? []).filter(id => id !== user.id);
+            const { error } = await supabase
+                .from("teams")
+                .update({ members_ids: newMembers })
+                .eq("id", leaveTarget.id);
+            if (error) throw error;
+            await fetchMemberTeams();
+            setAllTeams(prev => prev.map(t =>
+                t.id === leaveTarget.id ? { ...t, members_ids: newMembers } : t
+            ));
+            setLeaveTarget(null);
+        } catch (e: any) {
+            console.error("[LEAVE] caught:", e);
+            setLeaveError(e.message ?? "Помилка виходу з команди");
+        } finally {
+            setIsLeaving(false);
+        }
+    };
 
     // Filter search
     useEffect(() => {
@@ -216,7 +273,46 @@ export default function TeamsPage() {
             </div>
         )}
 
-        {/* Watermark */}
+        {/* Leave team modal */}
+        {leaveTarget && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-(--bg)/70 backdrop-blur-md p-4">
+            <div className="modal-in bg-(--card) border border-orange-500/30 rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl text-center">
+            <div className="w-14 h-14 rounded-full bg-orange-500/10 border-2 border-orange-500/30 flex items-center justify-center mx-auto mb-4">
+            <LogOut size={24} className="text-orange-500" />
+            </div>
+            <h2 className="text-lg font-black text-(--t1) uppercase tracking-tight mb-2">
+            {locale === "en" ? "Leave team?" : "Вийти з команди?"}
+            </h2>
+            <p className="text-sm text-(--t2) mb-1">
+            {locale === "en" ? "Are you sure you want to leave" : "Ви впевнені, що хочете покинути"}
+            </p>
+            <p className="text-sm font-black text-(--t1) mb-6">«{leaveTarget.name}»?</p>
+            {leaveError && (
+                <div className="flex items-center gap-2 text-[11px] font-bold text-red-500 bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-2 mb-4">
+                <AlertCircle size={13} /> {leaveError}
+                </div>
+            )}
+            <div className="flex gap-3">
+            <button
+            onClick={() => { setLeaveTarget(null); setLeaveError(""); }}
+            disabled={isLeaving}
+            className="flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) bg-(--bg) text-(--t2) hover:bg-(--card) transition-all active:scale-95 disabled:opacity-50"
+            >
+            {locale === "en" ? "Cancel" : "Скасувати"}
+            </button>
+            <button
+            onClick={handleLeaveTeam}
+            disabled={isLeaving}
+            className="flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest bg-orange-500 text-white hover:bg-orange-600 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20"
+            >
+            {isLeaving
+                ? <><Loader size={13} className="animate-spin" /> {locale === "en" ? "Leaving..." : "Виходимо..."}</>
+                : <><LogOut size={13} /> {locale === "en" ? "Leave" : "Вийти"}</>}
+            </button>
+            </div>
+            </div>
+            </div>
+        )}
         <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
         <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
         </div>
@@ -329,23 +425,23 @@ export default function TeamsPage() {
         {locale === "en" ? "My Teams" : "Мої команди"}
         </h2>
         <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest">
-        {loadingMy
+        {(loadingMy || loadingMember)
             ? (locale === "en" ? "Loading..." : "Завантаження...")
-            : `${locale === "en" ? "Captain of" : "Капітан"} ${myTeams.length} ${locale === "en" ? "team(s)" : `команд${myTeams.length === 1 ? "и" : ""}`}`}
+            : `${myTeams.length + memberTeams.length} ${locale === "en" ? "team(s)" : `команд${(myTeams.length + memberTeams.length) === 1 ? "а" : ""}`}`}
         </p>
         </div>
         </div>
 
         {/* My Teams list */}
         <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-xl border border-(--brd) p-4 sm:p-6 flex flex-col gap-3">
-        {loadingMy ? (
+        {(loadingMy || loadingMember) ? (
             <div className="flex flex-col items-center justify-center py-10 gap-3">
             <Loader className="w-7 h-7 text-blue-600 animate-spin" />
             <p className="text-[11px] font-black uppercase tracking-widest text-(--t2)">
             {locale === "en" ? "Loading..." : "Завантаження..."}
             </p>
             </div>
-        ) : myTeams.length === 0 ? (
+        ) : (myTeams.length === 0 && memberTeams.length === 0) ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
             <div className="w-14 h-14 rounded-full bg-amber-500/10 border-2 border-amber-500/20 flex items-center justify-center mb-3">
             <Star size={24} className="text-amber-500/50" />
@@ -358,7 +454,8 @@ export default function TeamsPage() {
             </p>
             </div>
         ) : (
-            myTeams.map((team, idx) => (
+            <>
+            {myTeams.map((team, idx) => (
                 <MyTeamRow
                 key={team.id}
                 team={team}
@@ -367,7 +464,17 @@ export default function TeamsPage() {
                 onEdit={() => router.push(`/teams/${team.id}/edit`)}
                 onDelete={() => { setDeleteError(""); setDeleteTarget(team); }}
                 />
-            ))
+            ))}
+            {memberTeams.map((team, idx) => (
+                <MemberTeamRow
+                key={team.id}
+                team={team}
+                idx={idx}
+                onOpen={() => router.push(`/teams/${team.id}`)}
+                onLeave={() => { setLeaveError(""); setLeaveTarget(team); }}
+                />
+            ))}
+            </>
         )}
 
         {/* Create button — always at the bottom */}
@@ -471,7 +578,47 @@ function SearchTeamCard({
     );
 }
 
-// ── My Team Row (compact, inside the right panel) ────────────────────────────
+// ── Member Team Row (участник, не капитан) ───────────────────────────────────
+function MemberTeamRow({
+    team, idx, onOpen, onLeave,
+}: {
+    team: Team; idx: number;
+    onOpen: () => void; onLeave: () => void;
+}) {
+    const memberCount = team.members_ids?.length ?? 0;
+
+    return (
+        <div className="fuIn flex items-center gap-3 bg-(--bg) rounded-2xl border border-(--brd) p-3 group hover:border-blue-600/30 transition-all" style={{ animationDelay: `${idx * 70}ms` }}>
+        <div className="cursor-pointer flex-shrink-0" onClick={onOpen}>
+        <TeamAvatar team={team} idx={idx} size="sm" />
+        </div>
+        <div className="flex-1 min-w-0 cursor-pointer" onClick={onOpen}>
+        <div className="flex items-center gap-1.5">
+        <p className="font-black text-(--t1) text-sm truncate group-hover:text-blue-600 transition-colors">{team.name}</p>
+        <span className="text-[7px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-1.5 py-0.5 rounded flex-shrink-0 flex items-center gap-0.5">
+        <Users size={7} /> Учасник
+        </span>
+        </div>
+        <div className="flex items-center gap-2 mt-0.5">
+        <span className="flex items-center gap-1 text-[9px] font-bold text-(--t2)">
+        <Users size={10} /> {memberCount}
+        </span>
+        {team.telegram_url && <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-500 border border-sky-500/20">TG</span>}
+        {team.discord_url  && <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">DC</span>}
+        </div>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+        <button
+        onClick={onLeave}
+        className="w-8 h-8 flex items-center justify-center rounded-xl bg-orange-500/5 border border-orange-500/20 text-orange-500 hover:bg-orange-500 hover:text-white transition-all active:scale-95"
+        title="Вийти з команди"
+        >
+        <LogOut size={13} />
+        </button>
+        </div>
+        </div>
+    );
+}
 function MyTeamRow({
     team, idx, onOpen, onEdit, onDelete,
 }: {
