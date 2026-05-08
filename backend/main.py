@@ -970,7 +970,7 @@ async def update_tournament(
     )
     if not tournament:
         raise HTTPException(status_code=404, detail="Турнір не знайдено")
-    if caller.get("role") != "superadmin" and tournament.get("created_by") != caller["id"]:
+    if caller.get("role") not in ("admin", "superadmin") and tournament.get("created_by") != caller["id"]:
         raise HTTPException(status_code=403, detail="Ви не є власником цього турніру")
 
     update_data = {k: v for k, v in body.model_dump().items() if v is not None}
@@ -986,6 +986,55 @@ async def update_tournament(
 
     print(f"[TOURNAMENT] {caller['username']} оновив турнір {tournament_id}: {list(update_data.keys())}", flush=True)
     return {"success": True, "tournament": result.data[0] if result.data else None}
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DELETE /api/tournaments/{tournament_id} — видалення турніру (admin/superadmin)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.delete("/api/tournaments/{tournament_id}")
+async def delete_tournament(tournament_id: str, authorization: str = Header(...)):
+    """Видалити турнір. Тільки admin або superadmin."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    if caller.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки адміністратор може видаляти турніри")
+
+    tournament = fetch_one(
+        supabase.table("tournaments").select("id, name, created_by").eq("id", tournament_id)
+    )
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Турнір не знайдено")
+
+    try:
+        # 1. Запрошення журі до турніру
+        supabase.table("jury_tournament_invitations").delete().eq("tournament_id", tournament_id).execute()
+
+        # 2. Пов'язані дані раундів
+        rounds = supabase.table("rounds").select("id").eq("tournament_id", tournament_id).execute()
+        round_ids = [r["id"] for r in (rounds.data or [])]
+        if round_ids:
+            supabase.table("jury_assignments").delete().in_("round_id", round_ids).execute()
+            supabase.table("jury_evaluations").delete().in_("round_id", round_ids).execute()
+            supabase.table("submissions").delete().in_("round_id", round_ids).execute()
+            supabase.table("rounds").delete().in_("id", round_ids).execute()
+
+        # 3. Відв'язуємо команди від турніру
+        supabase.table("teams").update({"tournament_id": None}).eq("tournament_id", tournament_id).execute()
+
+        # 4. Видаляємо сам турнір
+        supabase.table("tournaments").delete().eq("id", tournament_id).execute()
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Помилка при видаленні турніру: {str(e)}")
+
+    print(f"[TOURNAMENT] Турнір '{tournament['name']}' видалено адміном {caller.get('id')}", flush=True)
+    return {"success": True}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1023,7 +1072,7 @@ async def create_tournament_rounds(
     )
     if not tournament:
         raise HTTPException(status_code=404, detail="Турнір не знайдено")
-    if caller.get("role") != "superadmin" and tournament.get("created_by") != caller["id"]:
+    if caller.get("role") not in ("admin", "superadmin") and tournament.get("created_by") != caller["id"]:
         raise HTTPException(status_code=403, detail="Ви не є власником цього турніру")
 
     # create_tournament вже створила порожні рядки раундів (number=1..N) —
@@ -1230,7 +1279,7 @@ async def send_jury_invitation(payload: SendJuryInvitation, authorization: str =
     )
     if not tournament:
         raise HTTPException(status_code=404, detail="Турнір не знайдено")
-    if caller.get("role") != "superadmin" and tournament.get("created_by") != caller["id"]:
+    if caller.get("role") not in ("admin", "superadmin") and tournament.get("created_by") != caller["id"]:
         raise HTTPException(status_code=403, detail="Ви не є власником цього турніру")
 
     # Перевіряємо що invitee існує і має роль jury
