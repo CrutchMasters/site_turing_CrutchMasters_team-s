@@ -147,8 +147,10 @@ export default function RoundPage() {
     const [isJuryInvited,   setIsJuryInvited]    = useState<boolean | null>(null);
     const [isCaptain,       setIsCaptain]        = useState<boolean>(false);
     const [loading,         setLoading]          = useState(true);
-    // отдельный флаг чтобы не блокировать основной рендер
+    // окремий флаг щоб не блокувати основний рендер
     const [juryChecking,    setJuryChecking]     = useState(false);
+    // флаг поки перевіряємо submission — щоб не флікав стан "дедлайн минув"
+    const [submissionChecking, setSubmissionChecking] = useState(false);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
     const justSubmitted = searchParams?.get("submitted") === "1";
@@ -258,6 +260,7 @@ export default function RoundPage() {
         }
 
         // Ищем существующую submission
+        setSubmissionChecking(true);
         try {
             const res = await fetch(`${API_URL}/api/rounds/${id}/submission`, {
                 headers: { Authorization: `Bearer ${token}` },
@@ -266,7 +269,9 @@ export default function RoundPage() {
                 const json = await res.json();
                 if (json.submission) setMySubmission(json.submission);
             }
-        } catch { /* silent */ }
+        } catch { /* silent */ } finally {
+            setSubmissionChecking(false);
+        }
 
     }, [user, token, id]);
 
@@ -307,7 +312,9 @@ export default function RoundPage() {
     /* ── loading guards ── */
     if (authLoading || loading) return (
         <div className="flex min-h-screen bg-(--bg)">
+        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <Sidebar />
+        </div>
         <main className="flex-1 flex items-center justify-center">
         <Loader2 size={32} className="animate-spin text-(--t2)" />
         </main>
@@ -316,7 +323,9 @@ export default function RoundPage() {
 
     if (!round) return (
         <div className="flex min-h-screen bg-(--bg)">
+        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <Sidebar />
+        </div>
         <main className="flex-1 flex flex-col items-center justify-center gap-4">
         <AlertCircle size={28} className="text-(--t2)" />
         <p className="text-(--t2) font-bold">Раунд не знайдено</p>
@@ -366,34 +375,19 @@ export default function RoundPage() {
 
         /* ── ADMIN ── */
         if (isAdmin) {
-            if (isOwner) {
-                return (
-                    <Card>
-                    <SectionLabel icon={<ShieldAlert size={13} />}>Панель адміна</SectionLabel>
-                    <div className="flex flex-col gap-3">
-                    <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-600 text-xs font-bold">
-                    <ShieldAlert size={13} className="flex-shrink-0" />
-                    Ви власник цього турніру
-                    </div>
-                    <button onClick={() => router.push(`/rounds/${id}/edit`)}
-                    className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all">
-                    <Edit3 size={15} /> Редагувати раунд
-                    </button>
-                    <button onClick={() => router.push(`/jury/rounds/${id}/distribute`)}
-                    className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest border border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 active:scale-[0.98] transition-all">
-                    <Users size={15} /> Розподілити завдання
-                    </button>
-                    </div>
-                    </Card>
-                );
-            }
-            // Адмін, не власник
             return (
                 <Card>
                 <SectionLabel icon={<ShieldAlert size={13} />}>Панель адміна</SectionLabel>
-                <ViewOnlyBanner>
-                Ви адмін, але не є власником цього турніру. Управління та редагування недоступні — це чужий турнір.
-                </ViewOnlyBanner>
+                <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-600 text-xs font-bold">
+                <ShieldAlert size={13} className="flex-shrink-0" />
+                Адмін — повний доступ до управління
+                </div>
+                <button onClick={() => router.push(`/jury/rounds/${id}/distribute`)}
+                className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest border border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 active:scale-[0.98] transition-all">
+                <Users size={15} /> Розподілити завдання
+                </button>
+                </div>
                 </Card>
             );
         }
@@ -422,14 +416,14 @@ export default function RoundPage() {
                                 <CheckCircle2 size={13} className="flex-shrink-0" />
                                 Ви запрошені як журі для цього турніру
                             </div>
-                            {(roundActive || round.status === "finished" || round.status === "closed" || isEnded) ? (
+                            {(round.status === "finished" || round.status === "closed" || isEnded) ? (
                                 <a href={`/jury/rounds/${id}/evaluate`} onClick={(e) => { e.preventDefault(); router.push(`/jury/rounds/${id}/evaluate`); }}
                                     className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all">
                                     <Gavel size={15} /> Оцінити роботи
                                 </a>
                             ) : (
                                 <InfoBanner icon={<Clock size={16} />}>
-                                    Оцінювання буде доступне після початку активної фази раунду.
+                                    Оцінювання буде доступне після завершення раунду.
                                     Поточний статус: <b>{round.status ?? "невідомо"}</b>
                                 </InfoBanner>
                             )}
@@ -457,6 +451,19 @@ export default function RoundPage() {
 
         /* ── USER ── */
         if (isUser) {
+            // Поки перевіряємо submission — показуємо лоадер щоб не флікати
+            if (submissionChecking) {
+                return (
+                    <Card>
+                    <SectionLabel icon={<Flag size={13} />}>Здача роботи</SectionLabel>
+                    <div className="flex items-center gap-2 text-(--t2) text-sm font-bold">
+                    <Loader2 size={14} className="animate-spin flex-shrink-0" />
+                    Завантаження...
+                    </div>
+                    </Card>
+                );
+            }
+
             // Раунд — чернетка
             if (roundDraft) {
                 return (
@@ -469,31 +476,8 @@ export default function RoundPage() {
                 );
             }
 
-            // Раунд завершено
-            if (isEnded || round.status === "closed" || round.status === "finished") {
-                return (
-                    <Card>
-                    <SectionLabel icon={<Flag size={13} />}>Здача роботи</SectionLabel>
-                    {mySubmission && !mySubmission.is_draft ? (
-                        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-green-500/10 border border-green-500/20 text-green-600 text-sm font-bold">
-                        <CheckCircle2 size={15} className="flex-shrink-0" />
-                        Вашу роботу здано. Статус:&nbsp;<b>{mySubmission.status}</b>
-                        </div>
-                    ) : mySubmission?.is_draft ? (
-                        <InfoBanner icon={<AlertCircle size={16} />}>
-                        Дедлайн минув. Ваша чернетка не була підтверджена як фінальна здача.
-                        </InfoBanner>
-                    ) : (
-                        <InfoBanner icon={<AlertCircle size={16} />}>
-                        Дедлайн минув. Здача нових робіт більше не приймається.
-                        </InfoBanner>
-                    )}
-                    </Card>
-                );
-            }
-
-            // Раунд активний
-            if (roundActive) {
+            // Раунд активний — дедлайн ще не минув
+            if (roundActive && !isEnded) {
                 if (!isCaptain) {
                     return (
                         <Card>
@@ -536,6 +520,29 @@ export default function RoundPage() {
                 );
             }
 
+            // Раунд завершено або дедлайн минув
+            if (isEnded || round.status === "closed" || round.status === "finished") {
+                return (
+                    <Card>
+                    <SectionLabel icon={<Flag size={13} />}>Здача роботи</SectionLabel>
+                    {mySubmission && !mySubmission.is_draft ? (
+                        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-green-500/10 border border-green-500/20 text-green-600 text-sm font-bold">
+                        <CheckCircle2 size={15} className="flex-shrink-0" />
+                        Вашу роботу здано. Статус:&nbsp;<b>{mySubmission.status}</b>
+                        </div>
+                    ) : mySubmission?.is_draft ? (
+                        <InfoBanner icon={<AlertCircle size={16} />}>
+                        Дедлайн минув. Ваша чернетка не була підтверджена як фінальна здача.
+                        </InfoBanner>
+                    ) : (
+                        <InfoBanner icon={<AlertCircle size={16} />}>
+                        Дедлайн минув. Здача нових робіт більше не приймається.
+                        </InfoBanner>
+                    )}
+                    </Card>
+                );
+            }
+
             // Будь-який інший статус
             return (
                 <Card>
@@ -568,12 +575,13 @@ export default function RoundPage() {
         <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] blur-sm ${dark ? "invert" : ""}`} />
         </div>
 
-        <Sidebar />
-
         {isMobileSidebarOpen && (
             <div className="fixed inset-0 bg-black/50 z-40 lg:hidden"
             onClick={() => setIsMobileSidebarOpen(false)} />
         )}
+        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+        <Sidebar />
+        </div>
 
         <main className="flex-1 flex flex-col overflow-y-auto relative z-10">
         <MobileHeader

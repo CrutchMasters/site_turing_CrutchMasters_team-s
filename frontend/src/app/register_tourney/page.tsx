@@ -56,10 +56,33 @@ interface RoundInfo {
   status?: string;
 }
 
-interface DistributionStats {
-  total: number;
-  distributed: number;
-  evaluated: number;
+function DateTimePair({
+  label,
+  dateVal, onDate,
+  timeVal, onTime,
+  required,
+  requiredLabel,
+}: {
+  label: string;
+  dateVal: string; onDate: (v: string) => void;
+  timeVal: string; onTime: (v: string) => void;
+  required?: boolean;
+  requiredLabel?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+    <div className="flex items-center justify-between">
+    <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">{label}</span>
+    {required && (
+      <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1">
+      <Zap className="w-2.5 h-2.5 fill-red-500" /> {requiredLabel ?? "Обов'язково"}
+      </span>
+    )}
+    </div>
+    <DatePicker value={dateVal} onChange={onDate} />
+    <TimePicker value={timeVal} onChange={onTime} />
+    </div>
+  );
 }
 
 // ── Default criteria (fallback if round has no criteria column) ───────────────
@@ -418,62 +441,247 @@ export default function JuryEvaluationPage() {
     if (!roundId || !user) return;
     setPageLoading(true);
 
-
-    try {
-      // 1. Round info (через Supabase — публічні дані)
-      const { data: roundData } = await supabase
-      .from("rounds")
-      .select("id, number, name, description, tournament_id, end_at, status, criteria")
-      .eq("id", roundId)
-      .single();
-      if (!roundData) throw new Error("Раунд не знайдено");
-
-      // Parse criteria from round table
-      let parsedCriteria: Omit<CriterionScore, "score" | "comment">[] | null = null;
-      if (roundData.criteria && Array.isArray(roundData.criteria) && roundData.criteria.length > 0) {
-        parsedCriteria = roundData.criteria.map((c: any, idx: number) => ({
-          key: c.key ?? `criterion_${idx}`,
-          label: c.label ?? c.name ?? `Критерій ${idx + 1}`,
-          weight: typeof c.weight === "number" ? c.weight : Math.floor(100 / roundData.criteria.length),
-        }));
-      }
-      setRoundCriteria(parsedCriteria);
-
-      // Tournament name
-      let tournamentName = "";
-      if (roundData.tournament_id) {
-        const { data: tData } = await supabase
-        .from("tournaments")
-        .select("name")
-        .eq("id", roundData.tournament_id)
-        .single();
-        tournamentName = tData?.name ?? "";
-      }
-      setRound({ ...roundData, tournament_name: tournamentName });
-
-      // 2. Submissions — через бекенд (перевіряє JWT і права журі)
-      // Токен беремо з localStorage (актуальніший ніж сесія Supabase)
-      const freshToken = (typeof window !== "undefined" ? localStorage.getItem("access_token") : null)
-      ?? (await supabase.auth.getSession()).data.session?.access_token ?? "";
-      const subsRes = await fetch(`${API_URL}/api/rounds/${roundId}/submissions`, {
-        headers: { Authorization: `Bearer ${freshToken}` },
+  useEffect(() => {
+    if (accessState !== 'checking') return;
+    timerRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) { clearInterval(timerRef.current!); setAccessState('denied'); return 0; }
+        return prev - 1;
       });
-      if (!subsRes.ok) {
-        const err = await subsRes.json().catch(() => ({}));
-        throw new Error(err.detail ?? `Помилка ${subsRes.status}`);
+    }, 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [accessState]);
+
+  const handleConfirmYes = () => { if (timerRef.current) clearInterval(timerRef.current); setAccessState('denied'); };
+  const handleConfirmNo  = () => { if (timerRef.current) clearInterval(timerRef.current); router.push('/login'); };
+
+  // localToIso: локальний час браузера → ISO UTC для збереження в БД (нульовий пояс).
+  const toTimestamp = localToIso;;
+
+  const API_URL =
+  typeof window !== 'undefined' && window.location.hostname === 'localhost'
+  ? 'http://localhost:8000'
+  : 'https://site-turing-crutchmasters-team-s.onrender.com';
+
+  // БАГ 6 fix: завантажуємо файли раундів через бекенд (service_role),
+  // а не напряму через anon key — інакше приватний bucket поверне 403.
+  // Повертає signed URL (10 років), який зберігаємо в attachments.
+  const uploadFile = async (file: File, roundNumber: number): Promise<string> => {
+    const token = await getToken();
+    if (!token) throw new Error('Не вдалося отримати токен авторизації. Спробуйте увійти знову. [upload]');
+
+    const form = new FormData();
+    form.append('round_number', String(roundNumber));
+    form.append('file', file);
+
+    const res = await fetch(`${API_URL}/api/upload/round-file`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(`Помилка завантаження файлу "${file.name}": ${err.detail ?? res.statusText}`);
+    }
+    const data = await res.json();
+    // Бекенд повертає signed_url (довготривалий, service_role)
+    return data.signed_url as string;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitError(null);
+    if (!tourneyName.trim()) { setSubmitError(t.tourney?.errNameRequired ?? "Назва турніру є обов'язковою"); return; }
+    if (!startDate)          { setSubmitError(t.tourney?.errStartRequired ?? "Дата старту турніру є обов'язковою"); return; }
+    setIsSubmitting(true);
+    try {
+      // Перевірка дублікату назви
+      const { data: existing, error: checkError } = await supabase
+      .from("tournaments")
+      .select("id")
+      .ilike("name", tourneyName.trim())
+      .limit(1);
+      if (!checkError && existing && existing.length > 0) {
+        setSubmitError((t.tourney?.errDuplicate ?? 'Турнір з назвою "{name}" вже існує. Оберіть іншу назву.').replace('{name}', tourneyName.trim()));
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Формуємо масив раундів — файли спочатку завантажуємо в Storage
+      const roundsPayload = await Promise.all(
+        Array.from({ length: roundCount }, async (_, i) => {
+          const n = i + 1;
+          const rd = roundsData[n];
+
+          // 1. Посилання (URL-рядки) → тип "link"
+          const linkAttachments = (rd?.links ?? [])
+          .filter(Boolean)
+          .map((url, idx) => ({
+            id: `link-${n}-${idx}`,
+            name: url,
+            url,
+            type: 'link' as const,
+          }));
+
+          // 2. Файли → завантажуємо в Storage → тип "file"
+          const fileAttachments: { id: string; name: string; url: string; type: 'file' }[] = [];
+          // Guard: розпаковуємо FileItem { file: File, name, size, type } або голий File
+          const rawFiles: File[] = ((rd as any)?.files ?? [])
+          .map((f: unknown): File | null => {
+            if (f instanceof File) return f;
+            if (f && typeof f === 'object' && (f as any).file instanceof File)
+              return (f as any).file as File;
+            return null;
+          })
+          .filter((f: File | null): f is File => f !== null);
+          for (let fi = 0; fi < rawFiles.length; fi++) {
+            const file = rawFiles[fi];
+            const publicUrl = await uploadFile(file, n);
+            fileAttachments.push({
+              id: `file-${n}-${fi}`,
+              name: file.name,
+              url: publicUrl,
+              type: 'file' as const,
+            });
+          }
+
+          const attachments = [...linkAttachments, ...fileAttachments];
+
+          return {
+            number:       n,
+            name:         rd?.name?.trim()                        || `Раунд ${n}`,
+                   description:  rd?.description?.trim()                 || null,
+                   criteria:     rd?.criteria?.filter(Boolean).join('\n')|| null,
+                   technologies: rd?.requirements?.filter(Boolean)       ?? [],
+                   start_at:     toTimestamp(rd?.startDate ?? '', rd?.startTime ?? '') ?? null,
+                   end_at:       toTimestamp(rd?.deadlineDate ?? '', rd?.deadlineTime ?? '') ?? null,
+                   // links — зберігаємо для зворотної сумісності
+                   links:        linkAttachments,
+                   // attachments — єдине поле що читає сторінка раунду
+                   attachments,
+                   status: 'pending',
+          };
+        })
+      );
+
+      // Явно передаємо p_rounds_data: null — Postgres вибере 8-параметрову версію
+      // (без цього — "ambiguous overload" між 7- та 8-параметровою функцією)
+      // Раунди вставляємо окремо нижче через supabase.from("rounds").insert(...)
+      // FIX: передаємо p_end_at (кінець турніру) і p_created_by (fallback якщо auth.uid() null)
+      const { data: tournamentId, error: rpcError } = await supabase.rpc("create_tournament", {
+        p_name:              tourneyName.trim(),
+                                                                         p_rules:             description.trim() || null,
+                                                                         p_start_at:          toTimestamp(startDate, startTime),
+                                                                         p_end_at:            toTimestamp(endDate, endTime) || null,
+                                                                         p_registration_from: toTimestamp(regStartDate, regStartTime),
+                                                                         p_registration_to:   toTimestamp(regEndDate, regEndTime),
+                                                                         p_max_teams:         teamCount > 0 ? teamCount : null,
+                                                                         p_rounds:            roundCount,
+                                                                         p_rounds_data:       null,
+                                                                         p_created_by:        user?.id ?? null,
+      });
+      if (rpcError) throw new Error(rpcError.message || rpcError.details || JSON.stringify(rpcError));
+      if (!tournamentId) throw new Error(t.tourney?.errNoId ?? 'Турнір створено, але ID не повернуто');
+
+      // Вставляємо раунди через бекенд (service_role) — anon key не має прав на INSERT в rounds (RLS 401)
+      // БАГ 8 fix: перевіряємо ліміт constraint (1-8) перед відправкою
+      if (roundsPayload.length > 8) {
+        throw new Error(t.tourney?.errMaxRounds ?? 'Максимальна кількість раундів — 8');
+      }
+      const token = await getToken();
+      if (!token) throw new Error(t.tourney?.errNoToken ?? 'Не вдалося отримати токен авторизації. Спробуйте увійти знову.');
+      const roundsRes = await fetch(`${API_URL}/api/tournaments/${tournamentId}/rounds`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ rounds: roundsPayload }),
+      });
+      if (!roundsRes.ok) {
+        const err = await roundsRes.json().catch(() => ({}));
+        const errMsg: string = err.detail ?? JSON.stringify(err);
+        if (errMsg.includes('rounds_number_check') || errMsg.includes('number_check')) {
+          throw new Error(t.tourney?.errRoundNumber ?? 'Номер раунду має бути від 1 до 8. Перевірте кількість раундів.');
+        }
+        throw new Error((t.tourney?.errRoundsSave ?? 'Турнір створено, але раунди не збережено: {detail}').replace('{detail}', errMsg));
       }
       const subsJson = await subsRes.json();
       const assignedSubmissions: any[] = subsJson.submissions ?? [];
 
-      // Загальна кількість submissions раунду (для статистики)
-      const totalCount = assignedSubmissions.length;
-
-      if (assignedSubmissions.length === 0) {
-        setWorks([]);
-        setStats({ total: 0, distributed: 0, evaluated: 0 });
-        setPageLoading(false);
-        return;
+      router.push('/dashboard');
+    } catch (err: any) {
+      console.error('Помилка створення турніру:', err?.message ?? err);
+      // БАГ 8 fix: зрозуміле повідомлення про constraint раундів
+      const msg: string = err?.message ?? '';
+      if (msg.includes('rounds_number_check') || msg.includes('number_check')) {
+        setSubmitError(t.tourney?.errRoundNumber ?? 'Номер раунду має бути від 1 до 8. Перевірте кількість раундів.');
+      } else if (msg.includes('Максимальна кількість раундів') || msg.includes('Maximum number of rounds') || msg.includes('Максимальное количество')) {
+        setSubmitError(msg);
+      } else {
+        setSubmitError(msg || (t.tourney?.errGeneric ?? 'Виникла помилка. Спробуйте ще раз.'));
       }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  /* ── Loading ── */
+  if (accessState === 'loading' || isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-(--bg)">
+      <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  /* ── Checking ── */
+  if (accessState === 'checking') {
+    const progress = ((COUNTDOWN_SEC - countdown) / COUNTDOWN_SEC) * 100;
+    const circumference = 2 * Math.PI * 28;
+    return (
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-(--bg) text-(--t1)">
+      <style>{`
+        @keyframes fadeInModal { from{opacity:0;transform:scale(0.95) translateY(16px)} to{opacity:1;transform:scale(1) translateY(0)} }
+        @keyframes pulse-ring  { 0%{box-shadow:0 0 0 0 rgba(239,68,68,0.35)} 70%{box-shadow:0 0 0 14px rgba(239,68,68,0)} 100%{box-shadow:0 0 0 0 rgba(239,68,68,0)} }
+        .modal-card{animation:fadeInModal 0.4s cubic-bezier(.22,1,.36,1) both}
+        .pulse-btn{animation:pulse-ring 1.4s ease-out infinite}
+        `}</style>
+        <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full opacity-[0.07] blur-3xl bg-red-500" />
+        <div className="absolute -bottom-40 -right-40 w-[500px] h-[500px] rounded-full opacity-[0.07] blur-3xl bg-orange-500" />
+        </div>
+        <div className="modal-card relative z-10 w-full max-w-md mx-4 bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-2xl border border-red-500/30 p-8">
+        <div className="flex flex-col items-center mb-6">
+        <div className="relative w-20 h-20 mb-4">
+        <svg className="w-20 h-20 -rotate-90" viewBox="0 0 64 64">
+        <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(239,68,68,0.15)" strokeWidth="4" />
+        <circle cx="32" cy="32" r="28" fill="none" stroke="#ef4444" strokeWidth="4"
+        strokeLinecap="round" strokeDasharray={circumference}
+        strokeDashoffset={circumference * (progress / 100)}
+        style={{ transition: 'stroke-dashoffset 0.9s linear' }} />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-2xl font-black tabular-nums text-red-500">{countdown}</span>
+        </div>
+        </div>
+        <h2 className="text-xl font-black uppercase tracking-tight text-center mb-1 text-(--t1)">{t.tourney?.accessDeniedTitle ?? '⚠️ Обмежений доступ'}</h2>
+        <p className="text-sm text-center text-(--t2)">{t.tourney?.accessDeniedDesc ?? 'У вас немає прав для перегляду цієї сторінки'}</p>
+        </div>
+        <div className="h-px mb-6 bg-(--brd)" />
+        <p className="text-base font-black uppercase tracking-tight text-center mb-2 text-(--t1)">{t.tourney?.accessDeniedQuestion ?? 'Точно хочете переглянути цю сторінку?'}</p>
+        <p className="text-xs text-center mb-6 text-(--t2)">
+        {(t.tourney?.accessDeniedCountdown ?? 'Через {sec} сек ви автоматично побачите, що чекає на порушників 🐇').replace('{sec}', String(countdown))}
+        </p>
+        <div className="flex gap-3">
+        <button onClick={handleConfirmYes} className="pulse-btn flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest text-white bg-red-500 active:scale-95 transition-all">{t.tourney?.accessDeniedYes ?? 'Так, показати'}</button>
+        <button onClick={handleConfirmNo}  className="flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) text-(--t2) bg-(--bg) active:scale-95 transition-all hover:opacity-80">{t.tourney?.accessDeniedNo ?? 'Ні, піти'}</button>
+        </div>
+        <p className="text-center text-[10px] mt-4 text-(--t2) opacity-50">{t.tourney?.accessDeniedNoHint ?? '«Ні» → повернути на сторінку входу'}</p>
+        </div>
+        </div>
+    );
+  }
 
       // 3. Build work list — бекенд вже повертає my_evaluation для журі,
       //    тому окремого запиту до jury_evaluations не потрібно.
@@ -497,6 +705,39 @@ export default function JuryEvaluationPage() {
           const allFilled = criteria.every(c => c.score !== "");
           status = allFilled ? "evaluated" : "in_progress";
         }
+        @keyframes fadeSlideUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes rabbit-fall { 0%{top:-80px;opacity:0;transform:translateX(-50%) rotate(0deg)} 30%{opacity:1} 100%{top:110%;opacity:0;transform:translateX(-50%) rotate(720deg)} }
+        @keyframes scanline { 0%{transform:translateY(-100%)} 100%{transform:translateY(100vh)} }
+        .glitch-text{position:relative}
+        .glitch-text::before,.glitch-text::after{content:attr(data-text);position:absolute;inset:0;font:inherit;text-align:inherit}
+        .glitch-text::before{color:#3b82f6;animation:glitch 2.5s infinite steps(1);animation-delay:0.1s}
+        .glitch-text::after{color:#8b5cf6;animation:glitch 2.5s infinite steps(1);animation-delay:0.35s}
+        .fade-up{animation:fadeSlideUp 0.6s cubic-bezier(.22,1,.36,1) both}
+        .fade-up-1{animation:fadeSlideUp 0.6s cubic-bezier(.22,1,.36,1) 0.15s both}
+        .fade-up-2{animation:fadeSlideUp 0.6s cubic-bezier(.22,1,.36,1) 0.3s both}
+        .rabbit{position:fixed;left:50%;font-size:3rem;animation:rabbit-fall 3s ease-in 0.5s both;z-index:50}
+        .scanline{position:fixed;inset:0;pointer-events:none;z-index:40;background:linear-gradient(transparent 50%,rgba(0,0,0,0.03) 50%);background-size:100% 4px}
+        .scanline::after{content:'';position:absolute;left:0;right:0;height:60px;background:linear-gradient(transparent,rgba(59,130,246,0.04),transparent);animation:scanline 3s linear infinite}
+        `}</style>
+        <div className="scanline" />
+        <div className="rabbit">🐇</div>
+        <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute -top-40 -left-40 w-[700px] h-[700px] rounded-full opacity-[0.06] blur-3xl bg-blue-600" />
+        <div className="absolute -bottom-40 -right-40 w-[600px] h-[600px] rounded-full opacity-[0.06] blur-3xl bg-purple-600" />
+        </div>
+        <div className="relative z-10 flex flex-col items-center text-center px-4">
+        <div className="glitch-text text-[120px] sm:text-[160px] font-black leading-none mb-4 select-none fade-up text-(--t1)" data-text="403" style={{ letterSpacing: '-0.05em' }}>403</div>
+        <p className="fade-up-1 text-lg sm:text-2xl font-black uppercase tracking-tight mb-2 text-(--t1)">{t.tourney?.deniedTitle ?? 'Ах ти хитрий шукач потаємних шляхів,'}</p>
+        <p className="fade-up-1 text-lg sm:text-2xl font-black uppercase tracking-tight mb-8 text-blue-600">{t.tourney?.deniedSubtitle ?? 'привіт від Білого Кролика 🐇'}</p>
+        <p className="fade-up-2 text-xs font-black uppercase tracking-[0.3em] mb-10 text-(--t2)">{t.tourney?.deniedDesc ?? 'Ця сторінка тільки для адміністраторів'}</p>
+        <div className="fade-up-2 flex flex-col sm:flex-row gap-3 justify-center">
+        <a href={'/dashboard'} onClick={(e) => { e.preventDefault(); router.push('/dashboard'); }} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20">{t.tourney?.deniedBackDashboard ?? '← Повернутись на дашборд'}</a>
+        <a href={'/'} onClick={(e) => { e.preventDefault(); router.push('/'); }} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) text-(--t2) bg-(--bg) active:scale-95 transition-all hover:opacity-80">{t.tourney?.deniedBackHome ?? 'На головну'}</a>
+        </div>
+        </div>
+        </div>
+    );
+  }
 
         return {
           id: s.id,
@@ -572,33 +813,18 @@ export default function JuryEvaluationPage() {
     // зміні активної картки спричиняло зайві fetch-запити і скидало стан форми.
   }, [roundId, user, isJury]);
 
-  useEffect(() => {
-    if (!authLoading && user && canAccess) fetchData();
-  }, [authLoading, user, canAccess]);
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
+      <a href={'/'} onClick={(e) => { e.preventDefault(); router.push('/'); }} className="hover:text-blue-600 transition-colors">{t.tourney?.home ?? 'Головна'}</a>
+      <ChevronRight size={10} />
+      <a href={'/dashboard'} onClick={(e) => { e.preventDefault(); router.push('/dashboard'); }} className="hover:text-blue-600 transition-colors">{t.tourney?.dashboard ?? 'Дашборд'}</a>
+      <ChevronRight size={10} />
+      <span className="text-(--t1)">{t.tourney?.createAdmin ?? 'Створення турніру'}</span>
+      </nav>
 
-    // ── Active work mutations ─────────────────────────────────────────────────
-    const updateCriterionScore = (criterionKey: string, score: number | "") => {
-      if (activeIdx === null) return;
-      setWorks(prev => prev.map((w, i) => {
-        if (i !== activeIdx) return w;
-        const criteria = w.criteria.map(c =>
-        c.key === criterionKey ? { ...c, score } : c
-        );
-        const allFilled = criteria.every(c => c.score !== "");
-        return { ...w, criteria, status: allFilled ? "evaluated" : "in_progress" };
-      }));
-    };
-
-    const updateCriterionComment = (criterionKey: string, comment: string) => {
-      if (activeIdx === null) return;
-      setWorks(prev => prev.map((w, i) => {
-        if (i !== activeIdx) return w;
-        const criteria = w.criteria.map(c =>
-        c.key === criterionKey ? { ...c, comment } : c
-        );
-        return { ...w, criteria };
-      }));
-    };
+      <button onClick={() => router.back()} className="mb-6 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
+      <ArrowLeft size={14} /> {t.tourney?.back ?? 'Назад'}
+      </button>
 
     const updateGeneralComment = (comment: string) => {
       if (activeIdx === null) return;
@@ -695,42 +921,70 @@ export default function JuryEvaluationPage() {
         <div className="min-h-screen bg-(--bg) flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
         </div>
-      );
-    }
+        <div className="p-6 sm:p-8 space-y-5">
+        {/* Назва */}
+        <div>
+        <div className="flex items-center justify-between mb-2">
+        <label className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
+        {t.tourney?.name ?? 'Назва турніру'}
+        </label>
+        <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1">
+        <Zap className="w-2.5 h-2.5 fill-red-500" /> {t.tourney?.required ?? "Обов'язково"}
+        </span>
+        </div>
+        <input
+        type="text"
+        value={tourneyName}
+        onChange={e => setTourneyName(e.target.value)}
+        placeholder={t.tourney?.namePlaceholder ?? 'Назва турніру...'}
+        className={inp}
+        />
+        </div>
+        {/* Опис */}
+        <div>
+        <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-2">
+        {t.tourney?.desc ?? 'Опис / Правила'}
+        </label>
+        <RichTextEditor
+        value={description}
+        onChange={setDescription}
+        placeholder={t.tourney?.descPlaceholder ?? 'Введіть опис турніру...'}
+        rows={7}
+        />
+        </div>
+        </div>
+        </section>
 
     const activeWork = activeIdx !== null ? works[activeIdx] : null;
     const activeTotal = activeWork ? computeTotal(activeWork.criteria) : 0;
     const allCriteriaFilled = activeWork?.criteria.every(c => c.score !== "") ?? false;
 
-    return (
-      <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes fadeUp   { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
-        @keyframes cardDrop { from{opacity:0;transform:translateY(-12px) scale(.98)} to{opacity:1;transform:none} }
-        @keyframes scoreGlow { 0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,0)} 50%{box-shadow:0 0 12px 2px rgba(59,130,246,0.18)} }
-        .fuIn { animation: fadeUp   300ms cubic-bezier(.22,1,.36,1) both }
-        .cdIn { animation: cardDrop 380ms cubic-bezier(.22,1,.36,1) both }
-        .score-glow { animation: scoreGlow 2s ease-in-out infinite }
-        input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--t1); border: 3px solid var(--card); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.25); transition: transform 0.25s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.2s ease; }
-        input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.25); box-shadow: 0 2px 10px rgba(59,130,246,0.45); }
-        input[type=range]:active::-webkit-slider-thumb { transform: scale(0.92); transition: transform 0.12s cubic-bezier(0.34, 1.2, 0.64, 1), box-shadow 0.1s ease; }
-        input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--t1); border: 3px solid var(--card); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.25); transition: transform 0.25s cubic-bezier(0.34, 1.4, 0.64, 1); }
-        html, body { max-width: 100vw; overflow-x: hidden; }
-        @media (min-width: 480px) { .xs\\:inline { display: inline !important; } }
-        `}} />
-
-        {/* Watermark */}
-        <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
-        <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
+        <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd) bg-(--bg)/50">
+        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white flex-shrink-0">
+        <Users size={16} />
+        </div>
+        <span className="text-xs font-black uppercase tracking-widest text-(--t2)">{t.tourney?.regTeams ?? 'Реєстрація команд'}</span>
+        </div>
+        <div className="p-6 space-y-4 flex-1">
+        <DateTimePair label={t.tourney?.regStart ?? 'Початок реєстрації'} dateVal={regStartDate} onDate={setRegStartDate} timeVal={regStartTime} onTime={setRegStartTime} />
+        <div className="border-t border-(--brd)" />
+        <DateTimePair label={t.tourney?.regEnd ?? 'Кінець реєстрації'} dateVal={regEndDate} onDate={setRegEndDate} timeVal={regEndTime} onTime={setRegEndTime} />
+        </div>
         </div>
 
-        {/* Mobile sidebar overlay */}
-        {isMobileSidebarOpen && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
-        )}
-        <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
-        <Sidebar />
+        <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd) bg-(--bg)/50">
+        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
+        <Clock size={16} />
+        </div>
+        <span className="text-xs font-black uppercase tracking-widest text-(--t2)">{t.tourney?.startDates ?? 'Дати старту'}</span>
+        </div>
+        <div className="p-6 space-y-4 flex-1">
+        <DateTimePair label={t.tourney?.tourStart ?? 'Початок турніру'} dateVal={startDate} onDate={setStartDate} timeVal={startTime} onTime={setStartTime} required requiredLabel={t.tourney?.required} />
+        <div className="border-t border-(--brd)" />
+        <DateTimePair label={t.tourney?.tourEnd ?? 'Кінець турніру'} dateVal={endDate} onDate={setEndDate} timeVal={endTime} onTime={setEndTime} />
+        </div>
         </div>
 
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden max-w-full">
@@ -742,56 +996,81 @@ export default function JuryEvaluationPage() {
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 relative z-10 w-full max-w-full">
 
-        {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2) flex-wrap overflow-hidden">
-        <a href={"/"} onClick={(e) => { e.preventDefault(); router.push("/"); }} className="hover:text-blue-600 transition-colors flex-shrink-0">Головна</a>
-        <ChevronRight size={10} className="flex-shrink-0" />
-        <button onClick={() => round && router.push(`/tournaments/${round.tournament_id}`)} className="hover:text-blue-600 transition-colors truncate max-w-[80px]">
-        {round?.tournament_name ?? "Турнір"}
-        </button>
-        <ChevronRight size={10} className="flex-shrink-0" />
-        <span className="text-(--t1) truncate max-w-[100px]">{round ? `Раунд ${round.number}` : "..."} — Оцінювання</span>
-        </nav>
-
-        <div className="flex items-center gap-3 mb-6">
-        <button
-        onClick={() => round && router.push(`/rounds/${round.id}`)}
-        className="flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors group"
-        >
-        <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
-        Назад до раунду
-        </button>
-        <div className="flex-1 min-w-0">
-        <h1 className="text-xl sm:text-2xl font-black text-(--t1) uppercase tracking-tight truncate">
-        ⚖️ Оцінювання робіт
-        </h1>
-        {round && (
-          <p className="text-[11px] font-bold text-(--t2) uppercase tracking-widest mt-0.5">
-          {round.tournament_name} · Раунд {round.number}: {round.name}
-          </p>
-        )}
+        <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-(--brd) bg-(--bg)/50">
+        <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
+        <Layers size={14} />
+        </div>
+        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">{t.tourney?.block3format ?? '3. Формат'}</span>
+        <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1 whitespace-nowrap">
+        <Zap className="w-2 h-2 fill-red-500" /> {t.tourney?.required ?? "Обов'язково"}
+        </span>
+        </div>
+        <div className="p-5 flex flex-col gap-3 flex-1">
+        <div className="flex items-center justify-between">
+        <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{t.tourney?.roundCount ?? 'Кількість раундів'}</p>
+        <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">
+        {t.tourney?.roundSelected ?? 'Вибрано:'} <span className="text-blue-500">{roundCount}</span> {roundCount === 1 ? (t.tourney?.roundWord_1 ?? 'раунд') : roundCount < 5 ? (t.tourney?.roundWord_2 ?? 'раунди') : (t.tourney?.roundWord_5 ?? 'раундів')}
+        </p>
+        </div>
+        <div className="grid grid-cols-4 gap-1.5">
+        {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+          <button key={n} type="button"
+          onClick={() => { setRoundCount(n); if (selectedRoundTab > n) setSelectedRoundTab(1); }}
+          className={`h-10 rounded-xl font-black text-sm border transition-all duration-150 active:scale-90 ${
+            n === roundCount
+            ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/30'
+            : n <= roundCount
+            ? 'bg-blue-500/10 border-blue-500/40 text-blue-500'
+            : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600'
+          }`}>
+          {n}
+          </button>
+        ))}
         </div>
         </div>
+        </div>
 
-        {pageLoading ? (
-          <div className="flex items-center justify-center py-24">
-          <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-[11px] font-black uppercase tracking-widest text-(--t2)">Завантаження...</p>
-          </div>
-          </div>
-        ) : (
-          <div className="flex flex-col xl:flex-row gap-4 w-full">
-
-          {/* ══ Mobile tab switcher ══════════════════════════════════════ */}
-          <div className="xl:hidden w-full flex rounded-2xl border border-(--brd) bg-(--card) p-1 gap-1">
-          <button
-          onClick={() => setMobileTab("list")}
-          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
-            mobileTab === "list" ? "bg-blue-600 text-white shadow-md" : "text-(--t2) hover:text-(--t1)"
-          }`}
-          >
-          <Users size={13} /> Роботи ({works.length})
+        <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-(--brd) bg-(--bg)/50">
+        <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
+        <Users size={14} />
+        </div>
+        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">{t.tourney?.teamCount ?? 'Команди'}</span>
+        <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full whitespace-nowrap">
+        {t.common?.optional ?? 'Опціонально'}
+        </span>
+        </div>
+        <div className="p-5 flex flex-col gap-3 flex-1">
+        <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{t.tourney?.teamCount ?? 'Кількість команд'}</p>
+        <div className="flex items-center justify-center gap-3 flex-1">
+        <button type="button"
+        onClick={() => setTeamCount(Math.max(0, teamCount - 1))}
+        className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">−</button>
+        <input
+        type="number"
+        min={0}
+        value={teamCount === 0 ? '' : teamCount}
+        onChange={e => {
+          const v = parseInt(e.target.value, 10);
+          setTeamCount(isNaN(v) || v < 0 ? 0 : v);
+        }}
+        placeholder="∞"
+        className="w-16 text-center text-2xl font-black bg-transparent outline-none text-(--t1) placeholder:text-(--t2)/60 border-b-2 border-(--brd) focus:border-blue-500 transition-colors tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        />
+        <button type="button"
+        onClick={() => setTeamCount(teamCount + 1)}
+        className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">+</button>
+        </div>
+        <div className="flex gap-1.5 flex-wrap justify-center">
+        {[0, 8, 16, 32, 64].map(n => (
+          <button key={n} type="button" onClick={() => setTeamCount(n)}
+          className={`text-[10px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest transition-all active:scale-95 ${
+            teamCount === n
+            ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/30'
+            : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600'
+          }`}>
+          {n === 0 ? (t.tourney?.noLimit ?? 'Без ліміту') : n}
           </button>
           <button
           onClick={() => setMobileTab("form")}
@@ -813,93 +1092,32 @@ export default function JuryEvaluationPage() {
           {/* ══ LEFT — Submission list + Stats ═══════════════════════════ */}
           <div className={`w-full xl:w-[320px] flex-shrink-0 flex-col gap-4 ${mobileTab === "list" ? "flex" : "hidden xl:flex"}`}>
 
-          {/* Stats card */}
-          <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm overflow-hidden">
-          <div className="flex items-center gap-3 px-5 py-3.5 border-b border-(--brd) bg-(--bg)/40">
-          <BarChart2 size={14} className="text-blue-600" />
-          <span className="text-[10px] font-black uppercase tracking-widest text-(--t1)">
-          {isAdmin ? "Загальний стан розподілу" : "Мої роботи до оцінки"}
-          </span>
-          </div>
-          <div className="p-4 grid grid-cols-3 gap-3">
-          {[
-            { label: "Всього робіт",  value: stats.total,       color: "text-(--t1)" },
-             { label: "Розподілено",   value: stats.distributed, color: "text-blue-600" },
-             { label: "Оцінено",       value: stats.evaluated,   color: "text-green-500" },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="flex flex-col items-center gap-1 py-2 rounded-xl bg-(--bg) border border-(--brd)">
-            <span className={`text-xl font-black ${color}`}>{value}</span>
-            <span className="text-[9px] font-black uppercase tracking-wider text-(--t2) text-center leading-tight">{label}</span>
-            </div>
-          ))}
-          </div>
-          {/* Progress bar */}
-          <div className="px-4 pb-4">
-          <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Прогрес оцінення</span>
-          <span className="text-[9px] font-black text-blue-600">
-          {stats.distributed > 0 ? Math.round((stats.evaluated / stats.distributed) * 100) : 0}%
-          </span>
-          </div>
-          <div className="h-2 rounded-full bg-(--brd) overflow-hidden">
-          <div
-          className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-700 transition-all duration-700"
-          style={{ width: `${stats.distributed > 0 ? (stats.evaluated / stats.distributed) * 100 : 0}%` }}
-          />
-          </div>
-          </div>
-          {/* Admin redistribute */}
-          {isAdmin && (
-            <div className="px-4 pb-4 flex flex-col gap-2">
-            <button
-            onClick={() => router.push(`/jury/rounds/${roundId}/distribute`)}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-blue-600/30 bg-blue-600/10 text-blue-600 font-black text-[10px] uppercase tracking-widest hover:bg-blue-600/20 active:scale-95 transition-all"
-            >
-            <Shuffle size={12} /> Ручний розподіл робіт
-            </button>
-            <button
-            onClick={handleRedistribute}
-            disabled={redistributing}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-orange-500/40 hover:text-orange-500 active:scale-95 transition-all disabled:opacity-50"
-            >
-            {redistributing
-              ? <><Loader size={12} className="animate-spin" /> Розподіл...</>
-              : <><RefreshCw size={12} /> Авто-перерозподіл</>
-            }
-            </button>
-            </div>
-          )}
-          </div>
+        {/* Action buttons */}
+        <div className="cdIn flex flex-col sm:flex-row gap-3" style={{ animationDelay: '200ms' }}>
+        <button type="submit" disabled={isSubmitting}
+        className="flex-1 px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+        {isSubmitting && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+        {isSubmitting ? (t.tourney?.saving ?? 'Зберігається...') : (t.tourney?.createBtn ?? 'Створити турнір')}
+        </button>
+        <button type="button" onClick={() => router.back()} disabled={isSubmitting}
+        className="flex-1 px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60">
+        {t.common?.cancel ?? 'Скасувати'}
+        </button>
+        </div>
 
-          {/* Submission list */}
-          <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm overflow-hidden">
-          <div className="flex items-center gap-3 px-5 py-3.5 border-b border-(--brd) bg-(--bg)/40">
-          <Users size={14} className="text-blue-600" />
-          <span className="text-[10px] font-black uppercase tracking-widest text-(--t1)">
-          Роботи ({works.length})
-          </span>
-          </div>
-          <div className="p-3 max-h-[420px] xl:max-h-[calc(100vh-380px)] overflow-y-auto space-y-2">
-          {works.length === 0 ? (
-            <div className="flex flex-col items-center py-10 gap-3">
-            <Shield size={28} className="text-(--t2) opacity-30" />
-            <p className="text-[11px] font-black uppercase tracking-widest text-(--t2) text-center">
-            {isJury ? "Вам ще не призначено робіт для оцінювання" : "Немає поданих робіт"}
-            </p>
-            </div>
-          ) : (
-            works.map((work, idx) => (
-              <SubmissionCard
-              key={work.id}
-              work={work}
-              isActive={activeIdx === idx}
-              onSelect={() => { setActiveIdx(idx); setMobileTab("form"); }}
-              juryId={user?.id ?? ""}
-              />
-            ))
-          )}
-          </div>
-          </div>
+        </div>
+        {/* end LEFT COLUMN */}
+
+        {/* ── RIGHT COLUMN ── */}
+        <div className="w-full xl:sticky xl:top-6 xl:flex-1 xl:min-w-0">
+        <RoundSettingsPanel
+        roundCount={roundCount}
+        selectedRound={selectedRoundTab}
+        onSelectRound={setSelectedRoundTab}
+        onRoundsChange={setRoundsData}
+        labels={t.roundPanel}
+        />
+        </div>
 
           </div>
 

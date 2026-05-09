@@ -22,6 +22,10 @@ export interface RoundData {
     startTime: string;
     deadlineDate: string;
     deadlineTime: string;
+    evalStartDate: string;
+    evalStartTime: string;
+    evalEndDate: string;
+    evalEndTime: string;
     requirements: string[];
     /** Критерії оцінювання з вагами — обов'язкові */
     criteria: Criterion[];
@@ -36,12 +40,37 @@ export interface FileItem {
     type: string;
 }
 
+export interface RoundPanelLabels {
+    header?: string;
+    round?: string;
+    taskName?: string;
+    taskNamePlaceholder?: string;
+    taskDesc?: string;
+    taskDescPlaceholder?: string;
+    start?: string;
+    startDate?: string;
+    deadline?: string;
+    deadlineDate?: string;
+    requirements?: string;
+    requirementsPlaceholder?: string;
+    criteria?: string;
+    criteriaPlaceholder?: string;
+    links?: string;
+    addLink?: string;
+    files?: string;
+    uploadFiles?: string;
+    savedInCloud?: string;
+    noItems?: string;
+    add?: string;
+}
+
 interface Props {
     roundCount: number;
     selectedRound: number;
     onSelectRound: (n: number) => void;
     onRoundsChange?: (rounds: Record<number, RoundData>) => void;
     initialData?: Record<number, Partial<RoundData>>;
+    labels?: RoundPanelLabels;
 }
 
 // ── Validation (exported for parent to block save) ──────────────────────────
@@ -71,6 +100,8 @@ const defaultRound = (): RoundData => ({
     name: '', description: '',
     startDate: '', startTime: '',
     deadlineDate: '', deadlineTime: '',
+    evalStartDate: '', evalStartTime: '',
+    evalEndDate: '', evalEndTime: '',
     requirements: [], criteria: [], links: [], files: [],
 });
 
@@ -91,17 +122,21 @@ function DateTimeField({
 
 // ── ListField — requirements (plain strings) ───────────────────────────────
 function ListField({
-    label, items, onChange, placeholder,
-}: { label: string; items: string[]; onChange: (items: string[]) => void; placeholder?: string }) {
-    const addItem    = () => onChange([...items, '']);
-    const updateItem = (i: number, val: string) => { const n = [...items]; n[i] = val; onChange(n); };
+    label, items, onChange, placeholder, addLabel, noItemsLabel,
+}: { label: string; items: string[]; onChange: (items: string[]) => void; placeholder?: string; addLabel?: string; noItemsLabel?: string }) {
+    const addItem = () => onChange([...items, '']);
+    const updateItem = (i: number, val: string) => {
+        const next = [...items]; next[i] = val; onChange(next);
+    };
     const removeItem = (i: number) => onChange(items.filter((_, idx) => idx !== i));
 
     return (
         <div className="flex flex-col">
         <span className={label10}>{label}</span>
         <div className="border border-(--brd) rounded-2xl bg-(--bg) divide-y divide-(--brd) overflow-hidden">
-        {items.length === 0 && <p className="text-xs text-(--t2)/50 px-3 py-3 italic">Ще немає пунктів</p>}
+        {items.length === 0 && (
+            <p className="text-xs text-(--t2)/50 px-3 py-3 italic">{noItemsLabel ?? 'Ще немає пунктів'}</p>
+        )}
         {items.map((item, i) => (
             <div key={i} className="flex items-center gap-2 px-3 py-2 group hover:bg-(--card)/50 transition-colors">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-0.5" />
@@ -115,161 +150,22 @@ function ListField({
             </div>
         ))}
         </div>
-        <button type="button" onClick={addItem} className={addBtn}><Plus size={10} /> Додати</button>
-        </div>
-    );
-}
-
-// ── CriteriaField — оцінювальні критерії з вагою (обов'язково) ────────────
-function CriteriaField({
-    items,
-    onChange,
-}: {
-    items: Criterion[];
-    onChange: (items: Criterion[]) => void;
-}) {
-    const totalWeight = items.reduce((s, c) => s + (c.weight || 0), 0);
-    const weightOk    = totalWeight === 100;
-
-    const add = () => {
-        const remaining = Math.max(0, 100 - totalWeight);
-        onChange([...items, {
-            key:    `criterion_${Date.now()}`,
-                 label:  '',
-                 weight: remaining,
-        }]);
-    };
-
-    const update = (i: number, field: 'label' | 'weight', val: string | number) =>
-    onChange(items.map((c, idx) => {
-        if (idx !== i) return c;
-        if (field === 'weight') return { ...c, weight: Math.min(100, Math.max(0, Number(val) || 0)) };
-        return { ...c, label: val as string };
-    }));
-
-    const remove = (i: number) => onChange(items.filter((_, idx) => idx !== i));
-
-    const autoBalance = () => {
-        if (items.length === 0) return;
-        const base  = Math.floor(100 / items.length);
-        const extra = 100 - base * items.length;
-        onChange(items.map((c, i) => ({ ...c, weight: base + (i === 0 ? extra : 0) })));
-    };
-
-    const isEmpty   = items.length === 0;
-    const hasEmpty  = items.some(c => !c.label.trim());
-    const errorMsg  = isEmpty   ? "Обов'язково додайте хоча б один критерій"
-    : hasEmpty  ? "Заповніть назви всіх критеріїв"
-    : !weightOk ? `Сума ваг = ${totalWeight}%, має бути 100%`
-    : null;
-
-    return (
-        <div className="flex flex-col gap-2">
-
-        {/* Label row */}
-        <div className="flex items-center justify-between mb-0.5">
-        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
-        Критерії оцінювання <span className="text-red-500 ml-0.5">*</span>
-        </span>
-        {items.length > 0 && (
-            <div className="flex items-center gap-2">
-            {!weightOk && (
-                <button
-                type="button"
-                onClick={autoBalance}
-                title="Розподілити рівномірно"
-                className="flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 hover:border-blue-500/50 transition-all active:scale-95"
-                >
-                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
-                <path d="M2 8h12M8 2l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M2 4h4M2 12h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-                Авто
-                </button>
-            )}
-            <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg border transition-colors ${
-                weightOk
-                ? 'text-green-600 bg-green-500/10 border-green-500/20'
-                : 'text-amber-500 bg-amber-500/10 border-amber-500/20'
-            }`}>
-            Σ {totalWeight}% {weightOk ? '✓' : '≠ 100'}
-            </span>
-            </div>
-        )}
-        </div>
-
-        {/* Empty-state warning */}
-        {isEmpty && (
-            <div className="flex items-center gap-2 px-3 py-3 rounded-xl border border-dashed border-red-500/40 bg-red-500/5">
-            <AlertTriangle size={13} className="text-red-500 flex-shrink-0" />
-            <p className="text-xs font-bold text-red-500">Без критеріїв створити турнір неможливо</p>
-            </div>
-        )}
-
-        {/* List */}
-        {items.length > 0 && (
-            <div className="border border-(--brd) rounded-2xl bg-(--bg) overflow-hidden divide-y divide-(--brd)">
-            {/* Column headers */}
-            <div className="grid grid-cols-[1fr_76px_28px] gap-2 px-3 py-1.5 bg-(--bg)/80">
-            <span className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Назва</span>
-            <span className="text-[9px] font-black uppercase tracking-widest text-(--t2) text-center">Вага %</span>
-            <span />
-            </div>
-
-            {items.map((c, i) => (
-                <div key={c.key} className="grid grid-cols-[1fr_76px_28px] gap-2 items-center px-3 py-2 group hover:bg-(--card)/40 transition-colors">
-                {/* Label */}
-                <input
-                type="text"
-                value={c.label}
-                onChange={e => update(i, 'label', e.target.value)}
-                placeholder="Назва критерію..."
-                className={`bg-transparent outline-none text-sm text-(--t1) placeholder:text-(--t2)/40 w-full ${
-                    !c.label.trim() ? 'text-red-400 placeholder:text-red-400/50' : ''
-                }`}
-                />
-                {/* Weight */}
-                <input
-                type="number"
-                min={0} max={100}
-                value={c.weight}
-                onChange={e => update(i, 'weight', e.target.value)}
-                className="w-full text-center text-sm font-black rounded-xl border border-(--brd) bg-(--card) text-(--t1) outline-none px-2 py-1 focus:border-blue-600 transition-all
-                [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-                {/* Remove */}
-                <button type="button" onClick={() => remove(i)}
-                className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded-lg flex items-center justify-center text-(--t2) hover:text-red-500 transition-all flex-shrink-0">
-                <X size={11} />
-                </button>
-                </div>
-            ))}
-            </div>
-        )}
-
-        {/* Weight / label error */}
-        {errorMsg && !isEmpty && (
-            <p className="text-[10px] font-bold text-amber-500 flex items-center gap-1">
-            <AlertTriangle size={10} /> {errorMsg}
-            </p>
-        )}
-
-        <button type="button" onClick={add} className={addBtn}>
-        <Plus size={10} /> Додати критерій
+        <button type="button" onClick={addItem} className={addBtn}>
+        <Plus size={10} /> {addLabel ?? 'Додати'}
         </button>
         </div>
     );
 }
 
 // ── LinksField ────────────────────────────────────────────────────────────
-function LinksField({ links, onChange }: { links: string[]; onChange: (l: string[]) => void }) {
+function LinksField({ links, onChange, labelText, addLinkLabel }: { links: string[]; onChange: (l: string[]) => void; labelText?: string; addLinkLabel?: string }) {
     const addLink = () => onChange([...links, '']);
     const update  = (i: number, v: string) => { const n = [...links]; n[i] = v; onChange(n); };
     const remove  = (i: number) => onChange(links.filter((_, idx) => idx !== i));
 
     return (
         <div className="flex flex-col">
-        <span className={label10}>Посилання</span>
+        <span className={label10}>{labelText ?? 'Посилання'}</span>
         <div className="flex flex-col gap-2">
         {links.map((link, i) => (
             <div key={i} className="flex items-center gap-2">
@@ -285,13 +181,15 @@ function LinksField({ links, onChange }: { links: string[]; onChange: (l: string
             </div>
         ))}
         </div>
-        <button type="button" onClick={addLink} className={addBtn}><Plus size={10} /> Додати посилання</button>
+        <button type="button" onClick={addLink} className={addBtn}>
+        <Plus size={10} /> {addLinkLabel ?? 'Додати посилання'}
+        </button>
         </div>
     );
 }
 
 // ── FilesField ────────────────────────────────────────────────────────────
-function FilesField({ files, onChange }: { files: FileItem[]; onChange: (f: FileItem[]) => void }) {
+function FilesField({ files, onChange, labelText, uploadLabel, savedInCloudLabel }: { files: FileItem[]; onChange: (f: FileItem[]) => void; labelText?: string; uploadLabel?: string; savedInCloudLabel?: string }) {
     const inputRef = useRef<HTMLInputElement>(null);
 
     const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -312,7 +210,7 @@ function FilesField({ files, onChange }: { files: FileItem[]; onChange: (f: File
 
         return (
             <div className="flex flex-col gap-2">
-            <span className={label10}>Файли</span>
+            <span className={label10}>{labelText ?? 'Файли'}</span>
             {files.length > 0 && (
                 <div className="border border-(--brd) rounded-2xl overflow-hidden bg-(--bg) divide-y divide-(--brd)">
                 {files.map((f, i) => (
@@ -320,7 +218,7 @@ function FilesField({ files, onChange }: { files: FileItem[]; onChange: (f: File
                     <span className="text-base">{icon(f as any)}</span>
                     <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-(--t1) truncate">{f.name}</p>
-                    <p className="text-[10px] text-(--t2)">{(f as any).existing ? 'Збережено в хмарі' : fmt(f.size)}</p>
+                    <p className="text-[10px] text-(--t2)">{(f as any).existing ? (savedInCloudLabel ?? 'Збережено в хмарі') : fmt(f.size)}</p>
                     </div>
                     <button type="button" onClick={() => remove(i)}
                     className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded-lg flex items-center justify-center text-(--t2) hover:text-red-500 transition-all">
@@ -331,16 +229,20 @@ function FilesField({ files, onChange }: { files: FileItem[]; onChange: (f: File
                 </div>
             )}
             <input ref={inputRef} type="file" multiple className="hidden" onChange={handleFiles} />
-            <button type="button" onClick={() => inputRef.current?.click()}
-            className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-2xl border-2 border-dashed border-(--brd) text-(--t2) text-xs font-bold hover:border-blue-500/50 hover:text-blue-500 hover:bg-blue-500/5 transition-all active:scale-98">
-            <Upload size={14} /> Завантажити файли
+            <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-2xl border-2 border-dashed border-(--brd) text-(--t2) text-xs font-bold hover:border-blue-500/50 hover:text-blue-500 hover:bg-blue-500/5 transition-all active:scale-98"
+            >
+            <Upload size={14} />
+            {uploadLabel ?? 'Завантажити файли'}
             </button>
             </div>
         );
 }
 
-// ── RoundSettingsPanel ─────────────────────────────────────────────────────
-export default function RoundSettingsPanel({ roundCount, selectedRound, onSelectRound, onRoundsChange, initialData }: Props) {
+// ── RoundSettingsPanel (main export) ──────────────────────────────────────
+export default function RoundSettingsPanel({ roundCount, selectedRound, onSelectRound, onRoundsChange, initialData, labels }: Props) {
     const [rounds, setRounds] = useState<Record<number, RoundData>>({});
     const [seeded, setSeeded] = useState(false);
 
@@ -382,8 +284,8 @@ export default function RoundSettingsPanel({ roundCount, selectedRound, onSelect
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-(--brd) bg-(--bg)/50 gap-3">
         <div className="min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-0.5">Параметри раунду</p>
-        <p className="text-xs font-bold text-(--t1)">Раунд {selectedRound}</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-0.5">{labels?.header ?? 'Параметри раунду'}</p>
+        <p className="text-xs font-bold text-(--t1)">{labels?.round ?? 'Раунд'} {selectedRound}</p>
         </div>
 
         {/* Round tabs */}
@@ -413,59 +315,95 @@ export default function RoundSettingsPanel({ roundCount, selectedRound, onSelect
 
         {/* 1. Назва */}
         <div>
-        <label className={label10}>Назва завдання</label>
-        <input type="text" value={rd.name}
+        <label className={label10}>{labels?.taskName ?? 'Назва завдання'}</label>
+        <input
+        type="text"
+        value={rd.name}
         onChange={e => update(selectedRound, 'name', e.target.value)}
-        placeholder="Назва завдання..." className={inp} />
+        placeholder={labels?.taskNamePlaceholder ?? 'Назва завдання...'}
+        className={inp}
+        />
         </div>
 
         {/* 2. Опис */}
         <div>
-        <label className={label10}>Опис того, що треба реалізувати</label>
-        <RichTextEditor value={rd.description}
+        <label className={label10}>{labels?.taskDesc ?? 'Опис того, що треба реалізувати'}</label>
+        <RichTextEditor
+        value={rd.description}
         onChange={v => update(selectedRound, 'description', v)}
-        placeholder="Детально опишіть завдання..." />
+        placeholder={labels?.taskDescPlaceholder ?? 'Детально опишіть завдання...'}
+        />
         </div>
 
         {/* 3. Дедлайни */}
         <div className="grid grid-cols-2 gap-4">
         <div className="bg-(--bg) border border-(--brd) rounded-2xl p-4">
         <p className="text-[10px] font-black uppercase tracking-widest text-green-500 mb-3 flex items-center gap-1.5">
-        <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" /> Початок
+        <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+        {labels?.start ?? 'Початок'}
         </p>
-        <DateTimeField label="Дата старту"
-        dateVal={rd.startDate} onDate={v => update(selectedRound, 'startDate', v)}
-        timeVal={rd.startTime} onTime={v => update(selectedRound, 'startTime', v)} />
+        <DateTimeField
+        label={labels?.startDate ?? 'Дата старту'}
+        dateVal={rd.startDate}
+        onDate={v => update(selectedRound, 'startDate', v)}
+        timeVal={rd.startTime}
+        onTime={v => update(selectedRound, 'startTime', v)}
+        />
         </div>
         <div className="bg-(--bg) border border-(--brd) rounded-2xl p-4">
         <p className="text-[10px] font-black uppercase tracking-widest text-red-500 mb-3 flex items-center gap-1.5">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" /> Дедлайн
+        <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+        {labels?.deadline ?? 'Дедлайн'}
         </p>
-        <DateTimeField label="Дата здачі"
-        dateVal={rd.deadlineDate} onDate={v => update(selectedRound, 'deadlineDate', v)}
-        timeVal={rd.deadlineTime} onTime={v => update(selectedRound, 'deadlineTime', v)} />
-        </div>
-        </div>
-
-        {/* 4. Критерії оцінювання — обов'язкові, повна ширина */}
-        <CriteriaField
-        items={rd.criteria}
-        onChange={v => update(selectedRound, 'criteria', v)}
+        <DateTimeField
+        label={labels?.deadlineDate ?? 'Дата здачі'}
+        dateVal={rd.deadlineDate}
+        onDate={v => update(selectedRound, 'deadlineDate', v)}
+        timeVal={rd.deadlineTime}
+        onTime={v => update(selectedRound, 'deadlineTime', v)}
         />
+        </div>
+        </div>
 
-        {/* 5. Технології — повна ширина */}
-        <ListField label="Вимоги до технологій"
+        {/* 4. Вимоги + Критерії — 2 колонки */}
+        <div className="grid grid-cols-2 gap-4">
+        <ListField
+        label={labels?.requirements ?? 'Вимоги до технологій'}
         items={rd.requirements}
         onChange={v => update(selectedRound, 'requirements', v)}
-        placeholder="Наприклад: React, TypeScript..." />
+        placeholder={labels?.requirementsPlaceholder ?? 'Наприклад: React, TypeScript...'}
+        addLabel={labels?.add}
+        noItemsLabel={labels?.noItems}
+        />
+        <ListField
+        label={labels?.criteria ?? 'Критерії "must have"'}
+        items={rd.criteria}
+        onChange={v => update(selectedRound, 'criteria', v)}
+        placeholder={labels?.criteriaPlaceholder ?? 'Наприклад: авторизація...'}
+        addLabel={labels?.add}
+        noItemsLabel={labels?.noItems}
+        />
+        </div>
 
-        {/* 6. Посилання + Файли */}
+        {/* 5. Посилання + Файли — 2 колонки */}
         <div className="grid grid-cols-2 gap-4">
-        <LinksField links={rd.links} onChange={v => update(selectedRound, 'links', v)} />
-        <FilesField files={rd.files} onChange={v => update(selectedRound, 'files', v)} />
-        </div>
+        <LinksField
+        links={rd.links}
+        onChange={v => update(selectedRound, 'links', v)}
+        labelText={labels?.links}
+        addLinkLabel={labels?.addLink}
+        />
+        <FilesField
+        files={rd.files}
+        onChange={v => update(selectedRound, 'files', v)}
+        labelText={labels?.files}
+        uploadLabel={labels?.uploadFiles}
+        savedInCloudLabel={labels?.savedInCloud}
+        />
+    </div>
 
-        </div>
-        </div>
+    </div>
+
+    </div>
     );
 }

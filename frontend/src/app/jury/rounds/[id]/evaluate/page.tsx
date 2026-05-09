@@ -434,9 +434,9 @@ export default function JuryEvaluationPage() {
     const [mobileTab, setMobileTab] = useState<"list" | "form">("list");
     const saveMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const isJury     = user?.role === "jury";
-    const isAdmin    = user?.role === "admin" || user?.role === "superadmin";
-    const canAccess  = isJury || isAdmin;
+    const isJury       = user?.role === "jury";
+    const isSuperAdmin = user?.role === "superadmin";
+    const canAccess    = isJury || isSuperAdmin;
 
     const API_URL = typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:8000"
@@ -703,7 +703,7 @@ export default function JuryEvaluationPage() {
 
         // ── Redistribute (admin only) ─────────────────────────────────────────────
         const handleRedistribute = async () => {
-            if (!isAdmin || !roundId) return;
+            if (!isSuperAdmin || !roundId) return;
             setRedistributing(true);
             setSaveMsg(null);
             try {
@@ -854,7 +854,7 @@ export default function JuryEvaluationPage() {
                     <div className="flex items-center gap-3 px-5 py-3.5 border-b border-(--brd) bg-(--bg)/40">
                     <BarChart2 size={14} className="text-blue-600" />
                     <span className="text-[10px] font-black uppercase tracking-widest text-(--t1)">
-                    {isAdmin ? "Загальний стан розподілу" : "Мої роботи до оцінки"}
+                    {isSuperAdmin ? "Загальний стан розподілу" : "Мої роботи до оцінки"}
                     </span>
                     </div>
                     <div className="p-4 grid grid-cols-3 gap-3">
@@ -885,7 +885,7 @@ export default function JuryEvaluationPage() {
                     </div>
                     </div>
                     {/* Admin redistribute */}
-                    {isAdmin && (
+                    {isSuperAdmin && (
                         <div className="px-4 pb-4 flex flex-col gap-2">
                         <button
                         onClick={() => router.push(`/jury/rounds/${roundId}/distribute`)}
