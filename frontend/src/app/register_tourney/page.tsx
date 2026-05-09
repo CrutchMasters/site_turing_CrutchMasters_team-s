@@ -780,19 +780,6 @@ export default function JuryEvaluationPage() {
     // зміні активної картки спричиняло зайві fetch-запити і скидало стан форми.
   }, [roundId, user, isJury]);
 
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-      <a href={'/'} onClick={(e) => { e.preventDefault(); router.push('/'); }} className="hover:text-blue-600 transition-colors">{t.tourney?.home ?? 'Головна'}</a>
-      <ChevronRight size={10} />
-      <a href={'/dashboard'} onClick={(e) => { e.preventDefault(); router.push('/dashboard'); }} className="hover:text-blue-600 transition-colors">{t.tourney?.dashboard ?? 'Дашборд'}</a>
-      <ChevronRight size={10} />
-      <span className="text-(--t1)">{t.tourney?.createAdmin ?? 'Створення турніру'}</span>
-      </nav>
-
-      <button onClick={() => router.back()} className="mb-6 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
-      <ArrowLeft size={14} /> {t.tourney?.back ?? 'Назад'}
-      </button>
-
     const updateGeneralComment = (comment: string) => {
       if (activeIdx === null) return;
       setWorks(prev => prev.map((w, i) =>
