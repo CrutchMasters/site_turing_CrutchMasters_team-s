@@ -705,39 +705,6 @@ export default function JuryEvaluationPage() {
           const allFilled = criteria.every(c => c.score !== "");
           status = allFilled ? "evaluated" : "in_progress";
         }
-        @keyframes fadeSlideUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes rabbit-fall { 0%{top:-80px;opacity:0;transform:translateX(-50%) rotate(0deg)} 30%{opacity:1} 100%{top:110%;opacity:0;transform:translateX(-50%) rotate(720deg)} }
-        @keyframes scanline { 0%{transform:translateY(-100%)} 100%{transform:translateY(100vh)} }
-        .glitch-text{position:relative}
-        .glitch-text::before,.glitch-text::after{content:attr(data-text);position:absolute;inset:0;font:inherit;text-align:inherit}
-        .glitch-text::before{color:#3b82f6;animation:glitch 2.5s infinite steps(1);animation-delay:0.1s}
-        .glitch-text::after{color:#8b5cf6;animation:glitch 2.5s infinite steps(1);animation-delay:0.35s}
-        .fade-up{animation:fadeSlideUp 0.6s cubic-bezier(.22,1,.36,1) both}
-        .fade-up-1{animation:fadeSlideUp 0.6s cubic-bezier(.22,1,.36,1) 0.15s both}
-        .fade-up-2{animation:fadeSlideUp 0.6s cubic-bezier(.22,1,.36,1) 0.3s both}
-        .rabbit{position:fixed;left:50%;font-size:3rem;animation:rabbit-fall 3s ease-in 0.5s both;z-index:50}
-        .scanline{position:fixed;inset:0;pointer-events:none;z-index:40;background:linear-gradient(transparent 50%,rgba(0,0,0,0.03) 50%);background-size:100% 4px}
-        .scanline::after{content:'';position:absolute;left:0;right:0;height:60px;background:linear-gradient(transparent,rgba(59,130,246,0.04),transparent);animation:scanline 3s linear infinite}
-        `}</style>
-        <div className="scanline" />
-        <div className="rabbit">🐇</div>
-        <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute -top-40 -left-40 w-[700px] h-[700px] rounded-full opacity-[0.06] blur-3xl bg-blue-600" />
-        <div className="absolute -bottom-40 -right-40 w-[600px] h-[600px] rounded-full opacity-[0.06] blur-3xl bg-purple-600" />
-        </div>
-        <div className="relative z-10 flex flex-col items-center text-center px-4">
-        <div className="glitch-text text-[120px] sm:text-[160px] font-black leading-none mb-4 select-none fade-up text-(--t1)" data-text="403" style={{ letterSpacing: '-0.05em' }}>403</div>
-        <p className="fade-up-1 text-lg sm:text-2xl font-black uppercase tracking-tight mb-2 text-(--t1)">{t.tourney?.deniedTitle ?? 'Ах ти хитрий шукач потаємних шляхів,'}</p>
-        <p className="fade-up-1 text-lg sm:text-2xl font-black uppercase tracking-tight mb-8 text-blue-600">{t.tourney?.deniedSubtitle ?? 'привіт від Білого Кролика 🐇'}</p>
-        <p className="fade-up-2 text-xs font-black uppercase tracking-[0.3em] mb-10 text-(--t2)">{t.tourney?.deniedDesc ?? 'Ця сторінка тільки для адміністраторів'}</p>
-        <div className="fade-up-2 flex flex-col sm:flex-row gap-3 justify-center">
-        <a href={'/dashboard'} onClick={(e) => { e.preventDefault(); router.push('/dashboard'); }} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20">{t.tourney?.deniedBackDashboard ?? '← Повернутись на дашборд'}</a>
-        <a href={'/'} onClick={(e) => { e.preventDefault(); router.push('/'); }} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) text-(--t2) bg-(--bg) active:scale-95 transition-all hover:opacity-80">{t.tourney?.deniedBackHome ?? 'На головну'}</a>
-        </div>
-        </div>
-        </div>
-    );
-  }
 
         return {
           id: s.id,
