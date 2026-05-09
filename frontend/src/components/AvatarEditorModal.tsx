@@ -15,9 +15,11 @@ interface Props {
     // Какую таблицу обновлять: по умолчанию "account" / "id"
     // Для команд передавай: tableConfig={{ table: "teams", idColumn: "id" }}
     tableConfig?: TableConfig;
+    // Если true — только загружает в Storage, НЕ обновляет БД (для pre-creation аватаров)
+    skipDbUpdate?: boolean;
 }
 
-export default function AvatarEditorModal({ userId, onSave, onClose, supabase, tableConfig }: Props) {
+export default function AvatarEditorModal({ userId, onSave, onClose, supabase, tableConfig, skipDbUpdate }: Props) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [img, setImg] = useState<HTMLImageElement | null>(null);
     const [scale, setScale] = useState(100);
@@ -94,32 +96,33 @@ export default function AvatarEditorModal({ userId, onSave, onClose, supabase, t
             const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
             const finalUrl = `${urlData.publicUrl}?v=${timestamp}`;
 
-            // 2. Получаем старый avatar_url из нужной таблицы (account ИЛИ teams)
-            //    .maybeSingle() — не падает с 406 если строки нет
-            const { data: existingRow } = await supabase
-            .from(dbTable)
-            .select("avatar_url")
-            .eq(dbIdCol, userId)
-            .maybeSingle();
+            if (!skipDbUpdate) {
+                // 2. Получаем старый avatar_url из нужной таблицы (account ИЛИ teams)
+                const { data: existingRow } = await supabase
+                .from(dbTable)
+                .select("avatar_url")
+                .eq(dbIdCol, userId)
+                .maybeSingle();
 
-            // 3. Обновляем avatar_url в нужной таблице
-            const { error: updateError } = await supabase
-            .from(dbTable)
-            .update({ avatar_url: finalUrl })
-            .eq(dbIdCol, userId);
+                // 3. Обновляем avatar_url в нужной таблице
+                const { error: updateError } = await supabase
+                .from(dbTable)
+                .update({ avatar_url: finalUrl })
+                .eq(dbIdCol, userId);
 
-            if (updateError) throw updateError;
+                if (updateError) throw updateError;
 
-            // 4. Удаляем старый файл из storage если был
-            if (existingRow?.avatar_url) {
-                try {
-                    const url = new URL(existingRow.avatar_url);
-                    const pathParts = url.pathname.split("/object/public/avatars/");
-                    if (pathParts[1]) {
-                        const oldPath = pathParts[1].split("?")[0];
-                        await supabase.storage.from("avatars").remove([oldPath]);
-                    }
-                } catch { /* игнорируем ошибку удаления старого файла */ }
+                // 4. Удаляем старый файл из storage если был
+                if (existingRow?.avatar_url) {
+                    try {
+                        const url = new URL(existingRow.avatar_url);
+                        const pathParts = url.pathname.split("/object/public/avatars/");
+                        if (pathParts[1]) {
+                            const oldPath = pathParts[1].split("?")[0];
+                            await supabase.storage.from("avatars").remove([oldPath]);
+                        }
+                    } catch { /* игнорируем ошибку удаления старого файла */ }
+                }
             }
 
             onSave(finalUrl);

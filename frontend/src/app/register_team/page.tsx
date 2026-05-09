@@ -794,6 +794,7 @@ export default function RegisterTeamPage() {
             userId={`team_preview_${user?.id ?? "anon"}`}
             supabase={supabase}
             tableConfig={{ table: "teams", idColumn: "id" }}
+            skipDbUpdate={true}
             onSave={(url) => { setTeamAvatarUrl(url); setShowAvatarModal(false); }}
             onClose={() => setShowAvatarModal(false)}
             />
