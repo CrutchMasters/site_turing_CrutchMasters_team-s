@@ -1,60 +1,35 @@
-//src/app/jury/rounds/[id]/evaluate/page.tsx
-"use client";
-
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter, useParams } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
-import { useTheme } from "@/hooks/useTheme";
-import { supabase } from "@/lib/supabase";
-import Sidebar from "@/components/Sidebar";
-import MobileHeader from "@/components/MobileHeader";
+'use client';
+import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  Trophy, ChevronRight, ChevronLeft, ArrowLeft, Loader, Save,
-  CheckCircle2, AlertCircle, Github, Video,
-  RefreshCw, Star, BarChart2, Shuffle, Users,
-  Lock, Unlock, ChevronDown, ChevronUp, Eye,
-  Clock, Shield, Zap, Award, X, FileText,
-} from "lucide-react";
+  Zap, Trophy, Clock, Users, Layers, ChevronRight, ArrowLeft, X, CalendarDays,
+} from 'lucide-react';
+import { RichTextEditor } from '@/components/RichTextEditor';
 
-// ── Types ────────────────────────────────────────────────────────────────────
+import Sidebar from "@/components/Sidebar";
+import { DatePicker, TimePicker } from "@/components/DateTimePicker";
+import RoundSettingsPanel, { type RoundData } from "@/components/RoundSettingsPanel";
+import MobileHeader from "@/components/MobileHeader";
+import { useTheme } from "@/hooks/useTheme";
+import { useT } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
+import { localToIso } from "@/lib/datetime";
+import { supabase } from '@/lib/supabase';
+import { authedSupabase } from '@/lib/supabase';
 
-interface CriterionScore {
-  key: string;
-  label: string;
-  weight: number; // 0–100, sum of all = 100
-  score: number | ""; // 0–100
-  comment: string;
+/** Возвращает свежий токен: из localStorage → silentRefresh через authedSupabase */
+async function getToken(): Promise<string> {
+  const stored = typeof window !== 'undefined' ? localStorage.getItem('access_token') ?? '' : '';
+  // authedSupabase сам рефрешит если токен истёк — получаем клиент и читаем токен из localStorage снова
+  await authedSupabase(stored || null);
+  // После authedSupabase localStorage уже содержит свежий токен
+  return typeof window !== 'undefined' ? (localStorage.getItem('access_token') ?? '') : '';
 }
 
-interface SubmissionWork {
-  id: string;
-  team_id: string;
-  team_name: string;
-  team_org?: string;
-  team_avatar_url?: string;
-  round_id: string;
-  submitted_at: string;
-  github_url?: string;
-  youtube_url?: string;
-  live_url?: string;
-  files?: { name: string; path: string; url: string | null }[];
-  status: "not_evaluated" | "in_progress" | "evaluated";
-  // filled after evaluation load
-  criteria: CriterionScore[];
-  general_comment: string;
-  total_score?: number;
-}
+type AccessState = 'loading' | 'checking' | 'denied' | 'allowed';
+const COUNTDOWN_SEC = 5;
 
-interface RoundInfo {
-  id: string;
-  number: number;
-  name: string;
-  description?: string;
-  tournament_id: string;
-  tournament_name?: string;
-  end_at?: string;
-  status?: string;
-}
+const inp = "w-full px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none transition-all";
 
 function DateTimePair({
   label,
@@ -85,361 +60,42 @@ function DateTimePair({
   );
 }
 
-// ── Default criteria (fallback if round has no criteria column) ───────────────
-
-const DEFAULT_CRITERIA: Omit<CriterionScore, "score" | "comment">[] = [
-  { key: "backend_quality",    label: "Backend якість коду",       weight: 20 },
-{ key: "database_structure", label: "Database структура",        weight: 20 },
-{ key: "frontend_quality",   label: "Frontend якість/UX",        weight: 20 },
-{ key: "must_have",          label: 'Виконання "must have"',      weight: 20 },
-{ key: "no_bugs",            label: "Робото­здатність, без багів", weight: 20 },
-];
-
-function buildCriteriaFromRound(roundCriteria: Omit<CriterionScore, "score" | "comment">[] | null): CriterionScore[] {
-  const source = (roundCriteria && roundCriteria.length > 0) ? roundCriteria : DEFAULT_CRITERIA;
-  return source.map(c => ({ ...c, score: "", comment: "" }));
-}
-
-function computeTotal(criteria: CriterionScore[]): number {
-  let total = 0;
-  for (const c of criteria) {
-    if (c.score === "" || isNaN(Number(c.score))) continue;
-    total += (Number(c.score) * c.weight) / 100;
-  }
-  return Math.round(total * 10) / 10;
-}
-
-function fmtDate(iso?: string) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("uk-UA", {
-    day: "numeric", month: "short", year: "numeric",
-    hour: "2-digit", minute: "2-digit" });
-}
-
-// ── Readme Modal ──────────────────────────────────────────────────────────────
-
-function ReadmeModal({ url, text, title, onClose }: { url?: string; text?: string; title?: string; onClose: () => void }) {
-  const [content, setContent] = useState<string | null>(text ?? null);
-  const [loading, setLoading] = useState(!text && !!url);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (text) { setContent(text); setLoading(false); return; }
-    if (!url) return;
-    setLoading(true);
-    setError(null);
-    fetch(url)
-    .then(r => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r.text();
-    })
-    .then(t => { setContent(t); setLoading(false); })
-    .catch(e => { setError(e.message); setLoading(false); });
-  }, [url, text]);
-
-  // Simple markdown → HTML renderer (no external dep)
-  const renderMarkdown = (md: string): string => {
-    return md
-    // Escape HTML
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    // Code blocks
-    .replace(/```[\w]*\n?([\s\S]*?)```/g, '<pre class="md-pre"><code>$1</code></pre>')
-    // Inline code
-    .replace(/`([^`]+)`/g, '<code class="md-code">$1</code>')
-    // Headings
-    .replace(/^### (.+)$/gm, '<h3 class="md-h3">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="md-h2">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 class="md-h1">$1</h1>')
-    // Bold + italic
-    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Links
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="md-link">$1</a>')
-    // Images
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="md-img" />')
-    // Horizontal rule
-    .replace(/^---$/gm, '<hr class="md-hr" />')
-    // Unordered lists
-    .replace(/^\s*[-*+] (.+)$/gm, '<li class="md-li">$1</li>')
-    .replace(/(<li[\s\S]*?<\/li>)(\s*(?!<li))/g, '<ul class="md-ul">$1</ul>$2')
-    // Ordered lists
-    .replace(/^\d+\. (.+)$/gm, '<li class="md-oli">$1</li>')
-    .replace(/(<li class="md-oli"[\s\S]*?<\/li>)(\s*(?!<li))/g, '<ol class="md-ol">$1</ol>$2')
-    // Blockquotes
-    .replace(/^> (.+)$/gm, '<blockquote class="md-blockquote">$1</blockquote>')
-    // Paragraphs (lines not already wrapped)
-    .replace(/^(?!<[hupoba]|<li|<pre|<blockquote|<hr)(.+)$/gm, '<p class="md-p">$1</p>')
-    // Clean up empty lines
-    .replace(/\n{2,}/g, '\n');
-  };
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div
-    className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-    style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)" }}
-    onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-    <div
-    className="relative w-full max-w-3xl max-h-[85vh] flex flex-col rounded-[2rem] border border-(--brd) shadow-2xl overflow-hidden"
-    style={{ background: "var(--card)" }}
-    >
-    {/* Header */}
-    <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd)" style={{ background: "var(--bg)" }}>
-    <FileText size={16} className="text-blue-600 flex-shrink-0" />
-    <span className="text-[11px] font-black uppercase tracking-widest text-(--t1) flex-1">{title ?? "README"}</span>
-    <button
-    onClick={onClose}
-    className="w-8 h-8 rounded-xl flex items-center justify-center border border-(--brd) text-(--t2) hover:text-(--t1) hover:border-blue-600/40 transition-all active:scale-95"
-    >
-    <X size={14} />
-    </button>
-    </div>
-    {/* Content */}
-    <div className="flex-1 overflow-y-auto px-8 py-6">
-    {loading && (
-      <div className="flex items-center justify-center py-16">
-      <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )}
-    {error && (
-      <div className="flex flex-col items-center gap-3 py-16 text-center">
-      <AlertCircle size={28} className="text-red-400" />
-      <p className="text-sm font-bold text-(--t2)">Не вдалося завантажити файл</p>
-      <p className="text-xs text-(--t2) opacity-60">{error}</p>
-      <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-black text-blue-600 hover:underline mt-1">Відкрити напряму ↗</a>
-      </div>
-    )}
-    {!loading && !error && content !== null && (
-      <div
-      className="md-body"
-      dangerouslySetInnerHTML={{ __html: /^\s*<[a-zA-Z]/.test(content) ? content : renderMarkdown(content) }}
-      />
-    )}
-    </div>
-    </div>
-    <style>{`
-      .md-body { color: var(--t1); font-size: 14px; line-height: 1.7; }
-      .md-h1 { font-size: 1.6em; font-weight: 900; margin: 1.2em 0 0.5em; color: var(--t1); }
-      .md-h2 { font-size: 1.3em; font-weight: 900; margin: 1em 0 0.4em; color: var(--t1); border-bottom: 1px solid var(--brd); padding-bottom: 0.3em; }
-      .md-h3 { font-size: 1.1em; font-weight: 800; margin: 0.8em 0 0.3em; color: var(--t1); }
-      .md-p { margin: 0.5em 0; color: var(--t2); }
-      .md-pre { background: var(--bg); border: 1px solid var(--brd); border-radius: 12px; padding: 14px 16px; overflow-x: auto; margin: 0.8em 0; font-size: 12px; line-height: 1.5; }
-      .md-pre code { background: none; padding: 0; border: none; font-family: monospace; }
-      .md-code { background: var(--bg); border: 1px solid var(--brd); border-radius: 6px; padding: 1px 6px; font-size: 12px; font-family: monospace; color: #3b82f6; }
-      .md-link { color: #3b82f6; text-decoration: underline; text-underline-offset: 2px; }
-      .md-img { max-width: 100%; border-radius: 10px; margin: 0.5em 0; }
-      .md-hr { border: none; border-top: 1px solid var(--brd); margin: 1.2em 0; }
-      .md-ul, .md-ol { padding-left: 1.5em; margin: 0.4em 0; }
-      .md-li, .md-oli { margin: 0.2em 0; color: var(--t2); }
-      .md-blockquote { border-left: 3px solid #3b82f6; padding-left: 1em; margin: 0.6em 0; color: var(--t2); opacity: 0.8; font-style: italic; }
-      `}</style>
-      </div>
-  );
-}
-
-// ── Score slider / input ─────────────────────────────────────────────────────
-
-function ScoreInput({
-  value, onChange, disabled,
-}: {
-  value: number | ""; onChange: (v: number | "") => void; disabled?: boolean;
-}) {
-  const [focused, setFocused] = useState(false);
-  const num = value === "" ? 0 : Number(value);
-
-  const color =
-  value === "" ? "var(--brd)"
-  : num >= 80 ? "#22c55e"
-  : num >= 50 ? "#3b82f6"
-  : num >= 30 ? "#f59e0b"
-  : "#ef4444";
-
-  return (
-    <div className="flex items-center gap-3">
-    {/* Track wrapper */}
-    <div className="relative flex-1 flex items-center" style={{ height: 24 }}>
-    {/* Background track */}
-    <div className="absolute inset-x-0 h-2 rounded-full" style={{ top: "50%", transform: "translateY(-50%)", background: "var(--brd)" }} />
-    {/* Fill track — smooth color + width transition */}
-    <div
-    className="absolute left-0 h-2 rounded-full pointer-events-none"
-    style={{ top: "50%", transform: "translateY(-50%)", width: `${num}%`, background: color, transition: "background 0.35s ease, width 0.05s linear" }}
-    />
-    <input
-    type="range"
-    min={0} max={100} step={1}
-    value={num}
-    onChange={e => onChange(Number(e.target.value))}
-    disabled={disabled}
-    className="absolute inset-0 w-full cursor-pointer disabled:cursor-not-allowed"
-    style={{ height: "100%", opacity: 1, background: "transparent", WebkitAppearance: "none", appearance: "none" }}
-    />
-    </div>
-    {/* Number input */}
-    <div
-    className="relative flex-shrink-0"
-    style={{ width: 56 }}
-    >
-    <input
-    type="number"
-    min={0} max={100}
-    value={value}
-    onChange={e => {
-      const v = e.target.value;
-      if (v === "") { onChange(""); return; }
-      const n = Math.min(100, Math.max(0, Number(v)));
-      onChange(n);
-    }}
-    onFocus={() => setFocused(true)}
-    onBlur={() => setFocused(false)}
-    disabled={disabled}
-    placeholder="—"
-    className={`w-full text-center py-1.5 rounded-xl border text-sm font-black outline-none transition-all
-      [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none
-      disabled:opacity-40 disabled:cursor-not-allowed`}
-      style={{
-        background: "var(--bg)",
-          borderColor: focused ? color : "var(--brd)",
-          color: value !== "" ? color : "var(--t2)",
-          boxShadow: focused ? `0 0 0 2px ${color}30` : "none",
-          fontVariantNumeric: "tabular-nums",
-      }}
-      />
-      </div>
-      </div>
-  );
-}
-
-// ── Submission card ───────────────────────────────────────────────────────────
-
-function SubmissionCard({
-  work,
-  isActive,
-  onSelect,
-  juryId,
-}: {
-  work: SubmissionWork;
-  isActive: boolean;
-  onSelect: () => void;
-  juryId: string;
-}) {
-  const total = work.total_score ?? (work.criteria.some(c => c.score !== "") ? computeTotal(work.criteria) : undefined);
-
-  const statusIcon =
-  work.status === "evaluated"   ? <CheckCircle2 size={14} className="text-green-500" /> :
-  work.status === "in_progress" ? <Clock        size={14} className="text-amber-500" /> :
-  <AlertCircle size={14} className="text-(--t2) opacity-40" />;
-
-  const statusLabel =
-  work.status === "evaluated"   ? "Оцінено" :
-  work.status === "in_progress" ? "В процесі" :
-  "Не оцінено";
-
-    return (
-      <button
-      onClick={onSelect}
-      className={`w-full text-left p-4 rounded-2xl border transition-all group ${
-        isActive
-        ? "border-blue-600 bg-blue-600/8 shadow-md shadow-blue-600/10"
-        : "border-(--brd) bg-(--card) hover:border-blue-600/40 hover:bg-(--bg)"
-      }`}
-      >
-      <div className="flex items-start gap-2 mb-2">
-      <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0 mt-0.5">
-      {work.team_avatar_url
-        ? <img src={work.team_avatar_url} alt={work.team_name} className="w-full h-full object-cover" />
-        : <div className="w-full h-full bg-blue-600/10 text-blue-600 flex items-center justify-center text-xs font-black">{work.team_name.charAt(0).toUpperCase()}</div>
-      }
-      </div>
-      <div className="flex-1 min-w-0">
-      <p className={`font-black text-sm truncate ${isActive ? "text-blue-600" : "text-(--t1) group-hover:text-blue-600 transition-colors"}`}>
-      {work.team_name}
-      </p>
-      {work.team_org && (
-        <p className="text-[10px] font-bold text-(--t2) truncate mt-0.5">{work.team_org}</p>
-      )}
-      </div>
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-      {statusIcon}
-      <span className={`text-[10px] font-black rounded-lg border ${
-        total === undefined ? "text-transparent border-transparent bg-transparent" :
-        total >= 80 ? "text-green-500 bg-green-500/10 border-green-500/20" :
-        total >= 50 ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
-        "text-amber-500 bg-amber-500/10 border-amber-500/20"
-      }`} style={{ width: 40, textAlign: "center", padding: "2px 0", fontVariantNumeric: "tabular-nums", display: "inline-block" }}>
-      {total !== undefined ? total : ""}
-      </span>
-      </div>
-      </div>
-      <div className="flex items-center gap-2 flex-wrap">
-      <span className={`text-[9px] font-black uppercase tracking-widest ${
-        work.status === "evaluated"   ? "text-green-500" :
-        work.status === "in_progress" ? "text-amber-500" :
-        "text-(--t2) opacity-60"
-      }`}>
-      {statusLabel}
-      </span>
-      <span className="text-[9px] text-(--t2) opacity-40">·</span>
-      <span className="text-[9px] font-bold text-(--t2) opacity-60">
-      {fmtDate(work.submitted_at)}
-      </span>
-      </div>
-      </button>
-    );
-}
-
-// ── Main page ─────────────────────────────────────────────────────────────────
-
-export default function JuryEvaluationPage() {
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const params = useParams();
-  const router = useRouter();
-  const { user, isLoading: authLoading } = useAuth();
+export default function RegisterTourney() {
   const { dark } = useTheme();
-  const roundId = params?.id as string;
+  const { t } = useT();
+  const { user, isLoading } = useAuth();
+  const router = useRouter();
 
-  // -- Data --
-  const [round, setRound] = useState<RoundInfo | null>(null);
-  const [roundCriteria, setRoundCriteria] = useState<Omit<CriterionScore, "score" | "comment">[] | null>(null);
-  const [works, setWorks] = useState<SubmissionWork[]>([]);
-  const [stats, setStats] = useState<DistributionStats>({ total: 0, distributed: 0, evaluated: 0 });
-  const [pageLoading, setPageLoading] = useState(true);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [accessState, setAccessState] = useState<AccessState>('loading');
+  const [countdown, setCountdown] = useState(COUNTDOWN_SEC);
 
-  // -- UI --
-  const [activeIdx, setActiveIdx] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
-  const [redistributing, setRedistributing] = useState(false);
-  const [showAllInfo, setShowAllInfo] = useState(false);
-  const [readmeModal, setReadmeModal] = useState<{ url?: string; text?: string; title?: string } | null>(null);
-  const [mobileTab, setMobileTab] = useState<"list" | "form">("list");
-  const saveMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [tourneyName, setTourneyName]     = useState('');
+  const [description, setDescription]     = useState('');
+  const [startDate, setStartDate]         = useState('');
+  const [startTime, setStartTime]         = useState('');
+  const [endDate, setEndDate]             = useState('');
+  const [endTime, setEndTime]             = useState('');
+  const [regStartDate, setRegStartDate]   = useState('');
+  const [regStartTime, setRegStartTime]   = useState('');
+  const [regEndDate, setRegEndDate]       = useState('');
+  const [regEndTime, setRegEndTime]       = useState('');
+  const [teamCount, setTeamCount]         = useState<number>(0);
+  const [roundCount, setRoundCount]       = useState<number>(1);
+  const [selectedRoundTab, setSelectedRoundTab] = useState<number>(1);
+  const [roundsData, setRoundsData]       = useState<Record<number, RoundData>>({});
+  const [isSubmitting, setIsSubmitting]   = useState(false);
+  const [submitError, setSubmitError]     = useState<string | null>(null);
 
-  const isJury     = user?.role === "jury";
-  const isAdmin    = user?.role === "admin" || user?.role === "superadmin";
-  const canAccess  = isJury || isAdmin;
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const API_URL = typeof window !== "undefined" && window.location.hostname === "localhost"
-  ? "http://localhost:8000"
-  : "https://site-turing-crutchmasters-team-s.onrender.com";
-
-  // ── Access guard ──────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!authLoading && !user) { router.push("/login"); return; }
-    if (!authLoading && user && !canAccess) { router.push("/dashboard"); }
-  }, [authLoading, user, canAccess, router]);
-
-  // ── Fetch round + submissions ─────────────────────────────────────────────
-  const fetchData = useCallback(async () => {
-    if (!roundId || !user) return;
-    setPageLoading(true);
+    if (isLoading) return;
+    if (!user) { router.push('/login'); return; }
+    const allowed = user.role === 'admin' || user.role === 'superadmin';
+    if (allowed) setAccessState('allowed');
+    else { setAccessState('checking'); setCountdown(COUNTDOWN_SEC); }
+  }, [isLoading, user, router]);
 
   useEffect(() => {
     if (accessState !== 'checking') return;
@@ -606,8 +262,6 @@ export default function JuryEvaluationPage() {
         }
         throw new Error((t.tourney?.errRoundsSave ?? 'Турнір створено, але раунди не збережено: {detail}').replace('{detail}', errMsg));
       }
-      const subsJson = await subsRes.json();
-      const assignedSubmissions: any[] = subsJson.submissions ?? [];
 
       router.push('/dashboard');
     } catch (err: any) {
@@ -683,27 +337,23 @@ export default function JuryEvaluationPage() {
     );
   }
 
-      // 3. Build work list — бекенд вже повертає my_evaluation для журі,
-      //    тому окремого запиту до jury_evaluations не потрібно.
-      const workList: SubmissionWork[] = assignedSubmissions.map((s: any) => {
-        // my_evaluation присутній якщо роль === "jury", інакше null
-        const existingEval = s.my_evaluation ?? null;
-        let criteria = buildCriteriaFromRound(parsedCriteria);
-        let general_comment = "";
-        let total_score: number | undefined;
-        let status: SubmissionWork["status"] = "not_evaluated";
-
-        if (existingEval) {
-          const saved: Record<string, { score: number; comment: string }> = existingEval.criteria_scores ?? {};
-          criteria = criteria.map(c => ({
-            ...c,
-            score: saved[c.key]?.score ?? "",
-            comment: saved[c.key]?.comment ?? "",
-          }));
-          general_comment = existingEval.general_comment ?? "";
-          total_score = existingEval.total_score;
-          const allFilled = criteria.every(c => c.score !== "");
-          status = allFilled ? "evaluated" : "in_progress";
+  /* ── Denied (403) ── */
+  if (accessState === 'denied') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden bg-(--bg) text-(--t1)">
+      <style>{`
+        @keyframes glitch {
+          0%  {clip-path:inset(0 0 95% 0);transform:translate(-4px,0) skewX(-1deg)}
+          10% {clip-path:inset(60% 0 30% 0);transform:translate(4px,0) skewX(1deg)}
+          20% {clip-path:inset(30% 0 60% 0);transform:translate(-2px,0)}
+          30% {clip-path:inset(80% 0 5% 0);transform:translate(3px,0) skewX(-0.5deg)}
+          40% {clip-path:inset(10% 0 85% 0);transform:translate(-3px,0)}
+          50% {clip-path:inset(50% 0 45% 0);transform:translate(2px,0) skewX(1deg)}
+          60% {clip-path:inset(20% 0 70% 0);transform:translate(-4px,0)}
+          70% {clip-path:inset(70% 0 10% 0);transform:translate(4px,0) skewX(-1deg)}
+          80% {clip-path:inset(40% 0 50% 0);transform:translate(-2px,0)}
+          90% {clip-path:inset(5% 0 90% 0);transform:translate(3px,0)}
+          100%{clip-path:inset(0 0 95% 0);transform:translate(0,0)}
         }
         @keyframes fadeSlideUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
         @keyframes rabbit-fall { 0%{top:-80px;opacity:0;transform:translateX(-50%) rotate(0deg)} 30%{opacity:1} 100%{top:110%;opacity:0;transform:translateX(-50%) rotate(720deg)} }
@@ -739,79 +389,40 @@ export default function JuryEvaluationPage() {
     );
   }
 
-        return {
-          id: s.id,
-          team_id: s.team_id,
-          team_name: s.team_name ?? "Команда",
-          team_org: s.team_org,
-          team_avatar_url: s.team_avatar_url ?? undefined,
-          team_leader: s.team_leader ?? undefined,
-          round_id: s.round_id,
-          submitted_at: s.submitted_at,
-          github_url: s.github_url,
-          youtube_url: s.youtube_url,
-          live_url: s.live_url ?? undefined,
-          files: s.files ?? [],
-          status,
-          criteria,
-          general_comment,
-          total_score,
-        };
-      });
+  /* ════════════════════════════════════════════════════════════════════════
+   *    MAIN FORM (admin only)
+   * ════════════════════════════════════════════════════════════════════════ */
+  return (
+    <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
+    <style jsx global>{`
+      @keyframes fadeUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
+      @keyframes cardDrop { from{opacity:0;transform:translateY(-26px) scale(.97)} to{opacity:1;transform:none} }
+      @keyframes slideInRight { from{opacity:0;transform:translateX(40px)} to{opacity:1;transform:translateX(0)} }
+      .fuIn  { animation: fadeUp      340ms cubic-bezier(.22,1,.36,1) both }
+      .cdIn  { animation: cardDrop    500ms cubic-bezier(.22,1,.36,1) both }
+      .sirIn { animation: slideInRight 400ms cubic-bezier(.22,1,.36,1) both }
+      `}</style>
 
-      // Fetch team avatars + captain from Supabase
-      const teamIds = [...new Set(workList.map(w => w.team_id).filter(Boolean))];
-      if (teamIds.length > 0) {
-        const { data: teamsData } = await supabase
-        .from("teams")
-        .select("id, avatar_url, captain_id")
-        .in("id", teamIds);
-        if (teamsData) {
-          const avatarMap: Record<string, string> = {};
-          const captainIdMap: Record<string, string> = {};
-          teamsData.forEach((t: any) => {
-            if (t.avatar_url) avatarMap[t.id] = t.avatar_url;
-            if (t.captain_id) captainIdMap[t.id] = t.captain_id;
-          });
-            workList.forEach(w => {
-              if (avatarMap[w.team_id]) w.team_avatar_url = avatarMap[w.team_id];
-            });
+      {/* Watermark */}
+      <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
+      <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
+      </div>
 
-              // Fetch captain names from account table
-              const captainIds = [...new Set(Object.values(captainIdMap).filter(Boolean))];
-              if (captainIds.length > 0) {
-                const { data: accountsData } = await supabase
-                .from("account")
-                .select("id, username, login")
-                .in("id", captainIds);
-                if (accountsData) {
-                  const nameMap: Record<string, string> = {};
-                  accountsData.forEach((a: any) => { nameMap[a.id] = a.username || a.login || "—"; });
-                  workList.forEach(w => {
-                    const capId = captainIdMap[w.team_id];
-                    if (capId && nameMap[capId]) (w as any).team_leader = nameMap[capId];
-                  });
-                }
-              }
-        }
-      }
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+      )}
+      <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      <Sidebar />
+      </div>
 
-      setWorks(workList);
-      setStats({
-        total: totalCount ?? assignedSubmissions.length,
-        distributed: assignedSubmissions.length,
-        evaluated: workList.filter(w => w.status === "evaluated").length,
-      });
+      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
+      <MobileHeader
+      onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+      title={t.tourney?.create ?? 'Створення турніру'}
+      icon={<Trophy size={18} className="text-blue-600" />}
+      />
 
-      if (workList.length > 0 && activeIdx === null) setActiveIdx(0);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setPageLoading(false);
-    }
-    // FIX (середній): activeIdx прибрано з deps — перезавантаження даних при
-    // зміні активної картки спричиняло зайві fetch-запити і скидало стан форми.
-  }, [roundId, user, isJury]);
+      <div className="flex-1 p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
 
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
@@ -826,100 +437,42 @@ export default function JuryEvaluationPage() {
       <ArrowLeft size={14} /> {t.tourney?.back ?? 'Назад'}
       </button>
 
-    const updateGeneralComment = (comment: string) => {
-      if (activeIdx === null) return;
-      setWorks(prev => prev.map((w, i) =>
-      i === activeIdx ? { ...w, general_comment: comment } : w
-      ));
-    };
+      <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-(--t1) mb-8 sm:mb-10">
+      {t.tourney?.createAdmin ?? 'Створення турніру'}
+      </h1>
 
-    // ── Save evaluation ───────────────────────────────────────────────────────
-    const handleSave = async () => {
-      if (activeIdx === null || !user) return;
-      const work = works[activeIdx];
-      setSaving(true);
-      setSaveMsg(null);
-      try {
-        const criteriaScores: Record<string, { score: number | ""; comment: string }> = {};
-        work.criteria.forEach(c => { criteriaScores[c.key] = { score: c.score, comment: c.comment }; });
-        const total = computeTotal(work.criteria);
-
-        // FIX (середній): замість прямого запису в supabase з клієнта —
-        // відправляємо на бекенд-ендпоінт з JWT-авторизацією.
-        // Це запобігає маніпуляціям через DevTools (обхід перевірки журі).
-        const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
-
-        const res = await fetch(`${API_URL}/api/rounds/${work.round_id}/evaluate`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            submission_id:   work.id,
-            criteria_scores: criteriaScores,
-            general_comment: work.general_comment,
-            total_score:     total,
-          }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err?.detail ?? `HTTP ${res.status}`);
+      <style>{`
+        input[type="date"]::-webkit-calendar-picker-indicator,
+        input[type="time"]::-webkit-calendar-picker-indicator {
+          display: none !important;
+          opacity: 0 !important;
+          width: 0 !important;
         }
+        input[type="date"],
+        input[type="time"] {
+          -moz-appearance: textfield;
+        }
+        input[type="date"]::-moz-calendar-picker-indicator,
+        input[type="time"]::-moz-calendar-picker-indicator {
+          display: none !important;
+        }
+        `}</style>
+        <form className="space-y-5" onSubmit={handleSubmit}>
 
-        // Update local total + status
-        setWorks(prev => prev.map((w, i) => {
-          if (i !== activeIdx) return w;
-          const allFilled = w.criteria.every(c => c.score !== "");
-          return { ...w, total_score: total, status: allFilled ? "evaluated" : "in_progress" };
-        }));
-        setStats(prev => ({
-          ...prev,
-          evaluated: works.filter((w, i) => {
-            if (i === activeIdx) return work.criteria.every(c => c.score !== "");
-            return w.status === "evaluated";
-          }).length,
-        }));
+        <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
 
-        if (saveMsgTimer.current) clearTimeout(saveMsgTimer.current);
-        setSaveMsg({ type: "ok", text: "Оцінку збережено ✓" });
-        saveMsgTimer.current = setTimeout(() => setSaveMsg(null), 3000);
-      } catch (e: any) {
-        setSaveMsg({ type: "err", text: e?.message ?? "Помилка збереження" });
-      } finally {
-        setSaving(false);
-      }
-    };
+        {/* ── LEFT COLUMN ── */}
+        <div className="flex flex-col gap-5 w-full xl:flex-1 xl:min-w-0">
 
-    // ── Redistribute (admin only) ─────────────────────────────────────────────
-    const handleRedistribute = async () => {
-      if (!isAdmin || !roundId) return;
-      setRedistributing(true);
-      setSaveMsg(null);
-      try {
-        const freshToken = (typeof window !== "undefined" ? localStorage.getItem("access_token") : null) ?? "";
-        const res = await fetch(`${API_URL}/api/rounds/${roundId}/redistribute`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${freshToken}` },
-        });
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(json.detail ?? `HTTP ${res.status}`);
-        setSaveMsg({ type: "ok", text: `Розподілено ${json.submissions} робіт між ${json.jury_count} журі` });
-        if (saveMsgTimer.current) clearTimeout(saveMsgTimer.current);
-        saveMsgTimer.current = setTimeout(() => setSaveMsg(null), 4000);
-        await fetchData();
-      } catch (e: any) {
-        setSaveMsg({ type: "err", text: e?.message ?? "Помилка перерозподілу" });
-      } finally {
-        setRedistributing(false);
-      }
-    };
-
-    // ── Render guards ─────────────────────────────────────────────────────────
-    if (authLoading || (!user && !authLoading)) {
-      return (
-        <div className="min-h-screen bg-(--bg) flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        {/* BLOCK 1: Загальна інформація */}
+        <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
+        <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-(--bg)/50">
+        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
+        <Trophy size={16} />
+        </div>
+        <span className="text-xs font-black uppercase tracking-widest text-(--t2)">
+        1. {t.tourney?.general ?? 'Загальна інформація'}
+        </span>
         </div>
         <div className="p-6 sm:p-8 space-y-5">
         {/* Назва */}
@@ -955,9 +508,8 @@ export default function JuryEvaluationPage() {
         </div>
         </section>
 
-    const activeWork = activeIdx !== null ? works[activeIdx] : null;
-    const activeTotal = activeWork ? computeTotal(activeWork.criteria) : 0;
-    const allCriteriaFilled = activeWork?.criteria.every(c => c.score !== "") ?? false;
+        {/* BLOCK 2: Реєстрація + Дати */}
+        <section className="cdIn grid grid-cols-1 md:grid-cols-2 gap-5" style={{ animationDelay: '80ms' }}>
 
         <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
         <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd) bg-(--bg)/50">
@@ -986,15 +538,10 @@ export default function JuryEvaluationPage() {
         <DateTimePair label={t.tourney?.tourEnd ?? 'Кінець турніру'} dateVal={endDate} onDate={setEndDate} timeVal={endTime} onTime={setEndTime} />
         </div>
         </div>
+        </section>
 
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden max-w-full">
-        <MobileHeader
-        onOpenSidebar={() => setIsMobileSidebarOpen(true)}
-        title="Оцінювання"
-        icon={<Star size={18} className="text-blue-600" />}
-        />
-
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 relative z-10 w-full max-w-full">
+        {/* BLOCK 3: Формат + Команди */}
+        <section className="cdIn grid grid-cols-1 sm:grid-cols-2 gap-5 items-stretch" style={{ animationDelay: '140ms' }}>
 
         <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
         <div className="flex items-center gap-3 px-5 py-4 border-b border-(--brd) bg-(--bg)/50">
@@ -1072,25 +619,12 @@ export default function JuryEvaluationPage() {
           }`}>
           {n === 0 ? (t.tourney?.noLimit ?? 'Без ліміту') : n}
           </button>
-          <button
-          onClick={() => setMobileTab("form")}
-          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
-            mobileTab === "form" ? "bg-blue-600 text-white shadow-md" : "text-(--t2) hover:text-(--t1)"
-          }`}
-          >
-          <Star size={13} />
-          <span className="truncate max-w-[110px]">{activeWork ? activeWork.team_name : "Оцінка"}</span>
-          {activeWork && (
-            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-              activeWork.status === "evaluated" ? "bg-green-500" :
-              activeWork.status === "in_progress" ? "bg-amber-500" : "bg-(--brd)"
-            }`} />
-          )}
-          </button>
-          </div>
+        ))}
+        </div>
+        </div>
+        </div>
 
-          {/* ══ LEFT — Submission list + Stats ═══════════════════════════ */}
-          <div className={`w-full xl:w-[320px] flex-shrink-0 flex-col gap-4 ${mobileTab === "list" ? "flex" : "hidden xl:flex"}`}>
+        </section>
 
         {/* Action buttons */}
         <div className="cdIn flex flex-col sm:flex-row gap-3" style={{ animationDelay: '200ms' }}>
@@ -1119,379 +653,19 @@ export default function JuryEvaluationPage() {
         />
         </div>
 
-          </div>
+        </div>
+        {/* end MAIN TWO-COLUMN LAYOUT */}
 
-          {/* ══ RIGHT — Evaluation form ═══════════════════════════════════ */}
-          <div className={`flex-1 min-w-0 flex-col gap-4 ${mobileTab === "form" ? "flex" : "hidden xl:flex"}`}>
-
-          {activeWork ? (
-            <>
-            {/* ── Work header: team card + score island ── */}
-            <div className="cdIn flex flex-col sm:flex-row gap-3 items-stretch">
-
-            {/* MAIN INFO CARD */}
-            <div className="flex-1 min-w-0 bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm overflow-hidden">
-
-            {/* ── Mobile layout ── */}
-            <div className="sm:hidden">
-            {/* Top: avatar + team name + score */}
-            <div className="flex items-center gap-3 p-4">
-            <div className="flex-shrink-0 w-12 h-12 rounded-xl overflow-hidden border border-(--brd)">
-            {activeWork.team_avatar_url
-              ? <img src={activeWork.team_avatar_url} alt={activeWork.team_name} className="w-full h-full object-cover" />
-              : <div className="w-full h-full bg-blue-600/10 flex items-center justify-center text-blue-600 font-black text-xl">{activeWork.team_name.charAt(0).toUpperCase()}</div>
-            }
-            </div>
-            <div className="flex-1 min-w-0">
-            <h2 className="font-black text-(--t1) text-base uppercase tracking-tight truncate">{activeWork.team_name}</h2>
-            {activeWork.team_org && <p className="text-[10px] font-bold text-(--t2) truncate">{activeWork.team_org}</p>}
-            {(activeWork as any).team_leader && (
-              <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-              <span className="text-[10px] font-bold text-(--t2) truncate max-w-[120px]">{(activeWork as any).team_leader}</span>
-              <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">капітан</span>
-              </div>
-            )}
-            </div>
-            {/* Inline score badge */}
-            <div className={`flex-shrink-0 flex flex-col items-center justify-center w-14 h-14 rounded-2xl border font-black text-2xl ${
-              activeTotal >= 80 ? "text-green-500 bg-green-500/10 border-green-500/20" :
-              activeTotal >= 50 ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
-              activeTotal >  0  ? "text-amber-500 bg-amber-500/10 border-amber-500/20" :
-              "text-(--t2) bg-(--bg) border-(--brd)"
-            }`} style={{ fontVariantNumeric: "tabular-nums" }}>
-            {activeWork.criteria.every(c => c.score !== "") || activeTotal > 0 ? activeTotal : "—"}
-            </div>
-            </div>
-            {/* Bottom: link buttons row — icon-only on mobile, icon+text on sm+ */}
-            <div className="flex items-center gap-2 px-4 pb-4 border-t border-(--brd) pt-3">
-            {activeWork.github_url ? (
-              <a href={activeWork.github_url} target="_blank" rel="noopener noreferrer" title="GitHub"
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:text-blue-600 hover:border-blue-600/40 active:scale-95 transition-all min-w-0">
-              <Github size={13} className="flex-shrink-0" /><span className="hidden xs:inline truncate">GitHub</span>
-              </a>
-            ) : (
-              <span className="flex-1 flex items-center justify-center py-2.5 rounded-xl border border-(--brd) text-(--t2) opacity-30 cursor-not-allowed min-w-0">
-              <Github size={13} />
-              </span>
-            )}
-            {activeWork.youtube_url ? (
-              <a href={activeWork.youtube_url} target="_blank" rel="noopener noreferrer" title="YouTube"
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:text-red-500 hover:border-red-500/40 active:scale-95 transition-all min-w-0">
-              <Video size={13} className="flex-shrink-0" /><span className="hidden xs:inline truncate">YouTube</span>
-              </a>
-            ) : (
-              <span className="flex-1 flex items-center justify-center py-2.5 rounded-xl border border-(--brd) text-(--t2) opacity-30 cursor-not-allowed min-w-0">
-              <Video size={13} />
-              </span>
-            )}
-            {activeWork.live_url ? (
-              <a href={activeWork.live_url} target="_blank" rel="noopener noreferrer" title="Live Demo"
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:text-green-500 hover:border-green-500/40 active:scale-95 transition-all min-w-0">
-              <Zap size={13} className="flex-shrink-0" /><span className="hidden xs:inline truncate">Live</span>
-              </a>
-            ) : (
-              <span className="flex-1 flex items-center justify-center py-2.5 rounded-xl border border-(--brd) text-(--t2) opacity-30 cursor-not-allowed min-w-0">
-              <Zap size={13} />
-              </span>
-            )}
-            {(() => {
-              const rf = (activeWork.files ?? []).find(f => f.name?.toLowerCase().includes("readme") && f.url);
-              const roundDesc = round?.description ?? "";
-              const roundDescText = roundDesc.replace(/<[^>]*>/g, "").trim();
-              const hasReadme = !!rf?.url || roundDescText.length > 0;
-              return hasReadme ? (
-                <button onClick={() => setReadmeModal(rf?.url ? { url: rf.url, title: "README" } : { text: round!.description, title: `Опис: ${round!.name}` })} title="README"
-                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:text-blue-600 hover:border-blue-600/40 active:scale-95 transition-all min-w-0">
-                <Eye size={13} className="flex-shrink-0" /><span className="hidden xs:inline truncate">README</span>
-                </button>
-              ) : (
-                <span className="flex-1 flex items-center justify-center py-2.5 rounded-xl border border-(--brd) text-(--t2) opacity-30 cursor-not-allowed min-w-0">
-                <Eye size={13} />
-                </span>
-              );
-            })()}
-            </div>
-            </div>
-
-            {/* ── Desktop layout ── */}
-            <div className="hidden sm:flex items-stretch">
-            {/* LEFT — avatar + team info */}
-            <div className="flex items-center gap-4 p-5 sm:p-6 flex-1 min-w-0">
-            <div className="flex-shrink-0">
-            <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-(--brd) shadow-md">
-            {activeWork.team_avatar_url
-              ? <img src={activeWork.team_avatar_url} alt={activeWork.team_name} className="w-full h-full object-cover" />
-              : <div className="w-full h-full bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-3xl">{activeWork.team_name.charAt(0).toUpperCase()}</div>
-            }
-            </div>
-            </div>
-            <div className="flex flex-col justify-center gap-1 min-w-0">
-            <h2 className="font-black text-(--t1) text-xl uppercase tracking-tight truncate">{activeWork.team_name}</h2>
-            {activeWork.team_org && <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider truncate">{activeWork.team_org}</p>}
-            {(activeWork as any).team_leader && (
-              <div className="flex items-center gap-1.5 mt-0.5">
-              <Shield size={11} className="text-(--t2) flex-shrink-0" />
-              <span className="text-[11px] font-bold text-(--t2) truncate">{(activeWork as any).team_leader}</span>
-              <span className="ml-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-400 border border-orange-500/20">капітан</span>
-              </div>
-            )}
-            <div className="flex items-center gap-1.5 mt-0.5">
-            <Clock size={11} className="text-(--t2) flex-shrink-0" />
-            <span className="text-[11px] font-bold text-(--t2)">Здано: {fmtDate(activeWork.submitted_at)}</span>
-            </div>
-            </div>
-            </div>
-            {/* RIGHT — video + buttons */}
-            <div className="flex items-stretch border-l border-(--brd)">
-            <div className="flex flex-col items-center justify-center p-3 bg-(--bg)/40 gap-2">
-            <div className="w-28 h-[72px] rounded-xl overflow-hidden border border-(--brd) shadow-sm relative flex-shrink-0">
-            {activeWork.youtube_url ? (
-              <a href={activeWork.youtube_url} target="_blank" rel="noopener noreferrer" className="block w-full h-full group">
-              <img src={`https://img.youtube.com/vi/${activeWork.youtube_url.match(/(?:v=|youtu\.be\/)([^&\n?#]+)/)?.[1]}/hqdefault.jpg`} alt="preview" className="w-full h-full object-cover" />
-              <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-7 h-7 rounded-full bg-black/60 flex items-center justify-center"><Video size={12} className="text-white ml-0.5" /></div>
-              </div>
-              </a>
-            ) : (
-              <div className="w-full h-full bg-(--bg) flex flex-col items-center justify-center gap-1">
-              <Video size={16} className="text-(--t2) opacity-25" />
-              <span className="text-[8px] font-black uppercase text-(--t2) opacity-30 text-center leading-tight px-1">Відео відсутнє</span>
-              </div>
-            )}
-            </div>
-            {activeWork.youtube_url ? (
-              <a href={activeWork.youtube_url} target="_blank" rel="noopener noreferrer" className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-(--bg) border border-(--brd) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 transition-all active:scale-95"><Video size={10} /> YouTube</a>
-            ) : (
-              <span className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-(--brd) text-(--t2) opacity-30 font-black text-[9px] uppercase tracking-widest cursor-not-allowed"><Video size={10} /> YouTube</span>
-            )}
-            </div>
-            <div className="flex flex-col justify-center gap-2 px-4 py-4 min-w-[120px]">
-            {activeWork.github_url ? (
-              <a href={activeWork.github_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"><Github size={11} /> GitHub</a>
-            ) : (
-              <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed"><Github size={11} /> GitHub</span>
-            )}
-            {activeWork.live_url ? (
-              <a href={activeWork.live_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-green-500/40 hover:text-green-500 transition-all active:scale-95"><Zap size={11} /> Live Demo</a>
-            ) : (
-              <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed"><Zap size={11} /> Live Demo</span>
-            )}
-            {(() => {
-              const rf = (activeWork.files ?? []).find(f => f.name?.toLowerCase().includes("readme") && f.url);
-              const roundDesc2 = round?.description ?? "";
-              const roundDescText2 = roundDesc2.replace(/<[^>]*>/g, "").trim();
-              const hasReadme = !!rf?.url || roundDescText2.length > 0;
-              return hasReadme ? (
-                <button onClick={() => setReadmeModal(rf?.url ? { url: rf.url, title: "README" } : { text: round!.description, title: `Опис: ${round!.name}` })} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"><Eye size={11} /> README</button>
-              ) : (
-                <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed"><Eye size={11} /> README</span>
-              );
-            })()}
-            </div>
-            </div>
-            </div>
-
-            </div>
-
-            {/* SCORE ISLAND — hidden on mobile (shown inline above), visible on sm+ */}
-            <div className="hidden sm:flex flex-shrink-0 bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm flex-col items-center justify-center px-6 py-5 gap-2" style={{ width: 140, minWidth: 140 }}>
-            <div className={`text-4xl font-black rounded-2xl border flex items-center justify-center ${
-              activeTotal >= 80 ? "text-green-500 bg-green-500/10 border-green-500/20" :
-              activeTotal >= 50 ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
-              activeTotal >  0  ? "text-amber-500 bg-amber-500/10 border-amber-500/20" :
-              "text-(--t2) bg-(--bg) border-(--brd)"
-            }`} style={{ width: 104, height: 60, fontVariantNumeric: "tabular-nums" }}>
-            {activeWork.criteria.every(c => c.score !== "") || activeTotal > 0 ? activeTotal : "—"}
-            </div>
-            <span className="text-[8px] font-black uppercase tracking-widest text-(--t2) text-center leading-tight">
-            Підсумкова<br/>оцінка (авто)
-            </span>
-            </div>
-
-            </div>
-
-            {/* Criteria scores */}
-            <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm overflow-hidden" style={{ animationDelay: "50ms" }}>
-            <div className="flex items-center gap-3 px-5 sm:px-6 py-4 border-b border-(--brd) bg-(--bg)/40">
-            <Award size={14} className="text-blue-600" />
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-(--t1)">
-            Форма оцінки (по категоріях)
-            </h3>
-            </div>
-
-            {/* Criteria table header */}
-            <div className="hidden sm:grid grid-cols-[1fr_40px_1fr_96px] gap-3 px-5 sm:px-6 py-3 border-b border-(--brd) bg-(--bg)/20">
-            {["Категорія", "Вага", "Оцінка (0–100)", "Коментар"].map(h => (
-              <span key={h} className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{h}</span>
-            ))}
-            </div>
-
-            <div className="divide-y divide-(--brd)">
-            {activeWork.criteria.map((crit, ci) => (
-              <div key={crit.key} className="fuIn px-5 sm:px-6 py-4" style={{ animationDelay: `${ci * 40}ms` }}>
-              {/* Mobile: stacked layout */}
-              <div className="sm:hidden mb-3 flex items-center justify-between">
-              <span className="text-sm font-black text-(--t1)">{crit.label}</span>
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-blue-600/10 text-blue-600 border border-blue-600/20">
-              {crit.weight}%
-              </span>
-              </div>
-              {/* Desktop: grid */}
-              <div className="hidden sm:grid grid-cols-[1fr_40px_1fr_96px] gap-3 items-center">
-              <span className="text-sm font-bold text-(--t1)">{crit.label}</span>
-              <span className="text-[10px] font-black text-center text-blue-600 bg-blue-600/8 rounded-lg py-1">{crit.weight}%</span>
-              <ScoreInput
-              value={crit.score}
-              onChange={v => updateCriterionScore(crit.key, v)}
-              />
-              <input
-              type="text"
-              placeholder="Коментар..."
-              value={crit.comment}
-              onChange={e => updateCriterionComment(crit.key, e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-xs font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all placeholder:text-(--t2)/40"
-              />
-              </div>
-              {/* Mobile score + comment */}
-              <div className="sm:hidden space-y-2">
-              <ScoreInput
-              value={crit.score}
-              onChange={v => updateCriterionScore(crit.key, v)}
-              />
-              <input
-              type="text"
-              placeholder="Коментар..."
-              value={crit.comment}
-              onChange={e => updateCriterionComment(crit.key, e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-xs font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
-              />
-              </div>
-              </div>
-            ))}
-            </div>
-
-            {/* Total row */}
-            <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-t-2 border-(--brd) bg-(--bg)/30">
-            <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
-            Підсумкова оцінка (авто)
-            </span>
-            <div className="flex items-center gap-2">
-            <div style={{ width: 64, textAlign: "right" }}>
-            <span className={`text-2xl font-black ${
-              !allCriteriaFilled      ? "text-(--t2)" :
-              activeTotal >= 80       ? "text-green-500" :
-              activeTotal >= 50       ? "text-blue-500" :
-              "text-amber-500"
-            }`} style={{ fontVariantNumeric: "tabular-nums" }}>
-            {allCriteriaFilled ? activeTotal : "—"}
-            </span>
-            </div>
-            <span className="text-[9px] font-bold text-(--t2) uppercase">/ 100</span>
-            </div>
-            </div>
-            </div>
-
-            {/* General comment */}
-            <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm p-5 sm:p-6" style={{ animationDelay: "100ms" }}>
-            <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-3">
-            Опціональний загальний коментар
-            </label>
-            <textarea
-            rows={3}
-            placeholder="Загальні враження від роботи, рекомендації..."
-            value={activeWork.general_comment}
-            onChange={e => updateGeneralComment(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all resize-none placeholder:text-(--t2)/40"
-            />
-            </div>
-
-            {/* Action bar */}
-            <div className="cdIn flex flex-col gap-3" style={{ animationDelay: "130ms" }}>
-            {/* Save + Cancel */}
-            <div className="flex items-center gap-3">
-            <button
-            onClick={handleSave}
-            disabled={saving}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all active:scale-95 shadow-lg ${
-              saving
-              ? "bg-(--brd) text-(--t2) cursor-not-allowed shadow-none"
-              : allCriteriaFilled
-              ? "bg-green-600 text-white hover:bg-green-700 shadow-green-600/25"
-              : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-600/25"
-            }`}
-            >
-            {saving
-              ? <><Loader size={14} className="animate-spin" /> Збереження...</>
-              : allCriteriaFilled
-              ? <><CheckCircle2 size={14} /> Зберегти оцінку</>
-              : <><Save size={14} /> Зберегти оцінку</>
-            }
-            </button>
-            <button
-            onClick={() => { fetchData(); setSaveMsg(null); }}
-            className="flex items-center gap-2 px-4 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest border border-(--brd) bg-(--bg) text-(--t2) hover:bg-(--card) hover:text-(--t1) active:scale-95 transition-all"
-            >
-            <RefreshCw size={14} /><span className="hidden sm:inline"> Відмінити</span>
-            </button>
-            {saveMsg && (
-              <div className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest ${
-                saveMsg.type === "ok"
-                ? "bg-green-500/10 border border-green-500/20 text-green-500"
-                : "bg-red-500/10 border border-red-500/20 text-red-500"
-              }`}>
-              {saveMsg.type === "ok" ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
-              <span className="hidden sm:inline">{saveMsg.text}</span>
-              </div>
-            )}
-            </div>
-            {/* Prev / Next — full width on mobile */}
-            <div className="flex items-center gap-2">
-            <button
-            onClick={() => setActiveIdx(i => (i !== null && i > 0) ? i - 1 : i)}
-            disabled={activeIdx === 0 || activeIdx === null}
-            className="flex-1 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all disabled:opacity-30 text-center"
-            >
-            ← Попередня
-            </button>
-            <button
-            onClick={() => setActiveIdx(i => (i !== null && i < works.length - 1) ? i + 1 : i)}
-            disabled={activeIdx === works.length - 1 || activeIdx === null}
-            className="flex-1 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all disabled:opacity-30 text-center"
-            >
-            Наступна →
-            </button>
-            </div>
-            </div>
-            </>
-          ) : (
-            /* Empty state */
-            <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm flex flex-col items-center justify-center py-24 text-center gap-4 px-8">
-            <div className="w-16 h-16 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center">
-            <Star size={28} className="text-(--t2) opacity-30" />
-            </div>
-            <p className="font-black text-(--t1) text-base uppercase">
-            {works.length === 0
-              ? "Немає робіт для оцінювання"
-              : "Оберіть роботу зі списку"
-            }
-            </p>
-            <p className="text-sm text-(--t2) max-w-xs">
-            {works.length === 0 && isJury
-              ? "Адміністратор ще не розподілив роботи між журі. Очікуйте повідомлення."
-              : "Натисніть на картку команди зліва, щоб розпочати оцінювання"
-            }
-            </p>
-            </div>
-          )}
-          </div>
+        {/* Error */}
+        {submitError && (
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm font-bold text-red-500">
+          ⚠️ {submitError}
           </div>
         )}
+
+        </form>
         </div>
         </main>
-        {/* README Modal */}
-        {readmeModal && (
-          <ReadmeModal url={readmeModal.url} text={readmeModal.text} title={readmeModal.title} onClose={() => setReadmeModal(null)} />
-        )}
         </div>
-    );
+  );
 }
