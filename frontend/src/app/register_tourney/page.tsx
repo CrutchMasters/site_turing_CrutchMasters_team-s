@@ -13,6 +13,7 @@ import MobileHeader from "@/components/MobileHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { useT } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
+import { localToIso } from "@/lib/datetime";
 import { supabase } from '@/lib/supabase';
 import { authedSupabase } from '@/lib/supabase';
 
@@ -110,17 +111,8 @@ export default function RegisterTourney() {
   const handleConfirmYes = () => { if (timerRef.current) clearInterval(timerRef.current); setAccessState('denied'); };
   const handleConfirmNo  = () => { if (timerRef.current) clearInterval(timerRef.current); router.push('/login'); };
 
-  // FIX (середній): компенсуємо timezone offset щоб локальний час зберігався як UTC.
-  // new Date("2026-05-01T18:00:00") інтерпретується як LOCAL time браузером,
-  // але .toISOString() повертає UTC — без компенсації час зміщується на UTC offset.
-  const toTimestamp = (date: string, time: string): string | null => {
-    if (!date) return null;
-    // new Date('YYYY-MM-DDTHH:mm:ss') парсить як локальний час,
-    // .toISOString() сам конвертує в UTC — жодна ручна компенсація не потрібна.
-    // Попередній код робив подвійний зсув (додавав offset замість віднімати).
-    const localStr = `${date}T${time || '00:00'}:00`;
-    return new Date(localStr).toISOString();
-  };
+  // localToIso: локальний час браузера → ISO UTC для збереження в БД (нульовий пояс).
+  const toTimestamp = localToIso;;
 
   const API_URL =
   typeof window !== 'undefined' && window.location.hostname === 'localhost'
@@ -416,11 +408,12 @@ export default function RegisterTourney() {
       <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
 
-      
-      <Sidebar
-        mobileOpen={isMobileSidebarOpen}
-        onMobileClose={() => setIsMobileSidebarOpen(false)}
-      />
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+      )}
+      <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      <Sidebar />
+      </div>
 
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
       <MobileHeader

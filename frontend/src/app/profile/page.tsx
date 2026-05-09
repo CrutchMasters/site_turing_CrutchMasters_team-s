@@ -83,7 +83,7 @@ function timeAgo(iso: string): string {
     if (diff < 60) return `${diff}s ago`;
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+    return new Date(iso).toLocaleString("en-US", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   } catch { return ""; }
 }
 
@@ -165,17 +165,17 @@ function useJuryData(userId: string | undefined, isJury: boolean) {
 
         // 2. Rounds via jury_assignments
         const { data: assignments } = await supabase
-          .from("jury_assignments")
-          .select("round_id, tournament_id")
-          .eq("jury_id", userId);
+        .from("jury_assignments")
+        .select("round_id, tournament_id")
+        .eq("jury_id", userId);
 
         if (assignments && assignments.length > 0) {
           const roundIds = assignments.map(a => a.round_id);
           const { data: rounds } = await supabase
-            .from("rounds")
-            .select("id, number, name, tournament_id, end_at, status")
-            .in("id", roundIds)
-            .order("number");
+          .from("rounds")
+          .select("id, number, name, tournament_id, end_at, status")
+          .in("id", roundIds)
+          .order("number");
 
           if (rounds) {
             // Get tournament names
@@ -196,11 +196,11 @@ function useJuryData(userId: string | undefined, isJury: boolean) {
 
             // 3. Submissions in these rounds
             const { data: subs } = await supabase
-              .from("submissions")
-              .select("id, team_id, submitted_at, github_url, status, round_id")
-              .in("round_id", roundIds)
-              .order("submitted_at", { ascending: false })
-              .limit(20);
+            .from("submissions")
+            .select("id, team_id, submitted_at, github_url, status, round_id")
+            .in("round_id", roundIds)
+            .order("submitted_at", { ascending: false })
+            .limit(20);
 
             if (subs && subs.length > 0) {
               const teamIds = [...new Set(subs.map(s => s.team_id).filter(Boolean))];
@@ -238,29 +238,29 @@ function CodeInput({ value, onChange, disabled }: { value: string; onChange: (v:
     onChange(next);
     if (d && i < 5) setTimeout(() => inputs.current[i + 1]?.focus(), 0);
   };
-  const handleKeyDown = (i: number, e: React.KeyboardEvent) => {
-    if (e.key === "Backspace") {
-      if (slots[i]) { const next = slots.map((c, idx) => (idx === i ? "" : c)).join(""); onChange(next); }
-      else if (i > 0) { inputs.current[i - 1]?.focus(); const next = slots.map((c, idx) => (idx === i - 1 ? "" : c)).join(""); onChange(next); }
-    }
-    if (e.key === "ArrowLeft" && i > 0) inputs.current[i - 1]?.focus();
-    if (e.key === "ArrowRight" && i < 5) inputs.current[i + 1]?.focus();
-  };
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-    onChange(pasted);
-    setTimeout(() => inputs.current[Math.min(pasted.length, 5)]?.focus(), 0);
-  };
-  return (
-    <div className="flex gap-2 justify-center">
-    {slots.map((digit, i) => (
-      <input key={i} ref={el => { inputs.current[i] = el; }} type="text" inputMode="numeric" maxLength={1}
-      value={digit} onChange={e => handleChange(i, e.target.value)} onKeyDown={e => handleKeyDown(i, e)} onPaste={handlePaste} disabled={disabled}
-      className={`w-11 h-14 text-center text-2xl font-black rounded-xl border-2 outline-none transition-all duration-150 disabled:opacity-40 ${digit ? "border-blue-600 bg-blue-600/10 text-blue-600 shadow-md shadow-blue-600/25" : "border-(--brd) bg-(--bg) text-(--t1) focus:border-blue-500 focus:bg-blue-500/5"}`} />
-    ))}
-    </div>
-  );
+    const handleKeyDown = (i: number, e: React.KeyboardEvent) => {
+      if (e.key === "Backspace") {
+        if (slots[i]) { const next = slots.map((c, idx) => (idx === i ? "" : c)).join(""); onChange(next); }
+        else if (i > 0) { inputs.current[i - 1]?.focus(); const next = slots.map((c, idx) => (idx === i - 1 ? "" : c)).join(""); onChange(next); }
+      }
+      if (e.key === "ArrowLeft" && i > 0) inputs.current[i - 1]?.focus();
+      if (e.key === "ArrowRight" && i < 5) inputs.current[i + 1]?.focus();
+    };
+      const handlePaste = (e: React.ClipboardEvent) => {
+        e.preventDefault();
+        const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+        onChange(pasted);
+        setTimeout(() => inputs.current[Math.min(pasted.length, 5)]?.focus(), 0);
+      };
+      return (
+        <div className="flex gap-2 justify-center">
+        {slots.map((digit, i) => (
+          <input key={i} ref={el => { inputs.current[i] = el; }} type="text" inputMode="numeric" maxLength={1}
+          value={digit} onChange={e => handleChange(i, e.target.value)} onKeyDown={e => handleKeyDown(i, e)} onPaste={handlePaste} disabled={disabled}
+          className={`w-11 h-14 text-center text-2xl font-black rounded-xl border-2 outline-none transition-all duration-150 disabled:opacity-40 ${digit ? "border-blue-600 bg-blue-600/10 text-blue-600 shadow-md shadow-blue-600/25" : "border-(--brd) bg-(--bg) text-(--t1) focus:border-blue-500 focus:bg-blue-500/5"}`} />
+        ))}
+        </div>
+      );
 }
 
 // ── Edit Profile Section ──────────────────────────────────────────────────────
@@ -370,246 +370,246 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
 
     {/* ── Change Password — trigger ── */}
     <div className="rounded-2xl border border-(--brd) overflow-hidden" style={{ background: "var(--card)" }}>
-      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-(--brd)" style={{ background: "var(--card)" }}>
-        <div className="w-7 h-7 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center flex-shrink-0">
-          <KeyRound size={13} className="text-blue-600" />
-        </div>
-        <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Change Password</p>
-      </div>
-      <div className="p-5 space-y-3">
-        <p className="text-xs font-medium text-(--t2)">
-          A verification code will be sent to{" "}
-          <span className="font-black text-(--t1)">{profileUser.email}</span>
-        </p>
-        <button
-          onClick={() => { setPwStep("sending"); setShowPwModal(true); onModalChange?.(true); sendCode(); }}
-          className="group w-full relative flex items-center justify-center gap-2.5 overflow-hidden rounded-2xl px-4 py-3.5 font-black text-xs uppercase tracking-widest transition-all duration-300 active:scale-95 shadow-lg shadow-blue-600/20 border border-blue-500/30"
-          style={{ background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #3b82f6 100%)", color: "white" }}
-        >
-          {/* shimmer effect */}
-          <span className="absolute inset-0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12" />
-          <span className="relative flex items-center gap-2 drop-shadow">
-            <KeyRound size={14} />
-            <span className="tracking-[0.15em]">Change password</span>
-          </span>
-        </button>
-      </div>
+    <div className="flex items-center gap-3 px-5 py-3.5 border-b border-(--brd)" style={{ background: "var(--card)" }}>
+    <div className="w-7 h-7 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center flex-shrink-0">
+    <KeyRound size={13} className="text-blue-600" />
+    </div>
+    <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Change Password</p>
+    </div>
+    <div className="p-5 space-y-3">
+    <p className="text-xs font-medium text-(--t2)">
+    A verification code will be sent to{" "}
+    <span className="font-black text-(--t1)">{profileUser.email}</span>
+    </p>
+    <button
+    onClick={() => { setPwStep("sending"); setShowPwModal(true); onModalChange?.(true); sendCode(); }}
+    className="group w-full relative flex items-center justify-center gap-2.5 overflow-hidden rounded-2xl px-4 py-3.5 font-black text-xs uppercase tracking-widest transition-all duration-300 active:scale-95 shadow-lg shadow-blue-600/20 border border-blue-500/30"
+    style={{ background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #3b82f6 100%)", color: "white" }}
+    >
+    {/* shimmer effect */}
+    <span className="absolute inset-0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12" />
+    <span className="relative flex items-center gap-2 drop-shadow">
+    <KeyRound size={14} />
+    <span className="tracking-[0.15em]">Change password</span>
+    </span>
+    </button>
+    </div>
     </div>
 
     {/* ── Password Modal ── */}
     {showPwModal && typeof document !== "undefined" && createPortal(
       <>
-        <style>{`
-          @keyframes pwSlideUp { from { opacity:0; transform:translateY(20px) scale(0.95); } to { opacity:1; transform:translateY(0) scale(1); } }
-          .pw-modal-card { animation: pwSlideUp 0.5s cubic-bezier(0.22,1,0.36,1) forwards; }
+      <style>{`
+        @keyframes pwSlideUp { from { opacity:0; transform:translateY(20px) scale(0.95); } to { opacity:1; transform:translateY(0) scale(1); } }
+        .pw-modal-card { animation: pwSlideUp 0.5s cubic-bezier(0.22,1,0.36,1) forwards; }
         `}</style>
 
         {/* Full-screen overlay — covers EVERYTHING including sidebar */}
         <div
-          className="fixed inset-0 z-[9998]"
-          style={{
-            backdropFilter: "blur(8px)",
-            WebkitBackdropFilter: "blur(8px)",
-            background: "rgba(0,0,0,0.6)",
-          }}
-          onClick={resetPw}
+        className="fixed inset-0 z-[9998]"
+        style={{
+          backdropFilter: "blur(8px)",
+                                                                    WebkitBackdropFilter: "blur(8px)",
+                                                                    background: "rgba(0,0,0,0.6)",
+        }}
+        onClick={resetPw}
         />
 
         {/* Centering wrapper */}
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
         <div className="pw-modal-card pointer-events-auto w-full max-w-sm bg-(--card)/80 backdrop-blur-3xl rounded-[2.5rem] shadow-2xl border border-(--brd) flex flex-col items-center text-(--t1) overflow-hidden">
 
-          {/* Modal header */}
-          <div className="w-full flex items-center justify-between px-7 py-4 border-b border-(--brd)">
-            <div className="flex items-center gap-2.5">
-              <KeyRound size={14} className="text-blue-500" />
-              <span className="text-xs font-black uppercase tracking-widest text-(--t1)">Change Password</span>
+        {/* Modal header */}
+        <div className="w-full flex items-center justify-between px-7 py-4 border-b border-(--brd)">
+        <div className="flex items-center gap-2.5">
+        <KeyRound size={14} className="text-blue-500" />
+        <span className="text-xs font-black uppercase tracking-widest text-(--t1)">Change Password</span>
+        </div>
+        <button onClick={resetPw} className="w-7 h-7 rounded-xl border border-(--brd) bg-(--bg) flex items-center justify-center text-(--t2) hover:text-red-500 hover:border-red-500/40 transition-all active:scale-95">
+        <X size={13} />
+        </button>
+        </div>
+
+        <div className="w-full flex flex-col items-center p-10">
+
+        {/* Sending */}
+        {pwStep === "sending" && (
+          <div className="flex flex-col items-center gap-4 py-4">
+          <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600">
+          <Loader size={32} className="animate-spin" />
+          </div>
+          <p className="text-xs font-black uppercase tracking-widest text-(--t2)">Sending code...</p>
+          </div>
+        )}
+
+        {/* Code input step */}
+        {pwStep === "code" && (
+          <>
+          <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600 mb-6">
+          <Mail size={32} />
+          </div>
+          <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">Verify</h2>
+          <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-8 leading-relaxed">
+          Enter the 6-digit code sent to<br />
+          <span className="text-(--t1) font-black">{profileUser.email}</span>
+          </p>
+
+          <input
+          type="text"
+          maxLength={6}
+          value={code}
+          onChange={e => { setCode(e.target.value.replace(/\D/g, "")); setPwError(null); }}
+          placeholder="000000"
+          className="w-full text-center text-4xl font-black tracking-[0.2em] py-5 rounded-2xl bg-(--bg)/50 focus:bg-(--card) focus:ring-2 focus:ring-blue-500 outline-none transition-all text-blue-600 mb-4 placeholder:text-(--t2)/30 border border-(--brd)"
+          />
+
+          {pwError && (
+            <div className="w-full mb-4 px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-[11px] font-bold text-center">
+            {pwError}
             </div>
-            <button onClick={resetPw} className="w-7 h-7 rounded-xl border border-(--brd) bg-(--bg) flex items-center justify-center text-(--t2) hover:text-red-500 hover:border-red-500/40 transition-all active:scale-95">
-              <X size={13} />
-            </button>
+          )}
+
+          <button
+          onClick={verifyCode}
+          disabled={code.length !== 6}
+          className={`w-full py-5 rounded-[1.8rem] font-black uppercase shadow-lg transition-all active:scale-95 mb-4 text-sm tracking-wider ${
+            code.length === 6
+            ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20"
+            : "bg-(--brd) text-(--t2) cursor-not-allowed"
+          }`}
+          >
+          Confirm
+          </button>
+
+          <div className="flex items-center justify-between w-full">
+          <button
+          onClick={() => { if (resendCooldown === 0) sendCode(); }}
+          disabled={resendCooldown > 0}
+          className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-(--t2) hover:text-blue-600 transition-colors disabled:opacity-40"
+          >
+          <RefreshCw size={10} />
+          {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend"}
+          </button>
+          <button onClick={resetPw} className="text-[10px] font-black text-(--t2) hover:text-red-500 uppercase tracking-[0.2em] transition-all flex items-center gap-1.5">
+          <span>←</span> Back
+          </button>
+          </div>
+          </>
+        )}
+
+        {/* Verifying */}
+        {pwStep === "verifying" && (
+          <div className="flex flex-col items-center gap-4 py-4">
+          <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600">
+          <Loader size={32} className="animate-spin" />
+          </div>
+          <p className="text-xs font-black uppercase tracking-widest text-(--t2)">Verifying...</p>
+          </div>
+        )}
+
+        {/* New password step */}
+        {pwStep === "newpw" && (
+          <>
+          <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center text-green-500 mb-6">
+          <Lock size={28} />
+          </div>
+          <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">New Password</h2>
+          <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-6">Set a new password for your account</p>
+
+          <div className="w-full space-y-3">
+          <div className="relative">
+          <input
+          type={showPw ? "text" : "password"}
+          value={newPw}
+          onChange={e => setNewPw(e.target.value)}
+          placeholder="Minimum 8 characters..."
+          className="w-full px-5 py-4 pr-12 rounded-2xl border border-(--brd) bg-(--bg)/50 focus:ring-2 focus:ring-blue-500 focus:bg-(--card) outline-none text-sm text-(--t1) transition-all"
+          />
+          <button type="button" onClick={() => setShowPw(p => !p)} className="absolute right-4 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-600 transition-colors">
+          {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+          </div>
+          {newPw && pwStrength !== null && (
+            <div className="space-y-1 px-1">
+            <div className="flex gap-1">
+            {[1,2,3,4].map(i => (
+              <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+                i <= pwStrength
+                ? pwStrength <= 1 ? "bg-red-500" : pwStrength === 2 ? "bg-amber-500" : pwStrength === 3 ? "bg-blue-500" : "bg-green-500"
+                : "bg-(--brd)"
+              }`} />
+            ))}
+            </div>
+            <p className="text-[10px] font-bold text-(--t2)">
+            {pwStrength <= 1 ? "Weak" : pwStrength === 2 ? "Medium" : pwStrength === 3 ? "Good" : "Strong"}
+            </p>
+            </div>
+          )}
+          <div className="relative">
+          <input
+          type={showConfirm ? "text" : "password"}
+          value={confirmPw}
+          onChange={e => setConfirmPw(e.target.value)}
+          placeholder="Repeat password..."
+          className={`w-full px-5 py-4 pr-12 rounded-2xl border bg-(--bg)/50 focus:ring-2 focus:bg-(--card) outline-none text-sm text-(--t1) transition-all ${
+            confirmPw && confirmPw !== newPw
+            ? "border-red-500 focus:ring-red-500/30"
+            : confirmPw && confirmPw === newPw
+            ? "border-green-500 focus:ring-green-500/30"
+            : "border-(--brd) focus:ring-blue-500"
+          }`}
+          />
+          <button type="button" onClick={() => setShowConfirm(p => !p)} className="absolute right-4 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-600 transition-colors">
+          {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+          {confirmPw && confirmPw === newPw && (
+            <CheckCircle size={15} className="absolute right-12 top-1/2 -translate-y-1/2 text-green-500" />
+          )}
           </div>
 
-          <div className="w-full flex flex-col items-center p-10">
-
-          {/* Sending */}
-          {pwStep === "sending" && (
-            <div className="flex flex-col items-center gap-4 py-4">
-              <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600">
-                <Loader size={32} className="animate-spin" />
-              </div>
-              <p className="text-xs font-black uppercase tracking-widest text-(--t2)">Sending code...</p>
+          {pwError && (
+            <div className="px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-[11px] font-bold text-center">
+            {pwError}
             </div>
           )}
 
-          {/* Code input step */}
-          {pwStep === "code" && (
-            <>
-              <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600 mb-6">
-                <Mail size={32} />
-              </div>
-              <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">Verify</h2>
-              <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-8 leading-relaxed">
-                Enter the 6-digit code sent to<br />
-                <span className="text-(--t1) font-black">{profileUser.email}</span>
-              </p>
+          <button
+          onClick={setPassword}
+          disabled={!newPw || !confirmPw || newPw !== confirmPw || newPw.length < 8}
+          className={`w-full py-5 rounded-[1.8rem] font-black uppercase shadow-lg transition-all active:scale-95 text-sm tracking-wider ${
+            newPw && confirmPw && newPw === confirmPw && newPw.length >= 8
+            ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20"
+            : "bg-(--brd) text-(--t2) cursor-not-allowed"
+          }`}
+          >
+          Set Password
+          </button>
+          <button onClick={resetPw} className="w-full text-[10px] font-black text-(--t2) hover:text-red-500 uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-1.5">
+          <span>←</span> Cancel
+          </button>
+          </div>
+          </>
+        )}
 
-              <input
-                type="text"
-                maxLength={6}
-                value={code}
-                onChange={e => { setCode(e.target.value.replace(/\D/g, "")); setPwError(null); }}
-                placeholder="000000"
-                className="w-full text-center text-4xl font-black tracking-[0.2em] py-5 rounded-2xl bg-(--bg)/50 focus:bg-(--card) focus:ring-2 focus:ring-blue-500 outline-none transition-all text-blue-600 mb-4 placeholder:text-(--t2)/30 border border-(--brd)"
-              />
+        {/* Done */}
+        {pwStep === "done" && (
+          <>
+          <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center mb-6">
+          <CheckCircle size={32} className="text-green-500" />
+          </div>
+          <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">Done!</h2>
+          <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-8">Password changed successfully</p>
+          <button onClick={resetPw} className="w-full py-5 rounded-[1.8rem] bg-blue-600 text-white font-black uppercase shadow-lg hover:bg-blue-700 active:scale-95 transition-all text-sm tracking-wider shadow-blue-500/20">
+          Close
+          </button>
+          </>
+        )}
 
-              {pwError && (
-                <div className="w-full mb-4 px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-[11px] font-bold text-center">
-                  {pwError}
-                </div>
-              )}
-
-              <button
-                onClick={verifyCode}
-                disabled={code.length !== 6}
-                className={`w-full py-5 rounded-[1.8rem] font-black uppercase shadow-lg transition-all active:scale-95 mb-4 text-sm tracking-wider ${
-                  code.length === 6
-                    ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20"
-                    : "bg-(--brd) text-(--t2) cursor-not-allowed"
-                }`}
-              >
-                Confirm
-              </button>
-
-              <div className="flex items-center justify-between w-full">
-                <button
-                  onClick={() => { if (resendCooldown === 0) sendCode(); }}
-                  disabled={resendCooldown > 0}
-                  className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-(--t2) hover:text-blue-600 transition-colors disabled:opacity-40"
-                >
-                  <RefreshCw size={10} />
-                  {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend"}
-                </button>
-                <button onClick={resetPw} className="text-[10px] font-black text-(--t2) hover:text-red-500 uppercase tracking-[0.2em] transition-all flex items-center gap-1.5">
-                  <span>←</span> Back
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* Verifying */}
-          {pwStep === "verifying" && (
-            <div className="flex flex-col items-center gap-4 py-4">
-              <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600">
-                <Loader size={32} className="animate-spin" />
-              </div>
-              <p className="text-xs font-black uppercase tracking-widest text-(--t2)">Verifying...</p>
-            </div>
-          )}
-
-          {/* New password step */}
-          {pwStep === "newpw" && (
-            <>
-              <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center text-green-500 mb-6">
-                <Lock size={28} />
-              </div>
-              <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">New Password</h2>
-              <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-6">Set a new password for your account</p>
-
-              <div className="w-full space-y-3">
-                <div className="relative">
-                  <input
-                    type={showPw ? "text" : "password"}
-                    value={newPw}
-                    onChange={e => setNewPw(e.target.value)}
-                    placeholder="Minimum 8 characters..."
-                    className="w-full px-5 py-4 pr-12 rounded-2xl border border-(--brd) bg-(--bg)/50 focus:ring-2 focus:ring-blue-500 focus:bg-(--card) outline-none text-sm text-(--t1) transition-all"
-                  />
-                  <button type="button" onClick={() => setShowPw(p => !p)} className="absolute right-4 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-600 transition-colors">
-                    {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-                {newPw && pwStrength !== null && (
-                  <div className="space-y-1 px-1">
-                    <div className="flex gap-1">
-                      {[1,2,3,4].map(i => (
-                        <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-300 ${
-                          i <= pwStrength
-                            ? pwStrength <= 1 ? "bg-red-500" : pwStrength === 2 ? "bg-amber-500" : pwStrength === 3 ? "bg-blue-500" : "bg-green-500"
-                            : "bg-(--brd)"
-                        }`} />
-                      ))}
-                    </div>
-                    <p className="text-[10px] font-bold text-(--t2)">
-                      {pwStrength <= 1 ? "Weak" : pwStrength === 2 ? "Medium" : pwStrength === 3 ? "Good" : "Strong"}
-                    </p>
-                  </div>
-                )}
-                <div className="relative">
-                  <input
-                    type={showConfirm ? "text" : "password"}
-                    value={confirmPw}
-                    onChange={e => setConfirmPw(e.target.value)}
-                    placeholder="Repeat password..."
-                    className={`w-full px-5 py-4 pr-12 rounded-2xl border bg-(--bg)/50 focus:ring-2 focus:bg-(--card) outline-none text-sm text-(--t1) transition-all ${
-                      confirmPw && confirmPw !== newPw
-                        ? "border-red-500 focus:ring-red-500/30"
-                        : confirmPw && confirmPw === newPw
-                        ? "border-green-500 focus:ring-green-500/30"
-                        : "border-(--brd) focus:ring-blue-500"
-                    }`}
-                  />
-                  <button type="button" onClick={() => setShowConfirm(p => !p)} className="absolute right-4 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-600 transition-colors">
-                    {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                  {confirmPw && confirmPw === newPw && (
-                    <CheckCircle size={15} className="absolute right-12 top-1/2 -translate-y-1/2 text-green-500" />
-                  )}
-                </div>
-
-                {pwError && (
-                  <div className="px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-[11px] font-bold text-center">
-                    {pwError}
-                  </div>
-                )}
-
-                <button
-                  onClick={setPassword}
-                  disabled={!newPw || !confirmPw || newPw !== confirmPw || newPw.length < 8}
-                  className={`w-full py-5 rounded-[1.8rem] font-black uppercase shadow-lg transition-all active:scale-95 text-sm tracking-wider ${
-                    newPw && confirmPw && newPw === confirmPw && newPw.length >= 8
-                      ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20"
-                      : "bg-(--brd) text-(--t2) cursor-not-allowed"
-                  }`}
-                >
-                  Set Password
-                </button>
-                <button onClick={resetPw} className="w-full text-[10px] font-black text-(--t2) hover:text-red-500 uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-1.5">
-                  <span>←</span> Cancel
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* Done */}
-          {pwStep === "done" && (
-            <>
-              <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center mb-6">
-                <CheckCircle size={32} className="text-green-500" />
-              </div>
-              <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">Done!</h2>
-              <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-8">Password changed successfully</p>
-              <button onClick={resetPw} className="w-full py-5 rounded-[1.8rem] bg-blue-600 text-white font-black uppercase shadow-lg hover:bg-blue-700 active:scale-95 transition-all text-sm tracking-wider shadow-blue-500/20">
-                Close
-              </button>
-            </>
-          )}
-
-          </div>{/* end inner content */}
+        </div>{/* end inner content */}
         </div>{/* end modal card */}
         </div>{/* end centering wrapper */}
-      </>,
-      document.body
+        </>,
+        document.body
     )}
     </div>
   );
@@ -711,7 +711,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
     ) : (
       <div className="space-y-2">
       {juryTournaments.map(t => (
-        <a href={`/tournaments/${t.id}`} key={t.id} onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${t.id}`); }}
+        <button key={t.id} onClick={() => router.push(`/tournaments/${t.id}`)}
         className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group text-left">
         <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 flex-shrink-0"><Trophy size={15} /></div>
         <div className="flex-1 min-w-0">
@@ -721,10 +721,10 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
         {invStatusLabel[t.invitation_status] ?? t.invitation_status}
         </span>
         </div>
-        {t.start_at && <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">Start: {new Date(t.start_at).toLocaleDateString("en-US")}</p>}
+        {t.start_at && <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">Start: {new Date(t.start_at).toLocaleString("en-US", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>}
         </div>
         <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-        </a>
+        </button>
       ))}
       </div>
     )}
@@ -740,7 +740,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
       </div>
       <div className="p-5 sm:p-7 space-y-2">
       {juryRounds.map(r => (
-        <a href={`/jury/rounds/${r.id}/evaluate`} key={r.id} onClick={(e) => { e.preventDefault(); router.push(`/jury/rounds/${r.id}/evaluate`); }}
+        <button key={r.id} onClick={() => router.push(`/jury/rounds/${r.id}/evaluate`)}
         className="w-full flex items-center gap-3 p-3 rounded-xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group text-left">
         <div className="w-7 h-7 rounded-lg bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-xs flex-shrink-0">{r.number}</div>
         <div className="flex-1 min-w-0">
@@ -749,7 +749,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
         </div>
         {r.status && <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${roundStatusStyle[r.status] ?? roundStatusStyle.pending}`}>{r.status === "active" ? "Active" : r.status === "finished" ? "Finished" : "Pending"}</span>}
         <ExternalLink size={12} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-        </a>
+        </button>
       ))}
       </div>
       </section>
@@ -764,18 +764,18 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
       </div>
       <div className="p-5 sm:p-7 space-y-2">
       {jurySubmissions.map(s => (
-        <a href={`/jury/rounds/${s.round_id}/evaluate`} key={s.id} onClick={(e) => { e.preventDefault(); router.push(`/jury/rounds/${s.round_id}/evaluate`); }}
+        <button key={s.id} onClick={() => router.push(`/jury/rounds/${s.round_id}/evaluate`)}
         className="w-full flex items-center gap-3 p-3 rounded-xl border border-(--brd) bg-(--bg) hover:border-purple-500/40 hover:bg-purple-500/5 transition-all group text-left">
         <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-500 flex-shrink-0"><FileText size={12} /></div>
         <div className="flex-1 min-w-0">
         <p className="text-xs font-black text-(--t1) truncate group-hover:text-purple-500 transition-colors">{s.team_name}</p>
-        <p className="text-[10px] font-bold text-(--t2)">{new Date(s.submitted_at).toLocaleDateString("en-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
+        <p className="text-[10px] font-bold text-(--t2)">{new Date(s.submitted_at).toLocaleString("en-US", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
         </div>
         <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${s.status === "submitted" ? "text-green-500 bg-green-500/10 border-green-500/20" : "text-(--t2) bg-(--bg) border-(--brd)"}`}>
         {s.status === "submitted" ? "Submitted" : s.status}
         </span>
         <ExternalLink size={12} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-        </a>
+        </button>
       ))}
       </div>
       </section>
@@ -850,6 +850,15 @@ export default function ProfilePage() {
     fetchUser();
     fetchNotifications();
     fetchTournaments();
+    // Mark all notifications as read when entering profile page
+    const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+    if (token) {
+      fetch(`${API_URL}/api/notifications/mark-read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ all: true }),
+      }).catch(() => {});
+    }
   }, [authLoading, currentUser, router, fetchNotifications, fetchTournaments]);
 
   const markAllRead = async () => {
@@ -895,268 +904,267 @@ export default function ProfilePage() {
       .page-ready .fade-up-2 { animation: fadeUp 400ms ease 200ms both }
       .page-ready .fade-up-3 { animation: fadeUp 400ms ease 300ms both }
       .page-ready .fuIn      { animation: fadeUp 300ms ease 50ms both }
-    `}} />
+      `}} />
 
-    <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
-    <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
-    </div>
-
-    {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />}
-    <Sidebar
-        mobileOpen={isMobileSidebarOpen}
-        onMobileClose={() => setIsMobileSidebarOpen(false)}
-      />
-
-    <main className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isPwModalOpen ? "blur-sm brightness-75" : ""}`}>
-    <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Profile" icon={<UserCircle size={18} className="text-blue-600" />} />
-    <div className={`flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10 ${allReady ? "page-ready" : ""}`}>
-
-    <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2)">
-    <a href={"/"} onClick={(e) => { e.preventDefault(); router.push("/"); }} className="hover:text-blue-600 transition-colors">Home</a>
-    <ChevronRight size={10} /><span className="text-(--t1)">Profile</span>
-    </nav>
-    <button onClick={() => router.back()} className="mb-5 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
-    <ArrowLeft size={14} /> Back
-    </button>
-
-    {!allReady && !error && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-      <div className="flex flex-col items-center gap-3">
-      <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-      <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 opacity-70">Loading...</p>
+      <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
+      <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
+
+      {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />}
+      <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+      <Sidebar />
       </div>
-    )}
 
-    {error ? (
-      <p className="text-lg font-black text-(--t1)">{error}</p>
-    ) : (
-      <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
+      <main className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isPwModalOpen ? "blur-sm brightness-75" : ""}`}>
+      <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Profile" icon={<UserCircle size={18} className="text-blue-600" />} />
+      <div className={`flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10 ${allReady ? "page-ready" : ""}`}>
 
-      {/* ── LEFT COLUMN ── */}
-      <div className="flex flex-col gap-5 w-full xl:flex-1 min-w-0">
+      <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2)">
+      <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Home</button>
+      <ChevronRight size={10} /><span className="text-(--t1)">Profile</span>
+      </nav>
+      <button onClick={() => router.back()} className="mb-5 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
+      <ArrowLeft size={14} /> Back
+      </button>
 
-      {/* Profile card */}
-      <section className="fade-up bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-5 sm:p-7 relative overflow-hidden">
-      <div className="absolute right-0 top-0 opacity-5 pointer-events-none text-(--t1) hidden md:block"><Shield size={220} /></div>
-      {isLoading ? (
-        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 animate-pulse">
-        <div className="w-[88px] h-[88px] rounded-full flex-shrink-0" style={{background:"var(--brd)"}} />
-        <div className="flex-1 space-y-3 w-full">
-        <div className="h-6 w-36 rounded-xl" style={{background:"var(--brd)"}} />
-        <div className="h-4 w-48 rounded-lg" style={{background:"var(--brd)"}} />
-        <div className="h-4 w-44 rounded-lg" style={{background:"var(--brd)"}} />
+      {!allReady && !error && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+        <div className="flex flex-col items-center gap-3">
+        <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 opacity-70">Loading...</p>
         </div>
         </div>
+      )}
+
+      {error ? (
+        <p className="text-lg font-black text-(--t1)">{error}</p>
       ) : (
-        <div className="flex flex-col sm:flex-row items-center sm:items-stretch gap-6">
-        <div className="flex flex-col items-center justify-center flex-shrink-0">
-        <div className="relative group">
-        <div className="rounded-full bg-blue-600/10 flex items-center justify-center border-4 border-(--brd) shadow-md overflow-hidden" style={{ width: 120, height: 120 }}>
-        {profileUser?.avatar_url ? <img src={profileUser.avatar_url} alt="avatar" className="w-full h-full object-cover" /> : <span className="text-4xl font-black text-blue-600">{profileUser?.username?.charAt(0).toUpperCase() ?? "?"}</span>}
+        <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
+
+        {/* ── LEFT COLUMN ── */}
+        <div className="flex flex-col gap-5 w-full xl:flex-1 min-w-0">
+
+        {/* Profile card */}
+        <section className="fade-up bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-5 sm:p-7 relative overflow-hidden">
+        <div className="absolute right-0 top-0 opacity-5 pointer-events-none text-(--t1) hidden md:block"><Shield size={220} /></div>
+        {isLoading ? (
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 animate-pulse">
+          <div className="w-[88px] h-[88px] rounded-full flex-shrink-0" style={{background:"var(--brd)"}} />
+          <div className="flex-1 space-y-3 w-full">
+          <div className="h-6 w-36 rounded-xl" style={{background:"var(--brd)"}} />
+          <div className="h-4 w-48 rounded-lg" style={{background:"var(--brd)"}} />
+          <div className="h-4 w-44 rounded-lg" style={{background:"var(--brd)"}} />
+          </div>
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row items-center sm:items-stretch gap-6">
+          <div className="flex flex-col items-center justify-center flex-shrink-0">
+          <div className="relative group">
+          <div className="rounded-full bg-blue-600/10 flex items-center justify-center border-4 border-(--brd) shadow-md overflow-hidden" style={{ width: 120, height: 120 }}>
+          {profileUser?.avatar_url ? <img src={profileUser.avatar_url} alt="avatar" className="w-full h-full object-cover" /> : <span className="text-4xl font-black text-blue-600">{profileUser?.username?.charAt(0).toUpperCase() ?? "?"}</span>}
+          </div>
+          {profileUser?.status === "active" && <span className="absolute bottom-1.5 right-1.5 w-4 h-4 bg-green-500 border-4 border-(--card) rounded-full shadow-sm" />}
+          <button onClick={() => setShowAvatarEditor(true)} className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity" style={{ width: 120, height: 120 }}>
+          <Pencil size={18} className="text-white" />
+          </button>
+          </div>
+          </div>
+          <div className="flex-1 flex flex-col justify-center space-y-2.5 z-10 w-full text-left">
+          <div className="flex flex-row items-center justify-between gap-2">
+          <h1 className="text-xl font-black text-(--t1) uppercase tracking-tight">{profileUser?.username}</h1>
+          {!isEditing && (
+            <button onClick={() => setIsEditing(true)} className="flex items-center gap-1.5 border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2 hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all">
+            <Pencil size={11} /> Edit
+            </button>
+          )}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[9px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg">Your Profile</span>
+          <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-lg border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>{profileUser?.role ?? "user"}</span>
+          {isJury && <span className="text-[9px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1"><Star size={9} className="fill-amber-500" /> Jury</span>}
+          </div>
+          <div className="space-y-2 text-sm">
+          <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Name:</span><span className="font-bold text-sm">{profileUser?.username}</span></p>
+          <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Login:</span><span className="font-bold text-sm">{profileUser?.login}</span></p>
+          <p className="flex items-center gap-2.5 font-medium"><Mail size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Email:</span><span className="font-bold text-sm break-all">{profileUser?.email}</span></p>
+          <p className="flex items-center gap-2.5 font-medium"><Shield size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Role:</span><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>{profileUser?.role ?? "user"}</span></p>
+          </div>
+          <div className="pt-2.5 border-t border-(--brd) text-[9px] font-bold uppercase tracking-widest text-(--t2)">ID: {profileUser?.id}</div>
+          </div>
+          </div>
+        )}
+        {isEditing && profileUser && (
+          <div className="mt-5 pt-5 border-t border-(--brd)">
+          <EditProfileSection
+          profileUser={profileUser}
+          onSave={({ username, login }) => { setProfileUser((prev: any) => ({ ...prev, username, login })); setIsEditing(false); }}
+          onCancel={() => setIsEditing(false)}
+          onModalChange={setIsPwModalOpen}
+          />
+          </div>
+        )}
+        </section>
+
+        {/* JURY: show jury-specific panel; OTHERS: show teams + tournaments */}
+        {isJury ? (
+          <div className="fade-up-1">
+          <JuryProfilePanel
+          juryTournaments={juryTournaments}
+          juryRounds={juryRounds}
+          jurySubmissions={jurySubmissions}
+          loading={juryLoading}
+          router={router}
+          />
+          </div>
+        ) : (
+          <>
+          {/* Teams */}
+          <section className="fade-up-1 bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
+          <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
+          <div className="w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0"><Users size={14} /></div>
+          <div>
+          <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Teams</p>
+          {!teamsLoading && userTeams.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{userTeams.length} teams</p>}
+          </div>
+          </div>
+          <div className="p-5 sm:p-7">
+          {teamsLoading ? (
+            <div className="space-y-2">{[1,2].map(i => <div key={i} className="h-[60px] rounded-2xl animate-pulse" style={{background:"var(--brd)"}} />)}</div>
+          ) : userTeams.length === 0 ? (
+            <div className="text-center py-5">
+            <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2"><Users className="w-5 h-5 text-(--t2) opacity-40" /></div>
+            <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Not a member of any team</p>
+            <button onClick={() => router.push("/register_team")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">Create a team →</button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+            {userTeams.map(team => {
+              const isCaptain = team.captain_id === profileUser?.id;
+              const memberCount = team.members_ids?.length ?? 0;
+              return (
+                <button key={team.id} onClick={() => router.push("/teams/" + team.id)}
+                className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group text-left">
+                <div className="w-9 h-9 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-sm flex-shrink-0">{team.name.charAt(0).toUpperCase()}</div>
+                <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-black text-(--t1) text-sm truncate group-hover:text-blue-600 transition-colors">{team.name}</span>
+                {isCaptain && <span className="text-[8px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1"><Crown size={7} /> Captain</span>}
+                </div>
+                <div className="flex items-center gap-2 mt-0.5">
+                {team.city_school_org && <span className="text-[10px] font-bold text-(--t2) truncate">{team.city_school_org}</span>}
+                <span className="text-[10px] font-bold text-(--t2) flex items-center gap-1 flex-shrink-0"><Users size={8} /> {memberCount} members</span>
+                </div>
+                </div>
+                <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              );
+            })}
+            </div>
+          )}
+          </div>
+          </section>
+
+          {/* Tournaments (for non-jury) */}
+          <section className="fade-up-2 bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
+          <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
+          <div className="w-7 h-7 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0"><Trophy size={14} /></div>
+          <div>
+          <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Tournaments</p>
+          {!tourLoading && tournaments.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{tournaments.length} tournaments</p>}
+          </div>
+          </div>
+          <div className="p-5 sm:p-7">
+          {tourLoading ? (
+            <div className="space-y-2">{[1,2].map(i => <div key={i} className="h-[60px] rounded-2xl animate-pulse" style={{background:"var(--brd)"}} />)}</div>
+          ) : tournaments.length === 0 ? (
+            <div className="text-center py-5">
+            <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2"><Trophy className="w-5 h-5 text-(--t2) opacity-40" /></div>
+            <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Not participating in any tournaments</p>
+            <button onClick={() => router.push("/tournaments")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-amber-500 hover:underline">View tournaments →</button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+            {tournaments.map((t, i) => {
+              const st = t.status ?? "upcoming";
+              return (
+                <button key={t.id} onClick={() => router.push("/tournaments/" + t.id)}
+                className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group text-left" style={{ animationDelay: `${i * 40}ms` }}>
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 flex-shrink-0"><Trophy size={15} /></div>
+                <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-black text-(--t1) text-sm truncate group-hover:text-amber-500 transition-colors">{t.name}</span>
+                <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${tourStatusStyle[st] ?? tourStatusStyle.upcoming}`}>{tourStatusLabel[st] ?? st}</span>
+                </div>
+                {t.start_at && <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">Start: {new Date(t.start_at).toLocaleString("en-US", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>}
+                </div>
+                <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              );
+            })}
+            </div>
+          )}
+          </div>
+          </section>
+          </>
+        )}
         </div>
-        {profileUser?.status === "active" && <span className="absolute bottom-1.5 right-1.5 w-4 h-4 bg-green-500 border-4 border-(--card) rounded-full shadow-sm" />}
-        <button onClick={() => setShowAvatarEditor(true)} className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity" style={{ width: 120, height: 120 }}>
-        <Pencil size={18} className="text-white" />
-        </button>
+
+        {/* ── RIGHT COLUMN — Notifications ── */}
+        <div className="flex flex-col gap-5 w-full xl:w-[380px] flex-shrink-0">
+        <section className="fade-up bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
+        <div className="flex items-center justify-between gap-2 px-5 sm:px-6 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
+        <div className="flex items-center gap-2.5">
+        <div className="relative w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0">
+        <Bell size={14} />
+        {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black flex items-center justify-center">{unreadCount > 9 ? "9+" : unreadCount}</span>}
+        </div>
+        <div>
+        <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Notifications</p>
+        {!notifLoading && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{unreadCount > 0 ? `${unreadCount} unread` : "All read"}</p>}
         </div>
         </div>
-        <div className="flex-1 flex flex-col justify-center space-y-2.5 z-10 w-full text-left">
-        <div className="flex flex-row items-center justify-between gap-2">
-        <h1 className="text-xl font-black text-(--t1) uppercase tracking-tight">{profileUser?.username}</h1>
-        {!isEditing && (
-          <button onClick={() => setIsEditing(true)} className="flex items-center gap-1.5 border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2 hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all">
-          <Pencil size={11} /> Edit
+        {unreadCount > 0 && (
+          <button onClick={markAllRead} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 border border-(--brd) bg-(--bg) rounded-xl px-3 py-1.5 transition-all hover:border-blue-600/40 active:scale-95">
+          <CheckCheck size={12} /> All
           </button>
         )}
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[9px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg">Your Profile</span>
-        <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-lg border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>{profileUser?.role ?? "user"}</span>
-        {isJury && <span className="text-[9px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1"><Star size={9} className="fill-amber-500" /> Jury</span>}
-        </div>
-        <div className="space-y-2 text-sm">
-        <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Name:</span><span className="font-bold text-sm">{profileUser?.username}</span></p>
-        <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Login:</span><span className="font-bold text-sm">{profileUser?.login}</span></p>
-        <p className="flex items-center gap-2.5 font-medium"><Mail size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Email:</span><span className="font-bold text-sm break-all">{profileUser?.email}</span></p>
-        <p className="flex items-center gap-2.5 font-medium"><Shield size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Role:</span><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>{profileUser?.role ?? "user"}</span></p>
-        </div>
-        <div className="pt-2.5 border-t border-(--brd) text-[9px] font-bold uppercase tracking-widest text-(--t2)">ID: {profileUser?.id}</div>
-        </div>
-        </div>
-      )}
-      {isEditing && profileUser && (
-        <div className="mt-5 pt-5 border-t border-(--brd)">
-        <EditProfileSection
-        profileUser={profileUser}
-        onSave={({ username, login }) => { setProfileUser((prev: any) => ({ ...prev, username, login })); setIsEditing(false); }}
-        onCancel={() => setIsEditing(false)}
-        onModalChange={setIsPwModalOpen}
-        />
-        </div>
-      )}
-      </section>
-
-      {/* JURY: show jury-specific panel; OTHERS: show teams + tournaments */}
-      {isJury ? (
-        <div className="fade-up-1">
-        <JuryProfilePanel
-        juryTournaments={juryTournaments}
-        juryRounds={juryRounds}
-        jurySubmissions={jurySubmissions}
-        loading={juryLoading}
-        router={router}
-        />
-        </div>
-      ) : (
-        <>
-        {/* Teams */}
-        <section className="fade-up-1 bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
-        <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
-        <div className="w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0"><Users size={14} /></div>
-        <div>
-        <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Teams</p>
-        {!teamsLoading && userTeams.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{userTeams.length} teams</p>}
-        </div>
-        </div>
-        <div className="p-5 sm:p-7">
-        {teamsLoading ? (
-          <div className="space-y-2">{[1,2].map(i => <div key={i} className="h-[60px] rounded-2xl animate-pulse" style={{background:"var(--brd)"}} />)}</div>
-        ) : userTeams.length === 0 ? (
-          <div className="text-center py-5">
-          <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2"><Users className="w-5 h-5 text-(--t2) opacity-40" /></div>
-          <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Not a member of any team</p>
-          <a href={"/register_team"} onClick={(e) => { e.preventDefault(); router.push("/register_team"); }} className="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">Create a team →</a>
+        <div className="p-4 sm:p-5 max-h-[calc(100vh-220px)] overflow-y-auto">
+        {notifLoading ? (
+          <div className="space-y-2.5">{[1,2,3].map(i => <div key={i} className="h-[72px] rounded-xl animate-pulse" style={{background:"var(--brd)"}} />)}</div>
+        ) : notifications.length === 0 ? (
+          <div className="flex flex-col items-center py-12 text-center">
+          <Bell className="w-10 h-10 text-(--t2) mb-3 opacity-25" />
+          <p className="text-sm font-black text-(--t1) mb-1">No notifications</p>
           </div>
         ) : (
-          <div className="space-y-2">
-          {userTeams.map(team => {
-            const isCaptain = team.captain_id === profileUser?.id;
-            const memberCount = team.members_ids?.length ?? 0;
-            return (
-              <a key={team.id} href={`/teams/${team.id}`} onClick={(e) => { e.preventDefault(); router.push("/teams/" + team.id); }}
-              className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group text-left">
-              <div className="w-9 h-9 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-sm flex-shrink-0">{team.name.charAt(0).toUpperCase()}</div>
-              <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-black text-(--t1) text-sm truncate group-hover:text-blue-600 transition-colors">{team.name}</span>
-              {isCaptain && <span className="text-[8px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1"><Crown size={7} /> Captain</span>}
-              </div>
-              <div className="flex items-center gap-2 mt-0.5">
-              {team.city_school_org && <span className="text-[10px] font-bold text-(--t2) truncate">{team.city_school_org}</span>}
-              <span className="text-[10px] font-bold text-(--t2) flex items-center gap-1 flex-shrink-0"><Users size={8} /> {memberCount} members</span>
-              </div>
-              </div>
-              <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </a>
-            );
-          })}
+          <div className="space-y-2.5">
+          {notifications.map((notif, i) => (
+            <NotificationCard
+            key={notif.id} notif={notif} idx={i}
+            responded={responded[notif.id]}
+            responding={responding[notif.id] ?? null}
+            onAccept={() => respondInvitation(notif, true)}
+            onDecline={() => respondInvitation(notif, false)}
+            onMarkRead={() => markRead(notif.id)}
+            onGoTeam={(teamId) => router.push("/teams/" + teamId)}
+            />
+          ))}
           </div>
         )}
         </div>
         </section>
-
-        {/* Tournaments (for non-jury) */}
-        <section className="fade-up-2 bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
-        <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
-        <div className="w-7 h-7 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0"><Trophy size={14} /></div>
-        <div>
-        <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Tournaments</p>
-        {!tourLoading && tournaments.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{tournaments.length} tournaments</p>}
         </div>
-        </div>
-        <div className="p-5 sm:p-7">
-        {tourLoading ? (
-          <div className="space-y-2">{[1,2].map(i => <div key={i} className="h-[60px] rounded-2xl animate-pulse" style={{background:"var(--brd)"}} />)}</div>
-        ) : tournaments.length === 0 ? (
-          <div className="text-center py-5">
-          <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2"><Trophy className="w-5 h-5 text-(--t2) opacity-40" /></div>
-          <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Not participating in any tournaments</p>
-          <a href={"/tournaments"} onClick={(e) => { e.preventDefault(); router.push("/tournaments"); }} className="mt-3 text-[10px] font-black uppercase tracking-widest text-amber-500 hover:underline">View tournaments →</a>
-          </div>
-        ) : (
-          <div className="space-y-2">
-          {tournaments.map((t, i) => {
-            const st = t.status ?? "upcoming";
-            return (
-              <a key={t.id} href={`/tournaments/${t.id}`} onClick={(e) => { e.preventDefault(); router.push("/tournaments/" + t.id); }}
-              className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group text-left" style={{ animationDelay: `${i * 40}ms` }}>
-              <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 flex-shrink-0"><Trophy size={15} /></div>
-              <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-black text-(--t1) text-sm truncate group-hover:text-amber-500 transition-colors">{t.name}</span>
-              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${tourStatusStyle[st] ?? tourStatusStyle.upcoming}`}>{tourStatusLabel[st] ?? st}</span>
-              </div>
-              {t.start_at && <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">Start: {new Date(t.start_at).toLocaleDateString("en-US")}</p>}
-              </div>
-              <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </a>
-            );
-          })}
-          </div>
-        )}
-        </div>
-        </section>
-        </>
-      )}
-      </div>
-
-      {/* ── RIGHT COLUMN — Notifications ── */}
-      <div className="flex flex-col gap-5 w-full xl:w-[380px] flex-shrink-0">
-      <section className="fade-up bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
-      <div className="flex items-center justify-between gap-2 px-5 sm:px-6 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
-      <div className="flex items-center gap-2.5">
-      <div className="relative w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0">
-      <Bell size={14} />
-      {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black flex items-center justify-center">{unreadCount > 9 ? "9+" : unreadCount}</span>}
-      </div>
-      <div>
-      <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Notifications</p>
-      {!notifLoading && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{unreadCount > 0 ? `${unreadCount} unread` : "All read"}</p>}
-      </div>
-      </div>
-      {unreadCount > 0 && (
-        <button onClick={markAllRead} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 border border-(--brd) bg-(--bg) rounded-xl px-3 py-1.5 transition-all hover:border-blue-600/40 active:scale-95">
-        <CheckCheck size={12} /> All
-        </button>
-      )}
-      </div>
-      <div className="p-4 sm:p-5 max-h-[calc(100vh-220px)] overflow-y-auto">
-      {notifLoading ? (
-        <div className="space-y-2.5">{[1,2,3].map(i => <div key={i} className="h-[72px] rounded-xl animate-pulse" style={{background:"var(--brd)"}} />)}</div>
-      ) : notifications.length === 0 ? (
-        <div className="flex flex-col items-center py-12 text-center">
-        <Bell className="w-10 h-10 text-(--t2) mb-3 opacity-25" />
-        <p className="text-sm font-black text-(--t1) mb-1">No notifications</p>
-        </div>
-      ) : (
-        <div className="space-y-2.5">
-        {notifications.map((notif, i) => (
-          <NotificationCard
-          key={notif.id} notif={notif} idx={i}
-          responded={responded[notif.id]}
-          responding={responding[notif.id] ?? null}
-          onAccept={() => respondInvitation(notif, true)}
-          onDecline={() => respondInvitation(notif, false)}
-          onMarkRead={() => markRead(notif.id)}
-          onGoTeam={(teamId) => router.push("/teams/" + teamId)}
-          />
-        ))}
         </div>
       )}
       </div>
-      </section>
-      </div>
-      </div>
-    )}
-    </div>
-    </main>
+      </main>
 
-    {showAvatarEditor && profileUser && (
-      <AvatarEditorModal userId={profileUser.id} supabase={supabase}
-      onSave={(url) => setProfileUser((prev: any) => ({ ...prev, avatar_url: url }))}
-      onClose={() => setShowAvatarEditor(false)} />
-    )}
-    </div>
+      {showAvatarEditor && profileUser && (
+        <AvatarEditorModal userId={profileUser.id} supabase={supabase}
+        onSave={(url) => setProfileUser((prev: any) => ({ ...prev, avatar_url: url }))}
+        onClose={() => setShowAvatarEditor(false)} />
+      )}
+      </div>
   );
 }

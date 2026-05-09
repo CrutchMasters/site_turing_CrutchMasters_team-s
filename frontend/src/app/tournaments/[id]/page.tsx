@@ -48,15 +48,13 @@ interface Tournament {
     registration_from?: string;
     registration_to?: string;
     teams: Team[];
-    created_by?: string;
 }
 
 function fmtDate(iso?: string) {
     if (!iso) return "—";
-    return new Date(iso).toLocaleDateString("uk-UA", {
+    return new Date(iso).toLocaleString("uk-UA", {
         day: "numeric", month: "long", year: "numeric",
-        hour: "2-digit", minute: "2-digit",
-    });
+        hour: "2-digit", minute: "2-digit" });
 }
 
 export default function TournamentPage() {
@@ -234,11 +232,12 @@ export default function TournamentPage() {
             <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] blur-sm ${dark ? "invert" : ""}`} />
             </div>
 
-            
-            <Sidebar
-        mobileOpen={isMobileSidebarOpen}
-        onMobileClose={() => setIsMobileSidebarOpen(false)}
-      />
+            {isMobileSidebarOpen && (
+                <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+            )}
+            <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+            <Sidebar />
+            </div>
 
             <main className="flex-1 flex flex-col overflow-y-auto">
             <MobileHeader
@@ -248,22 +247,22 @@ export default function TournamentPage() {
             />
 
             <div className="p-6 max-w-3xl w-full mx-auto">
-            <a
-            href="/tournaments" onClick={(e) => { e.preventDefault(); router.push("/tournaments"); }}
+            <button
+            onClick={() => router.push("/tournaments")}
             className="mb-5 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors"
             >
             <ArrowLeft size={16} /> Назад до турнірів
-            </a>
+            </button>
 
             <div className="flex items-start justify-between gap-3 mb-4">
             <h1 className="text-2xl font-black text-(--t1)">{tournament.name}</h1>
-            {(isAdmin || tournament.created_by === user?.id) && (
-                <a
-                href={`/tournaments/${id}/edit`} onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${id}/edit`); }}
+            {isAdmin && (
+                <button
+                onClick={() => router.push(`/tournaments/${id}/edit`)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-(--brd) text-(--t2) hover:text-blue-600 hover:border-blue-600/40 text-xs font-bold transition-all"
                 >
                 <Edit size={14} /> Редагувати
-                </a>
+                </button>
             )}
             </div>
 
@@ -416,8 +415,9 @@ export default function TournamentPage() {
                     const isRegistered = !!myTeamInTournament;
 
                     return (
-                        <a
-                        key={round.id} href={`/rounds/${round.id}`} onClick={(e) => { e.preventDefault(); router.push(`/rounds/${round.id}`); }}
+                        <div
+                        key={round.id}
+                        onClick={() => router.push(`/rounds/${round.id}`)}
                         className={`flex items-center gap-4 p-4 border rounded-2xl cursor-pointer transition-all group bg-(--card) hover:bg-(--card) ${
                             isActive
                             ? 'border-green-600/50 hover:border-green-600/70'
@@ -457,7 +457,7 @@ export default function TournamentPage() {
                         </div>
 
                         <ChevronRight size={16} className="text-(--t2) group-hover:text-blue-600 transition-colors flex-shrink-0" />
-                        </a>
+                        </div>
                     );
                 })}
                 </div>
@@ -475,8 +475,9 @@ export default function TournamentPage() {
             ) : (
                 <div className="grid gap-2">
                 {tournament.teams.map((team, idx) => (
-                    <a
-                    key={team.id} href={`/teams/${team.id}`} onClick={(e) => { e.preventDefault(); router.push(`/teams/${team.id}`); }}
+                    <div
+                    key={team.id}
+                    onClick={() => router.push(`/teams/${team.id}`)}
                     className="flex items-center gap-3 p-4 border border-(--brd) rounded-2xl bg-(--card) hover:border-blue-600/40 cursor-pointer transition-all group"
                     >
                     <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0">
@@ -491,7 +492,7 @@ export default function TournamentPage() {
                         <p className="text-[11px] text-(--t2) font-bold truncate">{team.city_school_org}</p>
                     )}
                     </div>
-                    </a>
+                    </div>
                 ))}
                 </div>
             )}
