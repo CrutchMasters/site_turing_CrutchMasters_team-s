@@ -1146,9 +1146,18 @@ async def create_tournament_rounds(
             if res.data:
                 updated.extend(res.data)
             else:
-                failed_numbers.append(num)
+                # Раунд з таким number не існує — створюємо
+                insert_data = {**update_data, "tournament_id": tournament_id, "number": num}
+                if "status" not in insert_data:
+                    insert_data["status"] = "pending"
+                ins_res = supabase.table("rounds").insert(insert_data).execute()
+                if ins_res.data:
+                    updated.extend(ins_res.data)
+                    print(f"[ROUNDS] Створено новий раунд #{num} для турніру {tournament['name']}", flush=True)
+                else:
+                    failed_numbers.append(num)
         except Exception as round_err:
-            print(f"[ROUNDS] Помилка оновлення раунду #{num}: {round_err}", flush=True)
+            print(f"[ROUNDS] Помилка оновлення/створення раунду #{num}: {round_err}", flush=True)
             failed_numbers.append(num)
 
     if failed_numbers:
