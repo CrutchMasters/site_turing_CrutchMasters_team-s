@@ -405,7 +405,7 @@ export default function RoundPage() {
                                 <CheckCircle2 size={13} className="flex-shrink-0" />
                                 Ви запрошені як журі для цього турніру
                             </div>
-                            {roundActive ? (
+                            {(roundActive || round.status === "finished" || round.status === "closed" || isEnded) ? (
                                 <a href={`/jury/rounds/${id}/evaluate`} onClick={(e) => { e.preventDefault(); router.push(`/jury/rounds/${id}/evaluate`); }}
                                     className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all">
                                     <Gavel size={15} /> Оцінити роботи
