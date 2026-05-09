@@ -264,14 +264,14 @@ function CriteriaField({
 }
 
 // ── LinksField ────────────────────────────────────────────────────────────
-function LinksField({ links, onChange }: { links: string[]; onChange: (l: string[]) => void }) {
+function LinksField({ links, onChange, linksLabel, addLinkLabel }: { links: string[]; onChange: (l: string[]) => void; linksLabel?: string; addLinkLabel?: string }) {
     const addLink = () => onChange([...links, '']);
     const update  = (i: number, v: string) => { const n = [...links]; n[i] = v; onChange(n); };
     const remove  = (i: number) => onChange(links.filter((_, idx) => idx !== i));
 
     return (
         <div className="flex flex-col">
-        <span className={label10}>Посилання</span>
+        <span className={label10}>{linksLabel ?? 'Посилання'}</span>
         <div className="flex flex-col gap-2">
         {links.map((link, i) => (
             <div key={i} className="flex items-center gap-2">
@@ -287,13 +287,13 @@ function LinksField({ links, onChange }: { links: string[]; onChange: (l: string
             </div>
         ))}
         </div>
-        <button type="button" onClick={addLink} className={addBtn}><Plus size={10} /> Додати посилання</button>
+        <button type="button" onClick={addLink} className={addBtn}><Plus size={10} /> {addLinkLabel ?? 'Додати посилання'}</button>
         </div>
     );
 }
 
 // ── FilesField ────────────────────────────────────────────────────────────
-function FilesField({ files, onChange }: { files: FileItem[]; onChange: (f: FileItem[]) => void }) {
+function FilesField({ files, onChange, uploadFilesLabel, savedInCloudLabel, filesLabel }: { files: FileItem[]; onChange: (f: FileItem[]) => void; uploadFilesLabel?: string; savedInCloudLabel?: string; filesLabel?: string }) {
     const inputRef = useRef<HTMLInputElement>(null);
 
     const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -314,7 +314,7 @@ function FilesField({ files, onChange }: { files: FileItem[]; onChange: (f: File
 
         return (
             <div className="flex flex-col gap-2">
-            <span className={label10}>Файли</span>
+            <span className={label10}>{filesLabel ?? 'Файли'}</span>
             {files.length > 0 && (
                 <div className="border border-(--brd) rounded-2xl overflow-hidden bg-(--bg) divide-y divide-(--brd)">
                 {files.map((f, i) => (
@@ -322,7 +322,7 @@ function FilesField({ files, onChange }: { files: FileItem[]; onChange: (f: File
                     <span className="text-base">{icon(f as any)}</span>
                     <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-(--t1) truncate">{f.name}</p>
-                    <p className="text-[10px] text-(--t2)">{(f as any).existing ? 'Збережено в хмарі' : fmt(f.size)}</p>
+                    <p className="text-[10px] text-(--t2)">{(f as any).existing ? (savedInCloudLabel ?? 'Збережено в хмарі') : fmt(f.size)}</p>
                     </div>
                     <button type="button" onClick={() => remove(i)}
                     className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded-lg flex items-center justify-center text-(--t2) hover:text-red-500 transition-all">
@@ -335,7 +335,7 @@ function FilesField({ files, onChange }: { files: FileItem[]; onChange: (f: File
             <input ref={inputRef} type="file" multiple className="hidden" onChange={handleFiles} />
             <button type="button" onClick={() => inputRef.current?.click()}
             className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-2xl border-2 border-dashed border-(--brd) text-(--t2) text-xs font-bold hover:border-blue-500/50 hover:text-blue-500 hover:bg-blue-500/5 transition-all active:scale-98">
-            <Upload size={14} /> {labels?.uploadFiles ?? 'Завантажити файли'}
+            <Upload size={14} /> {uploadFilesLabel ?? 'Завантажити файли'}
             </button>
             </div>
         );
@@ -463,8 +463,8 @@ export default function RoundSettingsPanel({ roundCount, selectedRound, onSelect
 
         {/* 6. Посилання + Файли */}
         <div className="grid grid-cols-2 gap-4">
-        <LinksField links={rd.links} onChange={v => update(selectedRound, 'links', v)} />
-        <FilesField files={rd.files} onChange={v => update(selectedRound, 'files', v)} />
+        <LinksField links={rd.links} onChange={v => update(selectedRound, 'links', v)} linksLabel={labels?.links} addLinkLabel={labels?.addLink} />
+        <FilesField files={rd.files} onChange={v => update(selectedRound, 'files', v)} uploadFilesLabel={labels?.uploadFiles} savedInCloudLabel={labels?.savedInCloud} filesLabel={labels?.files} />
         </div>
 
         </div>
