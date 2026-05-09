@@ -15,6 +15,7 @@ import {
     X, Paperclip, Flag, File, Film,
     Image as ImageIcon, Archive, FileCode, Send, BookOpen, Trash2,
 } from "lucide-react";
+import { RichTextEditor } from "@/components/RichTextEditor";
 
 const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -512,61 +513,143 @@ export default function SubmitPage() {
                 {/* ── LEFT ── */}
                 <div className="flex flex-col gap-4">
 
-                {/* description */}
-                <Card>
-                <SectionLabel icon={<FileText size={13} />}>Опис проєкту</SectionLabel>
-                <textarea
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                disabled={isDraftLocked}
-                placeholder="Розкажіть про ваш проєкт: ідея, технології, особливості..."
-                rows={6}
-                className="w-full resize-none rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-sm px-4 py-3 outline-none focus:border-blue-600/60 focus:ring-2 focus:ring-blue-600/10 placeholder:text-(--t2) transition-all leading-relaxed font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                />
-                </Card>
+                {/* description + file upload — combined block with mutex logic */}
+                {(() => {
+                    // Strip HTML tags and decode &nbsp; to check if RichTextEditor is truly empty
+                    const strippedDescription = description
+                    .replace(/<[^>]*>/g, "")          // remove all HTML tags
+                    .replace(/&nbsp;/g, " ")           // decode &nbsp;
+                    .replace(/&amp;/g, "&")
+                    .replace(/&lt;/g, "<")
+                    .replace(/&gt;/g, ">")
+                    .trim();
+                    const hasDescription = strippedDescription.length > 0;
+                    const hasFile = attachedFiles.length > 0;
+                    // Mutex: one active at a time
+                    const descDisabled = isDraftLocked || hasFile;
+                    const fileDisabled = isDraftLocked || hasDescription;
 
-                {/* links */}
-                <Card>
-                <SectionLabel icon={<Link2 size={13} />}>Посилання</SectionLabel>
-                <div className="flex flex-col gap-3">
-                {/* GitHub */}
-                <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) focus-within:border-blue-600/60 focus-within:ring-2 focus-within:ring-blue-600/10 transition-all">
-                <Github size={16} className="text-(--t2) flex-shrink-0" />
-                <input
-                type="url"
-                value={githubUrl}
-                onChange={e => setGithubUrl(e.target.value)}
-                disabled={isDraftLocked}
-                placeholder="https://github.com/your/repo"
-                className="flex-1 bg-transparent text-sm text-(--t1) outline-none placeholder:text-(--t2) font-medium disabled:opacity-50"
-                />
-                </div>
-                {/* YouTube */}
-                <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) focus-within:border-blue-600/60 focus-within:ring-2 focus-within:ring-blue-600/10 transition-all">
-                <Youtube size={16} className="text-(--t2) flex-shrink-0" />
-                <input
-                type="url"
-                value={youtubeUrl}
-                onChange={e => setYoutubeUrl(e.target.value)}
-                disabled={isDraftLocked}
-                placeholder="https://youtube.com/watch?v=..."
-                className="flex-1 bg-transparent text-sm text-(--t1) outline-none placeholder:text-(--t2) font-medium disabled:opacity-50"
-                />
-                </div>
-                {/* Live / Demo */}
-                <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) focus-within:border-blue-600/60 focus-within:ring-2 focus-within:ring-blue-600/10 transition-all">
-                <Globe size={16} className="text-(--t2) flex-shrink-0" />
-                <input
-                type="url"
-                value={liveUrl}
-                onChange={e => setLiveUrl(e.target.value)}
-                disabled={isDraftLocked}
-                placeholder="https://your-demo.vercel.app"
-                className="flex-1 bg-transparent text-sm text-(--t1) outline-none placeholder:text-(--t2) font-medium disabled:opacity-50"
-                />
-                </div>
-                </div>
-                </Card>
+                    return (
+                        <Card>
+                        {/* ── Description ── */}
+                        <div className={`transition-opacity duration-200 ${fileDisabled ? "" : ""}`}>
+                        <div className="flex items-center justify-between mb-3">
+                        <SectionLabel icon={<FileText size={13} />}>Опис проєкту</SectionLabel>
+                        {hasFile && (
+                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-500 flex items-center gap-1 mb-3">
+                            <AlertCircle size={11} /> Файл прикріплено
+                            </span>
+                        )}
+                        </div>
+                        <div className={`transition-all duration-200 ${hasFile ? "opacity-40 pointer-events-none select-none" : ""}`}>
+                        <RichTextEditor
+                        value={description}
+                        onChange={setDescription}
+                        placeholder={hasFile ? "Видаліть файл, щоб написати опис вручну" : "Розкажіть про ваш проєкт: ідея, технології, особливості..."}
+                        rows={6}
+                        />
+                        </div>
+                        </div>
+
+                        {/* ── Divider with OR label ── */}
+                        <div className="flex items-center gap-3 my-5">
+                        <div className="flex-1 border-t border-(--brd)" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) px-2">або</span>
+                        <div className="flex-1 border-t border-(--brd)" />
+                        </div>
+
+                        {/* ── File upload ── */}
+                        <div className="flex items-center gap-2 mb-3">
+                        <div className={`w-5 h-5 rounded-lg border flex items-center justify-center flex-shrink-0 transition-all duration-200 ${hasDescription ? "bg-(--brd)/40 border-(--brd) text-(--t2)" : "bg-blue-600/10 border-blue-600/20 text-blue-600"}`}>
+                        <Paperclip size={11} />
+                        </div>
+                        <span className={`text-[11px] font-black uppercase tracking-widest transition-colors duration-200 ${hasDescription ? "text-(--t2)/40" : "text-(--t2)"}`}>README файл</span>
+                        <span className={`ml-auto flex items-center gap-1 text-[10px] font-bold italic transition-colors duration-200 ${hasDescription ? "text-(--t2)/25" : "text-(--t2)/60"}`}>
+                        <FileCode size={10} />
+                        .md та .markdown
+                        </span>
+                        {hasDescription && (
+                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-500 flex items-center gap-1">
+                            <AlertCircle size={11} /> Опис заповнено
+                            </span>
+                        )}
+                        </div>
+
+                        {/* Drop zone */}
+                        {!isDraftLocked && (
+                            <div
+                            onDragOver={!fileDisabled ? handleDragOver : undefined}
+                            onDragLeave={!fileDisabled ? handleDragLeave : undefined}
+                            onDrop={!fileDisabled ? handleDrop : undefined}
+                            onClick={!fileDisabled ? () => fileInputRef.current?.click() : undefined}
+                            className={`relative flex items-center gap-3 rounded-xl border-2 border-dashed px-5 py-4 transition-all duration-200 ${
+                                fileDisabled
+                                ? "border-(--brd)/40 bg-(--brd)/10 opacity-40 cursor-not-allowed"
+                                : isDragging
+                                ? "border-blue-600/60 bg-blue-600/5 cursor-pointer"
+                                : "border-(--brd) hover:border-blue-600/40 hover:bg-blue-600/5 cursor-pointer"
+                            }`}
+                            >
+                            <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            accept=".md,.markdown"
+                            className="hidden"
+                            disabled={fileDisabled}
+                            onChange={e => e.target.files && addFiles(e.target.files)}
+                            />
+                            <div className={`w-9 h-9 rounded-xl border flex items-center justify-center flex-shrink-0 transition-all duration-200 ${fileDisabled ? "bg-(--brd)/20 border-(--brd) text-(--t2)" : "bg-blue-600/10 border-blue-600/20 text-blue-600"}`}>
+                            <Upload size={16} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-(--t1)">
+                            {fileDisabled && !isDraftLocked
+                                ? "Очистіть опис, щоб прикріпити файл"
+                                : <>Перетягніть README або <span className="text-blue-600">оберіть вручну</span></>
+                            }
+                            </p>
+                            <p className="text-[11px] text-(--t2) font-medium mt-0.5">
+                            Markdown README (.md, .markdown) — опис вашого проєкту
+                            </p>
+                            </div>
+                            </div>
+                        )}
+
+                        {/* File list */}
+                        {attachedFiles.length > 0 && (
+                            <div className="flex flex-col gap-2 mt-3">
+                            {attachedFiles.map(f => (
+                                <div key={f.id} className="flex items-center gap-3 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg)">
+                                <div className="w-8 h-8 rounded-xl bg-(--brd) flex items-center justify-center text-(--t2) flex-shrink-0">
+                                <FileTypeIcon type={f.type} size={15} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                {!f.isLocal && f.url ? (
+                                    <a href={f.url} target="_blank" rel="noreferrer" className="text-xs font-bold text-blue-600 truncate block hover:underline">{f.name}</a>
+                                ) : (
+                                    <p className="text-xs font-bold text-(--t1) truncate">{f.name}</p>
+                                )}
+                                <p className="text-[11px] text-(--t2)">
+                                {f.isLocal ? formatSize(f.size) : <span className="text-green-600 font-bold">✓ збережено</span>}
+                                </p>
+                                </div>
+                                {!isDraftLocked && (
+                                    <button
+                                    onClick={() => handleRemoveFile(f)}
+                                    disabled={deletingFile === (f.isLocal ? undefined : f.path)}
+                                    className="w-7 h-7 rounded-lg flex items-center justify-center border border-red-500/20 bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors flex-shrink-0 disabled:opacity-50">
+                                    {deletingFile === (!f.isLocal && f.path) ? <Loader2 size={12} className="animate-spin" /> : <X size={13} />}
+                                    </button>
+                                )}
+                                </div>
+                            ))}
+                            </div>
+                        )}
+                        </Card>
+                    );
+                })()}
+
                 </div>
 
                 {/* ── RIGHT ── */}
@@ -620,84 +703,47 @@ export default function SubmitPage() {
                 )}
                 </Card>
 
-                {/* file attachment */}
+                {/* links */}
                 <Card>
-                <SectionLabel icon={<Paperclip size={13} />}>Прикріпити файли</SectionLabel>
-
-                {/* drop zone */}
-                {!isDraftLocked && (
-                    <div
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 cursor-pointer transition-all ${isDragging
-                        ? "border-blue-600/60 bg-blue-600/5"
-                        : "border-(--brd) hover:border-blue-600/40 hover:bg-blue-600/5"
-                    }`}
-                    >
-                    <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept=".md,.markdown"
-                    className="hidden"
-                    onChange={e => e.target.files && addFiles(e.target.files)}
-                    />
-                    <div className="w-10 h-10 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600">
-                    <Upload size={18} />
-                    </div>
-                    <p className="text-sm font-bold text-(--t1) text-center">
-                    Перетягніть README або{" "}
-                    <span className="text-blue-600">оберіть вручну</span>
-                    </p>
-                    <p className="text-[11px] text-(--t2) font-medium">
-                    Тільки Markdown файли (.md, .markdown)
-                    </p>
-                    </div>
-                )}
-
-                {/* file list */}
-                {attachedFiles.length > 0 && (
-                    <div className="flex flex-col gap-2 mt-3">
-                    {attachedFiles.map(f => (
-                        <div key={f.id}
-                        className="flex items-center gap-3 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg)">
-                        <div className="w-8 h-8 rounded-xl bg-(--brd) flex items-center justify-center text-(--t2) flex-shrink-0">
-                        <FileTypeIcon type={f.type} size={15} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                        {/* Remote файли — клікабельні посилання */}
-                        {!f.isLocal && f.url ? (
-                            <a href={f.url} target="_blank" rel="noreferrer"
-                            className="text-xs font-bold text-blue-600 truncate block hover:underline">
-                            {f.name}
-                            </a>
-                        ) : (
-                            <p className="text-xs font-bold text-(--t1) truncate">{f.name}</p>
-                        )}
-                        <p className="text-[11px] text-(--t2)">
-                        {f.isLocal
-                            ? formatSize(f.size)
-                            : <span className="text-green-600 font-bold">✓ збережено</span>
-                        }
-                        </p>
-                        </div>
-                        {!isDraftLocked && (
-                            <button
-                            onClick={() => handleRemoveFile(f)}
-                            disabled={deletingFile === (f.isLocal ? undefined : f.path)}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center border border-red-500/20 bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors flex-shrink-0 disabled:opacity-50">
-                            {deletingFile === (!f.isLocal && f.path)
-                                ? <Loader2 size={12} className="animate-spin" />
-                                : <X size={13} />
-                            }
-                            </button>
-                        )}
-                        </div>
-                    ))}
-                    </div>
-                )}
+                <SectionLabel icon={<Link2 size={13} />}>Посилання</SectionLabel>
+                <div className="flex flex-col gap-3">
+                {/* GitHub */}
+                <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) focus-within:border-blue-600/60 focus-within:ring-2 focus-within:ring-blue-600/10 transition-all">
+                <Github size={16} className="text-(--t2) flex-shrink-0" />
+                <input
+                type="url"
+                value={githubUrl}
+                onChange={e => setGithubUrl(e.target.value)}
+                disabled={isDraftLocked}
+                placeholder="https://github.com/your/repo"
+                className="flex-1 bg-transparent text-sm text-(--t1) outline-none placeholder:text-(--t2) font-medium disabled:opacity-50"
+                />
+                </div>
+                {/* YouTube */}
+                <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) focus-within:border-blue-600/60 focus-within:ring-2 focus-within:ring-blue-600/10 transition-all">
+                <Youtube size={16} className="text-(--t2) flex-shrink-0" />
+                <input
+                type="url"
+                value={youtubeUrl}
+                onChange={e => setYoutubeUrl(e.target.value)}
+                disabled={isDraftLocked}
+                placeholder="https://youtube.com/watch?v=..."
+                className="flex-1 bg-transparent text-sm text-(--t1) outline-none placeholder:text-(--t2) font-medium disabled:opacity-50"
+                />
+                </div>
+                {/* Live / Demo */}
+                <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) focus-within:border-blue-600/60 focus-within:ring-2 focus-within:ring-blue-600/10 transition-all">
+                <Globe size={16} className="text-(--t2) flex-shrink-0" />
+                <input
+                type="url"
+                value={liveUrl}
+                onChange={e => setLiveUrl(e.target.value)}
+                disabled={isDraftLocked}
+                placeholder="https://your-demo.vercel.app"
+                className="flex-1 bg-transparent text-sm text-(--t1) outline-none placeholder:text-(--t2) font-medium disabled:opacity-50"
+                />
+                </div>
+                </div>
                 </Card>
 
                 {/* success */}
@@ -719,16 +765,6 @@ export default function SubmitPage() {
                 {/* action buttons */}
                 {!isDraftLocked && (
                     <div className="flex items-stretch gap-3">
-                    {/* Draft */}
-                    <button
-                    onClick={() => handleAction(true)}
-                    disabled={submitting}
-                    className="flex items-center justify-center gap-2 px-5 py-4 rounded-2xl font-black text-sm uppercase tracking-widest border border-(--brd) bg-(--card) text-(--t2) hover:border-blue-600/40 hover:text-blue-600 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-                    >
-                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <BookOpen size={16} />}
-                    Чернетка
-                    </button>
-
                     {/* Submit */}
                     <button
                     onClick={() => handleAction(false)}

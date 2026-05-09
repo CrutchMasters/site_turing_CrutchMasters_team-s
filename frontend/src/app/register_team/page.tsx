@@ -21,7 +21,8 @@ typeof window !== "undefined" && window.location.hostname === "localhost"
 : "https://site-turing-crutchmasters-team-s.onrender.com";
 
 // Roles that are NOT allowed to create/edit teams or be invited
-const RESTRICTED_ROLES = ["admin", "jury", "superadmin"];
+// superadmin CAN create/manage teams
+const RESTRICTED_ROLES = ["admin", "jury"];
 
 interface SearchedUser {
   id: string;
@@ -276,7 +277,7 @@ function MemberChip({ user: u, onRemove }: { user: SearchedUser; onRemove: () =>
 // ── Section card header ───────────────────────────────────────────────────────
 function SectionHeader({ num, title, right }: { num: string; title: string; right?: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-(--bg)/40">
+    <div className="flex items-center gap-3 px-5 py-4 border-b border-(--brd) bg-(--bg)/40">
     <span className="w-7 h-7 rounded-lg bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-xs font-black text-blue-600 flex-shrink-0">
     {num}
     </span>
@@ -533,7 +534,7 @@ export default function RegisterTeamPage() {
           <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Нова команда" icon={<Users size={18} className="text-blue-600" />} />
 
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10">
 
           <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
           <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
@@ -565,12 +566,16 @@ export default function RegisterTeamPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="max-w-3xl space-y-5">
+          <form onSubmit={handleSubmit} className="max-w-6xl mx-auto w-full">
+          <div className="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-5 items-start">
+
+          {/* ── LEFT column: General info + Members ── */}
+          <div className="space-y-5">
 
           {/* 1. Загальна інформація */}
           <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) shadow-xl">
           <SectionHeader num="1" title="Загальна інформація" />
-          <div className="p-6 sm:p-8 space-y-5">
+          <div className="p-4 sm:p-6 md:p-8 space-y-5">
 
           {/* Avatar picker */}
           <div className="flex items-center gap-5">
@@ -684,10 +689,15 @@ export default function RegisterTeamPage() {
           </div>
           </section>
 
+          </div>{/* end LEFT column */}
+
+          {/* ── RIGHT column: Captain + Members + Buttons ── */}
+          <div className="space-y-5 xl:sticky xl:top-6">
+
           {/* 2. Капітан */}
           <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] border border-(--brd) shadow-xl overflow-visible" style={{ animationDelay: "70ms" }}>
           <SectionHeader num="2" title="Капітан" right={<Crown size={15} className="text-amber-500" />} />
-          <div className="p-6 sm:p-8 overflow-visible">
+          <div className="p-4 sm:p-6 md:p-8 overflow-visible">
           <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest mb-4">
           За замовчуванням - ваш акаунт. Можна змінити через пошук.
           </p>
@@ -714,7 +724,7 @@ export default function RegisterTeamPage() {
             </span>
           }
           />
-          <div className="p-6 sm:p-8 space-y-4 overflow-visible">
+          <div className="p-4 sm:p-6 md:p-8 space-y-4 overflow-visible">
           {members.length > 0 && (
             <div className="flex flex-wrap gap-2">
             {members.map(m => <MemberChip key={m.id} user={m} onRemove={() => removeMember(m.id)} />)}
@@ -751,26 +761,29 @@ export default function RegisterTeamPage() {
           </section>
 
           {/* Кнопки */}
-          <div className="fuIn flex flex-col sm:flex-row gap-3 pt-2" style={{ animationDelay: "200ms" }}>
+          <div className="fuIn flex flex-col gap-3 max-w-6xl mx-auto w-full" style={{ animationDelay: "200ms" }}>
           <button
           type="submit"
           disabled={!teamName.trim() || !captain || submitting || !!discordError || !!telegramError}
-          className={`flex items-center justify-center gap-2 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex-1 sm:flex-none ${!teamName.trim() || !captain || submitting || !!discordError || !!telegramError ? "bg-(--brd) text-(--t2) cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/25"}`}
+          className={`flex items-center justify-center gap-2 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 w-full ${!teamName.trim() || !captain || submitting || !!discordError || !!telegramError ? "bg-(--brd) text-(--t2) cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/25"}`}
           >
           {submitting ? <><Loader size={14} className="animate-spin" /> Створення...</> : <><Users size={14} /> Створити команду</>}
           </button>
           <button type="button" onClick={() => router.push("/teams")}
-          className="px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) bg-(--bg) text-(--t2) hover:bg-(--card) hover:text-(--t1) transition-all active:scale-95">
+          className="w-full px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) bg-(--bg) text-(--t2) hover:bg-(--card) hover:text-(--t1) transition-all active:scale-95">
           Скасувати
           </button>
-          </div>
 
           {submitError && (
             <div className="flex items-center gap-2 text-[11px] font-bold text-red-500 bg-red-500/5 border border-red-500/20 rounded-2xl px-4 py-3">
             <AlertCircle size={14} className="flex-shrink-0" /> {submitError}
             </div>
           )}
+          </div>
 
+          </div>{/* end RIGHT column */}
+
+          </div>{/* end grid */}
           </form>
           </div>
           </main>

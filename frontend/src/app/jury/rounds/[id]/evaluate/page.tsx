@@ -61,7 +61,7 @@ interface DistributionStats {
     evaluated: number;
 }
 
-// ── Default criteria ─────────────────────────────────────────────────────────
+// ── Default criteria (fallback if round has no criteria column) ───────────────
 
 const DEFAULT_CRITERIA: Omit<CriterionScore, "score" | "comment">[] = [
     { key: "backend_quality",    label: "Backend якість коду",       weight: 20 },
@@ -71,8 +71,9 @@ const DEFAULT_CRITERIA: Omit<CriterionScore, "score" | "comment">[] = [
 { key: "no_bugs",            label: "Робото­здатність, без багів", weight: 20 },
 ];
 
-function buildDefaultCriteria(): CriterionScore[] {
-    return DEFAULT_CRITERIA.map(c => ({ ...c, score: "", comment: "" }));
+function buildCriteriaFromRound(roundCriteria: Omit<CriterionScore, "score" | "comment">[] | null): CriterionScore[] {
+    const source = (roundCriteria && roundCriteria.length > 0) ? roundCriteria : DEFAULT_CRITERIA;
+    return source.map(c => ({ ...c, score: "", comment: "" }));
 }
 
 function computeTotal(criteria: CriterionScore[]): number {
@@ -240,10 +241,10 @@ function ScoreInput({
         <div className="relative flex-1 flex items-center" style={{ height: 24 }}>
         {/* Background track */}
         <div className="absolute inset-x-0 h-2 rounded-full" style={{ top: "50%", transform: "translateY(-50%)", background: "var(--brd)" }} />
-        {/* Fill track — no transition, syncs with thumb instantly */}
+        {/* Fill track — smooth color + width transition */}
         <div
         className="absolute left-0 h-2 rounded-full pointer-events-none"
-        style={{ top: "50%", transform: "translateY(-50%)", width: `${num}%`, background: color }}
+        style={{ top: "50%", transform: "translateY(-50%)", width: `${num}%`, background: color, transition: "background 0.35s ease, width 0.05s linear" }}
         />
         <input
         type="range"
@@ -380,6 +381,7 @@ export default function JuryEvaluationPage() {
 
     // -- Data --
     const [round, setRound] = useState<RoundInfo | null>(null);
+    const [roundCriteria, setRoundCriteria] = useState<Omit<CriterionScore, "score" | "comment">[] | null>(null);
     const [works, setWorks] = useState<SubmissionWork[]>([]);
     const [stats, setStats] = useState<DistributionStats>({ total: 0, distributed: 0, evaluated: 0 });
     const [pageLoading, setPageLoading] = useState(true);
@@ -418,10 +420,21 @@ export default function JuryEvaluationPage() {
             // 1. Round info (через Supabase — публічні дані)
             const { data: roundData } = await supabase
             .from("rounds")
-            .select("id, number, name, tournament_id, end_at, status")
+            .select("id, number, name, tournament_id, end_at, status, criteria")
             .eq("id", roundId)
             .single();
             if (!roundData) throw new Error("Раунд не знайдено");
+
+            // Parse criteria from round table
+            let parsedCriteria: Omit<CriterionScore, "score" | "comment">[] | null = null;
+            if (roundData.criteria && Array.isArray(roundData.criteria) && roundData.criteria.length > 0) {
+                parsedCriteria = roundData.criteria.map((c: any, idx: number) => ({
+                    key: c.key ?? `criterion_${idx}`,
+                    label: c.label ?? c.name ?? `Критерій ${idx + 1}`,
+                    weight: typeof c.weight === "number" ? c.weight : Math.floor(100 / roundData.criteria.length),
+                }));
+            }
+            setRoundCriteria(parsedCriteria);
 
             // Tournament name
             let tournamentName = "";
@@ -464,7 +477,7 @@ export default function JuryEvaluationPage() {
             const workList: SubmissionWork[] = assignedSubmissions.map((s: any) => {
                 // my_evaluation присутній якщо роль === "jury", інакше null
                 const existingEval = s.my_evaluation ?? null;
-                let criteria = buildDefaultCriteria();
+                let criteria = buildCriteriaFromRound(parsedCriteria);
                 let general_comment = "";
                 let total_score: number | undefined;
                 let status: SubmissionWork["status"] = "not_evaluated";

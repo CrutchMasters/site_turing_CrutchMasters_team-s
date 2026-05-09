@@ -58,6 +58,389 @@ function DateTimePair({
   );
 }
 
+
+// ── Tournament Timeline ────────────────────────────────────────────────────────
+function TournamentTimeline({
+  regStartDate, regStartTime, setRegStartDate, setRegStartTime,
+  regEndDate,   regEndTime,   setRegEndDate,   setRegEndTime,
+  startDate,    startTime,    setStartDate,    setStartTime,
+  endDate,      endTime,      setEndDate,      setEndTime,
+  roundsData,   roundCount,   setRoundsData,
+}: {
+  regStartDate: string; regStartTime: string;
+  setRegStartDate: (v:string)=>void; setRegStartTime: (v:string)=>void;
+  regEndDate: string;   regEndTime: string;
+  setRegEndDate: (v:string)=>void;   setRegEndTime: (v:string)=>void;
+  startDate: string;    startTime: string;
+  setStartDate: (v:string)=>void;    setStartTime: (v:string)=>void;
+  endDate: string;      endTime: string;
+  setEndDate: (v:string)=>void;      setEndTime: (v:string)=>void;
+  roundsData: Record<number, import("@/components/RoundSettingsPanel").RoundData>;
+  roundCount: number;
+  setRoundsData: React.Dispatch<React.SetStateAction<Record<number, import("@/components/RoundSettingsPanel").RoundData>>>;
+}) {
+  const toMs = (date: string, time: string): number | null => {
+    if (!date) return null;
+    const d = new Date(`${date}T${time || "00:00"}`);
+    return isNaN(d.getTime()) ? null : d.getTime();
+  };
+  const fromMs = (ms: number): { date: string; time: string } => {
+    const d = new Date(ms);
+    const date = d.toISOString().slice(0, 10);
+    const h = String(d.getHours()).padStart(2, "0");
+    const m = String(d.getMinutes()).padStart(2, "0");
+    return { date, time: `${h}:${m}` };
+  };
+
+  // Overlap detection: registration vs tournament
+  const regEndMs   = toMs(regEndDate,   regEndTime);
+  const tourStartMs = toMs(startDate,   startTime);
+  const regStartMs  = toMs(regStartDate, regStartTime);
+  const tourEndMs   = toMs(endDate,      endTime);
+
+  const regTourOverlap = (() => {
+    if (!regStartMs || !regEndMs || !tourStartMs || !tourEndMs) return false;
+    // overlap = they intersect: regStart < tourEnd && tourStart < regEnd
+    return regStartMs < tourEndMs && tourStartMs < regEndMs;
+  })();
+
+  // Визначаємо мін/макс для таймлайну
+  const allMs = [
+    toMs(regStartDate, regStartTime),
+    toMs(regEndDate,   regEndTime),
+    toMs(startDate,    startTime),
+    toMs(endDate,      endTime),
+    ...Array.from({ length: roundCount }, (_, i) => {
+      const rd = roundsData[i + 1];
+      return [
+        toMs(rd?.startDate ?? "", rd?.startTime ?? ""),
+                  toMs(rd?.deadlineDate ?? "", rd?.deadlineTime ?? ""),
+                  toMs(rd?.evalStartDate ?? "", rd?.evalStartTime ?? ""),
+                  toMs(rd?.evalEndDate ?? "", rd?.evalEndTime ?? ""),
+      ];
+    }).flat(),
+  ].filter((v): v is number => v !== null);
+
+  const now = Date.now();
+  const tlMin = allMs.length ? Math.min(...allMs) - 3600_000 : now - 86400_000;
+  const tlMax = allMs.length ? Math.max(...allMs) + 3600_000 : now + 86400_000 * 30;
+  const tlRange = tlMax - tlMin;
+
+  const pct = (ms: number | null) =>
+  ms === null ? null : Math.max(0, Math.min(100, ((ms - tlMin) / tlRange) * 100));
+
+  // Segments: registration, tournament, rounds, eval per round
+  const segments: { label: string; color: string; from: number | null; to: number | null; row: number }[] = [
+    { label: "Реєстрація", color: regTourOverlap ? "bg-red-500"  : "bg-green-500", from: toMs(regStartDate, regStartTime), to: toMs(regEndDate, regEndTime),   row: 0 },
+    { label: "Турнір",     color: regTourOverlap ? "bg-red-400"  : "bg-blue-500",  from: toMs(startDate, startTime),       to: toMs(endDate, endTime),          row: 1 },
+    ...Array.from({ length: roundCount }, (_, i) => {
+      const n  = i + 1;
+      const rd = roundsData[n];
+      return [
+        {
+          label: `Раунд ${n}`,
+          color: "bg-violet-500",
+          from:  toMs(rd?.startDate ?? "", rd?.startTime ?? ""),
+                  to:    toMs(rd?.deadlineDate ?? "", rd?.deadlineTime ?? ""),
+                  row: 2 + i * 2,
+        },
+        {
+          label: `Оцінювання ${n}`,
+          color: "bg-amber-500",
+          from:  toMs(rd?.evalStartDate ?? "", rd?.evalStartTime ?? ""),
+                  to:    toMs(rd?.evalEndDate ?? "", rd?.evalEndTime ?? ""),
+                  row: 3 + i * 2,
+        },
+      ];
+    }).flat(),
+  ];
+
+  const formatLabel = (ms: number | null) => {
+    if (!ms) return "—";
+    const d = new Date(ms);
+    return d.toLocaleDateString("uk-UA", { day: "2-digit", month: "short" }) + " " +
+    String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  };
+
+  // Повзунок: перетягуємо thumb → оновлюємо дату
+  const trackRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef<{ key: string; onSet: (dt: { date: string; time: string }) => void } | null>(null);
+
+  const startDrag = (key: string, onSet: (dt: { date: string; time: string }) => void) =>
+  (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    dragging.current = { key, onSet };
+  };
+
+  useEffect(() => {
+    const move = (clientX: number) => {
+      if (!dragging.current || !trackRef.current) return;
+      const rect = trackRef.current.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const ms = tlMin + ratio * tlRange;
+      dragging.current.onSet(fromMs(ms));
+    };
+    const onMouseMove = (e: MouseEvent) => move(e.clientX);
+    const onTouchMove = (e: TouchEvent) => move(e.touches[0].clientX);
+    const onUp = () => { dragging.current = null; };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onUp);
+    };
+  }, [tlMin, tlRange]);
+
+  const thumbs: {
+    key: string;
+    ms: number | null;
+    color: string;
+    label: string;
+    row: number;
+    onSet: (dt: { date: string; time: string }) => void;
+  }[] = [
+    { key: "regStart",  ms: toMs(regStartDate, regStartTime), color: regTourOverlap ? "bg-red-500" : "bg-green-500",  label: "Поч. реєстр.",  row: 0, onSet: ({ date, time }) => { setRegStartDate(date); setRegStartTime(time); } },
+    { key: "regEnd",    ms: toMs(regEndDate,   regEndTime),   color: regTourOverlap ? "bg-red-600" : "bg-green-700",  label: "Кін. реєстр.", row: 0, onSet: ({ date, time }) => { setRegEndDate(date);   setRegEndTime(time);   } },
+    { key: "tourStart", ms: toMs(startDate,    startTime),    color: regTourOverlap ? "bg-red-400" : "bg-blue-500",   label: "Поч. турніру",  row: 1, onSet: ({ date, time }) => { setStartDate(date);    setStartTime(time);    } },
+    { key: "tourEnd",   ms: toMs(endDate,      endTime),      color: regTourOverlap ? "bg-red-500" : "bg-blue-700",   label: "Кін. турніру",  row: 1, onSet: ({ date, time }) => { setEndDate(date);       setEndTime(time);      } },
+    ...Array.from({ length: roundCount }, (_, i) => {
+      const n = i + 1;
+      const rd = roundsData[n];
+      return [
+        {
+          key: `r${n}start`, ms: toMs(rd?.startDate ?? "", rd?.startTime ?? ""),
+                  color: "bg-violet-500", label: `Р${n} старт`, row: 2 + i * 2,
+                  onSet: ({ date, time }: { date: string; time: string }) =>
+                  setRoundsData(prev => ({ ...prev, [n]: { ...(prev[n] ?? {}), startDate: date, startTime: time } as any })),
+        },
+        {
+          key: `r${n}end`, ms: toMs(rd?.deadlineDate ?? "", rd?.deadlineTime ?? ""),
+                  color: "bg-violet-700", label: `Р${n} дедлайн`, row: 2 + i * 2,
+                  onSet: ({ date, time }: { date: string; time: string }) =>
+                  setRoundsData(prev => ({ ...prev, [n]: { ...(prev[n] ?? {}), deadlineDate: date, deadlineTime: time } as any })),
+        },
+        {
+          key: `r${n}evalStart`, ms: toMs(rd?.evalStartDate ?? "", rd?.evalStartTime ?? ""),
+                  color: "bg-amber-500", label: `Р${n} оцін. початок`, row: 3 + i * 2,
+                  onSet: ({ date, time }: { date: string; time: string }) =>
+                  setRoundsData(prev => ({ ...prev, [n]: { ...(prev[n] ?? {}), evalStartDate: date, evalStartTime: time } as any })),
+        },
+        {
+          key: `r${n}evalEnd`, ms: toMs(rd?.evalEndDate ?? "", rd?.evalEndTime ?? ""),
+                  color: "bg-amber-700", label: `Р${n} оцін. кінець`, row: 3 + i * 2,
+                  onSet: ({ date, time }: { date: string; time: string }) =>
+                  setRoundsData(prev => ({ ...prev, [n]: { ...(prev[n] ?? {}), evalEndDate: date, evalEndTime: time } as any })),
+        },
+      ];
+    }).flat(),
+  ];
+
+  const hasAnyDate = allMs.length > 0;
+
+  // Number of rows for the multi-lane track
+  // Row 0 = Реєстрація, Row 1 = Турнір, then per round: Row 2+i*2 = Round, Row 3+i*2 = Оцінювання
+  const ROW_H   = 12; // px per lane height
+  const ROW_GAP = 10; // px gap between lanes
+  const rowCount = 2 + roundCount * 2;
+  const trackH   = rowCount * ROW_H + (rowCount - 1) * ROW_GAP;
+  const LABEL_W  = 56; // px — reserved left space for lane labels (inside layout, not overflow)
+
+  const laneColors = (ri: number) =>
+  ri === 0 ? (regTourOverlap ? 'text-red-500'    : 'text-green-500')
+  : ri === 1 ? (regTourOverlap ? 'text-red-400'  : 'text-blue-500')
+  : ri % 2 === 0 ? 'text-violet-500' : 'text-amber-500';
+
+  const laneBg = (ri: number) =>
+  ri === 0 ? (regTourOverlap ? 'bg-red-500'    : 'bg-green-500')
+  : ri === 1 ? (regTourOverlap ? 'bg-red-400'  : 'bg-blue-500')
+  : ri % 2 === 0 ? 'bg-violet-500' : 'bg-amber-500';
+
+  const laneLabels = [
+    "Реєстр.",
+    "Турнір",
+    ...Array.from({ length: roundCount }, (_, i) => [`Р${i+1}`, `Оцін.${i+1}`]).flat(),
+  ];
+
+  return (
+    <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd)" style={{ animationDelay: '120ms' }}>
+    <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd) bg-(--bg)/50 rounded-t-2xl sm:rounded-t-[2.5rem]">
+    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
+    <CalendarDays size={16} />
+    </div>
+    <span className="text-xs font-black uppercase tracking-widest text-(--t2)">Таймлайн турніру</span>
+    {!hasAnyDate && (
+      <span className="ml-auto text-[10px] font-bold text-(--t2)/50">Вкажіть хоча б одну дату</span>
+    )}
+    </div>
+
+    <div className="p-6">
+
+    {/* Overlap warning */}
+    {regTourOverlap && (
+      <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3">
+      <span className="text-red-500 text-lg leading-none mt-0.5">⚠️</span>
+      <div>
+      <p className="text-[11px] font-black uppercase tracking-widest text-red-500 mb-0.5">Конфлікт дат</p>
+      <p className="text-xs font-medium text-red-400">Реєстрація і турнір не повинні перекриватись. Перевірте часові рамки.</p>
+      </div>
+      </div>
+    )}
+
+    {hasAnyDate ? (
+      <>
+      {/* ── Multi-lane track ── */}
+      <div className="mb-6 select-none" ref={trackRef}>
+      {/* Outer flex: labels | track */}
+      <div className="flex gap-3" style={{ minHeight: `${trackH}px` }}>
+
+      {/* Left labels column */}
+      <div className="flex flex-col flex-shrink-0" style={{ width: LABEL_W, gap: ROW_GAP }}>
+      {laneLabels.map((lbl, ri) => (
+        <div
+        key={ri}
+        className={`flex items-center justify-end text-[9px] font-black uppercase tracking-widest whitespace-nowrap ${laneColors(ri)}`}
+        style={{ height: ROW_H }}
+        >
+        {lbl}
+        </div>
+      ))}
+      </div>
+
+      {/* Right: track bars + thumbs */}
+      <div className="relative flex-1" style={{ height: `${trackH}px` }}>
+      {/* Lane base bars + filled segments */}
+      {laneLabels.map((_, ri) => {
+        const top = ri * (ROW_H + ROW_GAP);
+        return (
+          <React.Fragment key={ri}>
+          {/* Base track */}
+          <div
+          className="absolute rounded-full bg-(--brd)"
+          style={{ top, left: 0, right: 0, height: ROW_H }}
+          />
+          {/* Filled segments */}
+          {segments.filter(s => s.row === ri).map((seg, si) => {
+            const l = pct(seg.from);
+            const r = pct(seg.to);
+            if (l === null || r === null || r <= l) return null;
+            return (
+              <div
+              key={si}
+              className={`absolute rounded-full opacity-60 ${laneBg(ri)}`}
+              style={{ top, height: ROW_H, left: `${l}%`, width: `${r - l}%` }}
+              />
+            );
+          })}
+          </React.Fragment>
+        );
+      })}
+
+      {/* Thumbs */}
+      {thumbs.map((th) => {
+        const p = pct(th.ms);
+        if (p === null) return null;
+        const top = th.row * (ROW_H + ROW_GAP);
+        return (
+          <div
+          key={th.key}
+          className="absolute -translate-x-1/2 group cursor-grab active:cursor-grabbing z-10"
+          style={{ left: `${p}%`, top: top - 2 }}
+          onMouseDown={startDrag(th.key, th.onSet)}
+          onTouchStart={startDrag(th.key, th.onSet)}
+          >
+          <div className={`w-4 h-4 rounded-full border-2 border-white shadow-lg ${th.color} transition-transform group-hover:scale-130`} style={{ marginTop: 2 }} />
+          {/* Tooltip */}
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+          <div className="whitespace-nowrap bg-(--card) border border-(--brd) rounded-xl px-3 py-2 shadow-xl">
+          <p className="text-[9px] font-black uppercase tracking-widest text-(--t1)">{th.label}</p>
+          <p className="text-[10px] font-black text-blue-500 mt-0.5">{formatLabel(th.ms)}</p>
+          </div>
+          </div>
+          </div>
+        );
+      })}
+      </div>
+      </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 mb-5">
+      {[
+        { color: regTourOverlap ? "bg-red-500" : "bg-green-500", label: "Реєстрація" },
+        { color: regTourOverlap ? "bg-red-400" : "bg-blue-500",  label: "Турнір" },
+        { color: "bg-violet-500", label: "Раунди" },
+        { color: "bg-amber-500",  label: "Оцінювання" },
+      ].map(l => (
+        <div key={l.label} className="flex items-center gap-1.5">
+        <div className={`w-2.5 h-2.5 rounded-full ${l.color} opacity-80`} />
+        <span className="text-[10px] font-bold text-(--t2) uppercase tracking-widest">{l.label}</span>
+        </div>
+      ))}
+      </div>
+
+      {/* Date cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      {[
+        { label: "Поч. реєстр.", ms: toMs(regStartDate, regStartTime), color: regTourOverlap ? "text-red-500"  : "text-green-500", border: regTourOverlap ? "border-red-500/30" : "border-(--brd)" },
+                   { label: "Кін. реєстр.", ms: toMs(regEndDate,   regEndTime),   color: regTourOverlap ? "text-red-600"  : "text-green-600", border: regTourOverlap ? "border-red-500/30" : "border-(--brd)" },
+                   { label: "Поч. турніру", ms: toMs(startDate,    startTime),    color: regTourOverlap ? "text-red-400"  : "text-blue-500",  border: regTourOverlap ? "border-red-500/30" : "border-(--brd)" },
+                   { label: "Кін. турніру", ms: toMs(endDate,       endTime),     color: regTourOverlap ? "text-red-500"  : "text-blue-600",  border: regTourOverlap ? "border-red-500/30" : "border-(--brd)" },
+      ].map(item => (
+        <div key={item.label} className={`bg-(--bg) rounded-xl border p-3 ${item.border}`}>
+        <p className="text-[8px] font-black uppercase tracking-widest text-(--t2) mb-1">{item.label}</p>
+        <p className={`text-[11px] font-black ${item.ms ? item.color : "text-(--t2) opacity-30"}`}>
+        {item.ms ? formatLabel(item.ms) : "—"}
+        </p>
+        </div>
+      ))}
+      </div>
+
+      {/* Round + eval cards */}
+      {roundCount > 0 && (
+        <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {Array.from({ length: roundCount }, (_, i) => {
+          const n  = i + 1;
+          const rd = roundsData[n];
+          const s  = toMs(rd?.startDate ?? "",     rd?.startTime ?? "");
+          const e  = toMs(rd?.deadlineDate ?? "",  rd?.deadlineTime ?? "");
+          const es = toMs(rd?.evalStartDate ?? "", rd?.evalStartTime ?? "");
+          const ee = toMs(rd?.evalEndDate ?? "",   rd?.evalEndTime ?? "");
+          return (
+            <div key={n} className="bg-(--bg) rounded-xl border border-(--brd) p-3 flex flex-col gap-1.5">
+            <p className="text-[8px] font-black uppercase tracking-widest text-violet-500">Раунд {n}</p>
+            <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-violet-500 flex-shrink-0" />
+            <span className="text-[9px] font-bold text-(--t2) uppercase tracking-widest w-14 flex-shrink-0">Виконання</span>
+            <span className="text-[10px] font-bold text-(--t1)">{s ? formatLabel(s) : "—"} → {e ? formatLabel(e) : "—"}</span>
+            </div>
+            {(es || ee) && (
+              <div className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
+              <span className="text-[9px] font-bold text-(--t2) uppercase tracking-widest w-14 flex-shrink-0">Оцінювання</span>
+              <span className="text-[10px] font-bold text-amber-500">{es ? formatLabel(es) : "—"} → {ee ? formatLabel(ee) : "—"}</span>
+              </div>
+            )}
+            </div>
+          );
+        })}
+        </div>
+      )}
+      </>
+    ) : (
+      <div className="flex flex-col items-center justify-center py-10 gap-3 opacity-40">
+      <CalendarDays size={36} className="text-(--t2)" />
+      <p className="text-[11px] font-black uppercase tracking-widest text-(--t2) text-center">Вкажіть дати щоб побачити таймлайн</p>
+      </div>
+    )}
+    </div>
+    </section>
+  );
+}
+
 export default function RegisterTourney() {
   const { dark } = useTheme();
   const { t } = useT();
@@ -537,6 +920,20 @@ export default function RegisterTourney() {
         </div>
         </div>
         </section>
+
+        {/* BLOCK 2.5: Таймлайн */}
+        <TournamentTimeline
+        regStartDate={regStartDate} regStartTime={regStartTime}
+        setRegStartDate={setRegStartDate} setRegStartTime={setRegStartTime}
+        regEndDate={regEndDate}     regEndTime={regEndTime}
+        setRegEndDate={setRegEndDate}   setRegEndTime={setRegEndTime}
+        startDate={startDate}       startTime={startTime}
+        setStartDate={setStartDate} setStartTime={setStartTime}
+        endDate={endDate}           endTime={endTime}
+        setEndDate={setEndDate}     setEndTime={setEndTime}
+        roundsData={roundsData}     roundCount={roundCount}
+        setRoundsData={setRoundsData}
+        />
 
         {/* BLOCK 3: Формат + Команди */}
         <section className="cdIn grid grid-cols-1 sm:grid-cols-2 gap-5 items-stretch" style={{ animationDelay: '140ms' }}>

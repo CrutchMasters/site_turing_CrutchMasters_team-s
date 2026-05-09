@@ -618,14 +618,18 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
 
 // ── Notification card (compact for profile) ───────────────────────────────────
 function NotificationCard({
-  notif, idx, responded, responding, onAccept, onDecline, onMarkRead, onGoTeam,
+  notif, idx, responded, responding, inactive, onAccept, onDecline, onJuryAccept, onJuryDecline, onMarkRead, onGoTeam,
 }: {
   notif: Notification; idx: number; responded: "accepted" | "declined" | undefined;
   responding: "accept" | "decline" | null;
-  onAccept: () => void; onDecline: () => void; onMarkRead: () => void; onGoTeam: (id: string) => void;
+  inactive?: "already_member" | "already_jury";
+  onAccept: () => void; onDecline: () => void;
+  onJuryAccept: () => void; onJuryDecline: () => void;
+  onMarkRead: () => void; onGoTeam: (id: string) => void;
 }) {
-  const meta     = parseMeta(notif.meta);
-  const isInvite = notif.type === "team_invitation";
+  const meta      = parseMeta(notif.meta);
+  const isInvite  = notif.type === "team_invitation";
+  const isJury    = notif.type === "jury_invitation";
   const borderClass = typeBorder[notif.type] ?? "border-l-gray-400";
   return (
     <div className={`fuIn bg-(--bg) rounded-xl border border-(--brd) border-l-4 ${borderClass} p-3.5 transition-all ${!notif.read ? "shadow-sm" : "opacity-60"}`} style={{ animationDelay: `${idx * 40}ms` }}>
@@ -641,17 +645,44 @@ function NotificationCard({
     <p className="text-[10px] font-bold text-(--t2) mt-0.5 leading-relaxed">{notif.message}</p>
     {meta.team_id && <button onClick={() => onGoTeam(meta.team_id!)} className="mt-1.5 flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-blue-500 hover:text-blue-400 transition-colors"><Users size={9} /> {meta.team_name} <ChevronRight size={8} /></button>}
     <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-(--t2) opacity-50">{timeAgo(notif.created_at)}</p>
+
+    {/* Team invitation */}
     {isInvite && !responded && (
-      <div className="flex items-center gap-1.5 mt-2.5">
-      <button onClick={onAccept} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-60">
-      {responding === "accept" ? <Loader size={10} className="animate-spin" /> : <Check size={10} />} Accept
-      </button>
-      <button onClick={onDecline} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-(--card) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 active:scale-95 transition-all disabled:opacity-60">
-      {responding === "decline" ? <Loader size={10} className="animate-spin" /> : <X size={10} />} Decline
-      </button>
-      </div>
+      inactive === "already_member" ? (
+        <div className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border bg-gray-500/10 text-gray-500 border-gray-500/20">
+        <Check size={9} /> Вже в команді
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5 mt-2.5">
+        <button onClick={onAccept} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-60">
+        {responding === "accept" ? <Loader size={10} className="animate-spin" /> : <Check size={10} />} Accept
+        </button>
+        <button onClick={onDecline} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-(--card) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 active:scale-95 transition-all disabled:opacity-60">
+        {responding === "decline" ? <Loader size={10} className="animate-spin" /> : <X size={10} />} Decline
+        </button>
+        </div>
+      )
     )}
-    {isInvite && responded && (
+
+    {/* Jury invitation */}
+    {isJury && !responded && (
+      inactive === "already_jury" ? (
+        <div className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border bg-amber-500/10 text-amber-500 border-amber-500/20">
+        <Star size={9} /> Вже суддя
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5 mt-2.5">
+        <button onClick={onJuryAccept} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 text-white font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 active:scale-95 transition-all disabled:opacity-60">
+        {responding === "accept" ? <Loader size={10} className="animate-spin" /> : <Star size={10} />} Accept
+        </button>
+        <button onClick={onJuryDecline} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-(--card) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 active:scale-95 transition-all disabled:opacity-60">
+        {responding === "decline" ? <Loader size={10} className="animate-spin" /> : <X size={10} />} Decline
+        </button>
+        </div>
+      )
+    )}
+
+    {(isInvite || isJury) && responded && (
       <div className={`mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border ${responded==="accepted"?"bg-green-500/10 text-green-500 border-green-500/20":"bg-red-500/10 text-red-500 border-red-500/20"}`}>
       {responded === "accepted" ? <><Check size={9} /> Accepted</> : <><X size={9} /> Declined</>}
       </div>
@@ -806,6 +837,7 @@ export default function ProfilePage() {
   const [notifLoading, setNotifLoading]   = useState(true);
   const [responding, setResponding]       = useState<Record<string, "accept" | "decline" | null>>({});
   const [responded, setResponded]         = useState<Record<string, "accepted" | "declined">>({});
+  const [isInactive, setIsInactive]       = useState<Record<string, "already_member" | "already_jury">>({});
   const [tournaments, setTournaments]     = useState<Tournament[]>([]);
   const [tourLoading, setTourLoading]     = useState(true);
 
@@ -817,9 +849,47 @@ export default function ProfilePage() {
   const fetchNotifications = useCallback(async () => {
     setNotifLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/notifications?limit=50`, { headers: authHeader() });
-      const data = await res.json();
-      setNotifications(data.notifications ?? []);
+      const [notifRes, teamInvRes, juryInvRes] = await Promise.allSettled([
+        fetch(`${API_URL}/api/notifications?limit=50`, { headers: authHeader() }),
+                                                                          fetch(`${API_URL}/api/invitations/my`, { headers: authHeader() }),
+                                                                          fetch(`${API_URL}/api/jury-invitations/my`, { headers: authHeader() }),
+      ]);
+
+      const notifData = notifRes.status === "fulfilled" && notifRes.value.ok
+      ? await notifRes.value.json() : { notifications: [] };
+      const notifs: Notification[] = notifData.notifications ?? [];
+      setNotifications(notifs);
+
+      // Pending invitation IDs з бекенду (реальний стан)
+      const pendingTeamIds = new Set<string>();
+      if (teamInvRes.status === "fulfilled" && teamInvRes.value.ok) {
+        const d = await teamInvRes.value.json();
+        (d.invitations ?? []).forEach((inv: { id: string }) => pendingTeamIds.add(inv.id));
+      }
+      const pendingJuryIds = new Set<string>();
+      if (juryInvRes.status === "fulfilled" && juryInvRes.value.ok) {
+        const d = await juryInvRes.value.json();
+        (d.invitations ?? []).forEach((inv: { id: string; status: string }) => {
+          if (inv.status === "pending") pendingJuryIds.add(inv.id);
+        });
+      }
+
+      // Якщо invitation_id сповіщення відсутній у pending — вже оброблено → isInactive
+      const inactiveMap: Record<string, "already_member" | "already_jury"> = {};
+      notifs.forEach((n) => {
+        const meta = parseMeta(n.meta);
+        if (n.type === "team_invitation" && meta.invitation_id) {
+          if (!pendingTeamIds.has(meta.invitation_id)) {
+            inactiveMap[n.id] = "already_member";
+          }
+        }
+        if (n.type === "jury_invitation" && meta.invitation_id) {
+          if (!pendingJuryIds.has(meta.invitation_id)) {
+            inactiveMap[n.id] = "already_jury";
+          }
+        }
+      });
+      setIsInactive(inactiveMap);
     } catch { setNotifications([]); }
     finally { setNotifLoading(false); }
   }, [authHeader]);
@@ -876,7 +946,42 @@ export default function ProfilePage() {
     setResponding(prev => ({ ...prev, [key]: accept ? "accept" : "decline" }));
     try {
       const res = await fetch(`${API_URL}/api/invitations/respond`, { method: "POST", headers: authHeader(), body: JSON.stringify({ invitation_id: invitationId, accept }) });
-      if (!res.ok) { const err = await res.json(); alert(err.detail ?? "Response error"); return; }
+      if (!res.ok) {
+        const err = await res.json();
+        const detail: string = err.detail ?? "Response error";
+        // Якщо вже в команді — показуємо isInactive замість alert
+        if (detail.includes("вже є членом") || detail.includes("вже оброблено")) {
+          setIsInactive(prev => ({ ...prev, [key]: "already_member" }));
+          await markRead(notif.id);
+          return;
+        }
+        alert(detail);
+        return;
+      }
+      setResponded(prev => ({ ...prev, [key]: accept ? "accepted" : "declined" }));
+      await markRead(notif.id);
+    } catch { alert("Server connection error"); }
+    finally { setResponding(prev => ({ ...prev, [key]: null })); }
+  };
+
+  const respondJuryInvitation = async (notif: Notification, accept: boolean) => {
+    const meta = parseMeta(notif.meta); const invitationId = meta.invitation_id;
+    if (!invitationId) return;
+    const key = notif.id;
+    setResponding(prev => ({ ...prev, [key]: accept ? "accept" : "decline" }));
+    try {
+      const res = await fetch(`${API_URL}/api/jury-invitations/respond`, { method: "POST", headers: authHeader(), body: JSON.stringify({ invitation_id: invitationId, accept }) });
+      if (!res.ok) {
+        const err = await res.json();
+        const detail: string = err.detail ?? "Response error";
+        if (detail.includes("вже") || detail.includes("already")) {
+          setIsInactive(prev => ({ ...prev, [key]: "already_jury" }));
+          await markRead(notif.id);
+          return;
+        }
+        alert(detail);
+        return;
+      }
       setResponded(prev => ({ ...prev, [key]: accept ? "accepted" : "declined" }));
       await markRead(notif.id);
     } catch { alert("Server connection error"); }
@@ -1144,8 +1249,11 @@ export default function ProfilePage() {
             key={notif.id} notif={notif} idx={i}
             responded={responded[notif.id]}
             responding={responding[notif.id] ?? null}
+            inactive={isInactive[notif.id]}
             onAccept={() => respondInvitation(notif, true)}
             onDecline={() => respondInvitation(notif, false)}
+            onJuryAccept={() => respondJuryInvitation(notif, true)}
+            onJuryDecline={() => respondJuryInvitation(notif, false)}
             onMarkRead={() => markRead(notif.id)}
             onGoTeam={(teamId) => router.push("/teams/" + teamId)}
             />

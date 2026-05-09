@@ -38,7 +38,8 @@ const gradients = [
 "from-cyan-500 to-cyan-700",
 ];
 
-const RESTRICTED_ROLES = ["admin", "jury",];
+// Superadmin can manage teams like a regular user; only jury/admin are restricted
+const RESTRICTED_ROLES = ["jury"];
 
 export default function TeamsPage() {
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -231,6 +232,7 @@ export default function TeamsPage() {
         };
 
         const isRestricted = userRole ? RESTRICTED_ROLES.includes(userRole) : false;
+        const isSuperAdmin = userRole === "superadmin";
 
         if (isLoading || !user) {
             return (
@@ -439,71 +441,73 @@ export default function TeamsPage() {
                     </div>
                     <div>
                     <h2 className="text-sm font-black uppercase tracking-widest text-(--t1)">
-                    {locale === "en" ? "My Teams" : "Мої команди"}
-                    </h2>
-                    <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest">
-                    {(loadingMy || loadingMember)
-                        ? (locale === "en" ? "Loading..." : "Завантаження...")
-                        : `${myTeams.length + memberTeams.length} ${locale === "en" ? "team(s)" : `команд${(myTeams.length + memberTeams.length) === 1 ? "а" : ""}`}`}
-                        </p>
-                        </div>
-                        </div>
+                    {isSuperAdmin
+                        ? (locale === "en" ? "My Teams (Super Admin)" : "Мої команди (Супер Адмін)")
+                        : (locale === "en" ? "My Teams" : "Мої команди")}
+                        </h2>
+                        <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest">
+                        {(loadingMy || loadingMember)
+                            ? (locale === "en" ? "Loading..." : "Завантаження...")
+                            : `${myTeams.length + memberTeams.length} ${locale === "en" ? "team(s)" : `команд${(myTeams.length + memberTeams.length) === 1 ? "а" : ""}`}`}
+                            </p>
+                            </div>
+                            </div>
 
-                        {/* My Teams list */}
-                        <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-xl border border-(--brd) p-4 sm:p-6 flex flex-col gap-3">
-                        {(loadingMy || loadingMember) ? (
-                            <div className="flex flex-col items-center justify-center py-10 gap-3">
-                            <Loader className="w-7 h-7 text-blue-600 animate-spin" />
-                            <p className="text-[11px] font-black uppercase tracking-widest text-(--t2)">
-                            {locale === "en" ? "Loading..." : "Завантаження..."}
-                            </p>
-                            </div>
-                        ) : (myTeams.length === 0 && memberTeams.length === 0) ? (
-                            <div className="flex flex-col items-center justify-center py-8 text-center">
-                            <div className="w-14 h-14 rounded-full bg-amber-500/10 border-2 border-amber-500/20 flex items-center justify-center mb-3">
-                            <Star size={24} className="text-amber-500/50" />
-                            </div>
-                            <p className="text-sm font-black text-(--t1) mb-1">
-                            {locale === "en" ? "No teams yet" : "Ви ще не маєте команд"}
-                            </p>
-                            <p className="text-[11px] text-(--t2)">
-                            {locale === "en" ? "Create your first team below!" : "Створіть свою першу команду!"}
-                            </p>
-                            </div>
-                        ) : (
-                            <>
-                            {myTeams.map((team, idx) => (
-                                <MyTeamRow
-                                key={team.id}
-                                team={team}
-                                idx={idx}
-                                onOpen={() => router.push(`/teams/${team.id}`)}
-                                onEdit={() => router.push(`/teams/${team.id}/edit`)}
-                                onDelete={() => { setDeleteError(""); setDeleteTarget(team); }}
-                                />
-                            ))}
-                            {memberTeams.map((team, idx) => (
-                                <MemberTeamRow
-                                key={team.id}
-                                team={team}
-                                idx={idx}
-                                onOpen={() => router.push(`/teams/${team.id}`)}
-                                onLeave={() => { setLeaveError(""); setLeaveTarget(team); }}
-                                />
-                            ))}
-                            </>
-                        )}
+                            {/* My Teams list */}
+                            <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-xl border border-(--brd) p-4 sm:p-6 flex flex-col gap-3">
+                            {(loadingMy || loadingMember) ? (
+                                <div className="flex flex-col items-center justify-center py-10 gap-3">
+                                <Loader className="w-7 h-7 text-blue-600 animate-spin" />
+                                <p className="text-[11px] font-black uppercase tracking-widest text-(--t2)">
+                                {locale === "en" ? "Loading..." : "Завантаження..."}
+                                </p>
+                                </div>
+                            ) : (myTeams.length === 0 && memberTeams.length === 0) ? (
+                                <div className="flex flex-col items-center justify-center py-8 text-center">
+                                <div className="w-14 h-14 rounded-full bg-amber-500/10 border-2 border-amber-500/20 flex items-center justify-center mb-3">
+                                <Star size={24} className="text-amber-500/50" />
+                                </div>
+                                <p className="text-sm font-black text-(--t1) mb-1">
+                                {locale === "en" ? "No teams yet" : "Ви ще не маєте команд"}
+                                </p>
+                                <p className="text-[11px] text-(--t2)">
+                                {locale === "en" ? "Create your first team below!" : "Створіть свою першу команду!"}
+                                </p>
+                                </div>
+                            ) : (
+                                <>
+                                {myTeams.map((team, idx) => (
+                                    <MyTeamRow
+                                    key={team.id}
+                                    team={team}
+                                    idx={idx}
+                                    onOpen={() => router.push(`/teams/${team.id}`)}
+                                    onEdit={() => router.push(`/teams/${team.id}/edit`)}
+                                    onDelete={() => { setDeleteError(""); setDeleteTarget(team); }}
+                                    />
+                                ))}
+                                {memberTeams.map((team, idx) => (
+                                    <MemberTeamRow
+                                    key={team.id}
+                                    team={team}
+                                    idx={idx}
+                                    onOpen={() => router.push(`/teams/${team.id}`)}
+                                    onLeave={() => { setLeaveError(""); setLeaveTarget(team); }}
+                                    />
+                                ))}
+                                </>
+                            )}
 
-                        {/* Create button — always at the bottom */}
-                        <button
-                        onClick={() => router.push("/register_team")}
-                        className="mt-1 flex items-center justify-center gap-2 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl px-5 py-4 hover:bg-blue-700 shadow-lg shadow-blue-600/25 active:scale-95 transition-all w-full group"
-                        >
-                        <Plus size={15} className="group-hover:rotate-90 transition-transform duration-300" />
-                        {t.teams.create}
-                        </button>
-                        </div>
-                        </div>
+                            {/* Create button — always at the bottom */}
+                            <button
+                            onClick={() => router.push("/register_team")}
+                            className="mt-1 flex items-center justify-center gap-2 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl px-5 py-4 hover:bg-blue-700 shadow-lg shadow-blue-600/25 active:scale-95 transition-all w-full group"
+                            >
+                            <Plus size={15} className="group-hover:rotate-90 transition-transform duration-300" />
+                            {t.teams.create}
+                            </button>
+                            </div>
+                            </div>
                 )}
 
                 </div>
