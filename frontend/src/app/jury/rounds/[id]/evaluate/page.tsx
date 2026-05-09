@@ -391,6 +391,7 @@ export default function JuryEvaluationPage() {
     const [redistributing, setRedistributing] = useState(false);
     const [showAllInfo, setShowAllInfo] = useState(false);
     const [readmeModal, setReadmeModal] = useState<string | null>(null);
+    const [mobileTab, setMobileTab] = useState<"list" | "form">("list");
     const saveMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const isJury     = user?.role === "jury";
@@ -699,6 +700,8 @@ export default function JuryEvaluationPage() {
                 input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.25); box-shadow: 0 2px 10px rgba(59,130,246,0.45); }
                 input[type=range]:active::-webkit-slider-thumb { transform: scale(0.92); transition: transform 0.12s cubic-bezier(0.34, 1.2, 0.64, 1), box-shadow 0.1s ease; }
                 input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--t1); border: 3px solid var(--card); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.25); transition: transform 0.25s cubic-bezier(0.34, 1.4, 0.64, 1); }
+                html, body { max-width: 100vw; overflow-x: hidden; }
+                @media (min-width: 480px) { .xs\\:inline { display: inline !important; } }
                 `}} />
 
                 {/* Watermark */}
@@ -714,24 +717,24 @@ export default function JuryEvaluationPage() {
                 <Sidebar />
                 </div>
 
-                <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                <main className="flex-1 flex flex-col min-w-0 overflow-hidden max-w-full">
                 <MobileHeader
                 onOpenSidebar={() => setIsMobileSidebarOpen(true)}
                 title="Оцінювання"
                 icon={<Star size={18} className="text-blue-600" />}
                 />
 
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 relative z-10">
+                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 relative z-10 w-full max-w-full">
 
                 {/* Breadcrumb */}
-                <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2) flex-wrap">
-                <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
-                <ChevronRight size={10} />
-                <button onClick={() => round && router.push(`/tournaments/${round.tournament_id}`)} className="hover:text-blue-600 transition-colors truncate max-w-[100px]">
+                <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2) flex-wrap overflow-hidden">
+                <a href={"/"} onClick={(e) => { e.preventDefault(); router.push("/"); }} className="hover:text-blue-600 transition-colors flex-shrink-0">Головна</a>
+                <ChevronRight size={10} className="flex-shrink-0" />
+                <button onClick={() => round && router.push(`/tournaments/${round.tournament_id}`)} className="hover:text-blue-600 transition-colors truncate max-w-[80px]">
                 {round?.tournament_name ?? "Турнір"}
                 </button>
-                <ChevronRight size={10} />
-                <span className="text-(--t1) truncate max-w-[120px]">{round ? `Раунд ${round.number}` : "..."} — Оцінювання</span>
+                <ChevronRight size={10} className="flex-shrink-0" />
+                <span className="text-(--t1) truncate max-w-[100px]">{round ? `Раунд ${round.number}` : "..."} — Оцінювання</span>
                 </nav>
 
                 <div className="flex items-center gap-3 mb-6">
@@ -762,10 +765,37 @@ export default function JuryEvaluationPage() {
                     </div>
                     </div>
                 ) : (
-                    <div className="flex flex-col xl:flex-row gap-5 items-start w-full">
+                    <div className="flex flex-col xl:flex-row gap-4 w-full">
+
+                    {/* ══ Mobile tab switcher ══════════════════════════════════════ */}
+                    <div className="xl:hidden w-full flex rounded-2xl border border-(--brd) bg-(--card) p-1 gap-1">
+                    <button
+                    onClick={() => setMobileTab("list")}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                        mobileTab === "list" ? "bg-blue-600 text-white shadow-md" : "text-(--t2) hover:text-(--t1)"
+                    }`}
+                    >
+                    <Users size={13} /> Роботи ({works.length})
+                    </button>
+                    <button
+                    onClick={() => setMobileTab("form")}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                        mobileTab === "form" ? "bg-blue-600 text-white shadow-md" : "text-(--t2) hover:text-(--t1)"
+                    }`}
+                    >
+                    <Star size={13} />
+                    <span className="truncate max-w-[110px]">{activeWork ? activeWork.team_name : "Оцінка"}</span>
+                    {activeWork && (
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                            activeWork.status === "evaluated" ? "bg-green-500" :
+                            activeWork.status === "in_progress" ? "bg-amber-500" : "bg-(--brd)"
+                        }`} />
+                    )}
+                    </button>
+                    </div>
 
                     {/* ══ LEFT — Submission list + Stats ═══════════════════════════ */}
-                    <div className="w-full xl:w-[320px] flex-shrink-0 flex flex-col gap-4">
+                    <div className={`w-full xl:w-[320px] flex-shrink-0 flex-col gap-4 ${mobileTab === "list" ? "flex" : "hidden xl:flex"}`}>
 
                     {/* Stats card */}
                     <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm overflow-hidden">
@@ -847,7 +877,7 @@ export default function JuryEvaluationPage() {
                             key={work.id}
                             work={work}
                             isActive={activeIdx === idx}
-                            onSelect={() => setActiveIdx(idx)}
+                            onSelect={() => { setActiveIdx(idx); setMobileTab("form"); }}
                             juryId={user?.id ?? ""}
                             />
                         ))
@@ -858,20 +888,98 @@ export default function JuryEvaluationPage() {
                     </div>
 
                     {/* ══ RIGHT — Evaluation form ═══════════════════════════════════ */}
-                    <div className="flex-1 min-w-0 flex flex-col gap-4">
+                    <div className={`flex-1 min-w-0 flex-col gap-4 ${mobileTab === "form" ? "flex" : "hidden xl:flex"}`}>
 
                     {activeWork ? (
                         <>
-                        {/* ── Work header row: main info card + score island ── */}
+                        {/* ── Work header: team card + score island ── */}
                         <div className="cdIn flex flex-col sm:flex-row gap-3 items-stretch">
 
                         {/* MAIN INFO CARD */}
                         <div className="flex-1 min-w-0 bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm overflow-hidden">
-                        <div className="flex items-stretch">
 
+                        {/* ── Mobile layout ── */}
+                        <div className="sm:hidden">
+                        {/* Top: avatar + team name + score */}
+                        <div className="flex items-center gap-3 p-4">
+                        <div className="flex-shrink-0 w-12 h-12 rounded-xl overflow-hidden border border-(--brd)">
+                        {activeWork.team_avatar_url
+                            ? <img src={activeWork.team_avatar_url} alt={activeWork.team_name} className="w-full h-full object-cover" />
+                            : <div className="w-full h-full bg-blue-600/10 flex items-center justify-center text-blue-600 font-black text-xl">{activeWork.team_name.charAt(0).toUpperCase()}</div>
+                        }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                        <h2 className="font-black text-(--t1) text-base uppercase tracking-tight truncate">{activeWork.team_name}</h2>
+                        {activeWork.team_org && <p className="text-[10px] font-bold text-(--t2) truncate">{activeWork.team_org}</p>}
+                        {(activeWork as any).team_leader && (
+                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                            <span className="text-[10px] font-bold text-(--t2) truncate max-w-[120px]">{(activeWork as any).team_leader}</span>
+                            <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">капітан</span>
+                            </div>
+                        )}
+                        </div>
+                        {/* Inline score badge */}
+                        <div className={`flex-shrink-0 flex flex-col items-center justify-center w-14 h-14 rounded-2xl border font-black text-2xl ${
+                            activeTotal >= 80 ? "text-green-500 bg-green-500/10 border-green-500/20" :
+                            activeTotal >= 50 ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
+                            activeTotal >  0  ? "text-amber-500 bg-amber-500/10 border-amber-500/20" :
+                            "text-(--t2) bg-(--bg) border-(--brd)"
+                        }`} style={{ fontVariantNumeric: "tabular-nums" }}>
+                        {activeWork.criteria.every(c => c.score !== "") || activeTotal > 0 ? activeTotal : "—"}
+                        </div>
+                        </div>
+                        {/* Bottom: link buttons row — icon-only on mobile, icon+text on sm+ */}
+                        <div className="flex items-center gap-2 px-4 pb-4 border-t border-(--brd) pt-3">
+                        {activeWork.github_url ? (
+                            <a href={activeWork.github_url} target="_blank" rel="noopener noreferrer" title="GitHub"
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:text-blue-600 hover:border-blue-600/40 active:scale-95 transition-all min-w-0">
+                            <Github size={13} className="flex-shrink-0" /><span className="hidden xs:inline truncate">GitHub</span>
+                            </a>
+                        ) : (
+                            <span className="flex-1 flex items-center justify-center py-2.5 rounded-xl border border-(--brd) text-(--t2) opacity-30 cursor-not-allowed min-w-0">
+                            <Github size={13} />
+                            </span>
+                        )}
+                        {activeWork.youtube_url ? (
+                            <a href={activeWork.youtube_url} target="_blank" rel="noopener noreferrer" title="YouTube"
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:text-red-500 hover:border-red-500/40 active:scale-95 transition-all min-w-0">
+                            <Video size={13} className="flex-shrink-0" /><span className="hidden xs:inline truncate">YouTube</span>
+                            </a>
+                        ) : (
+                            <span className="flex-1 flex items-center justify-center py-2.5 rounded-xl border border-(--brd) text-(--t2) opacity-30 cursor-not-allowed min-w-0">
+                            <Video size={13} />
+                            </span>
+                        )}
+                        {activeWork.live_url ? (
+                            <a href={activeWork.live_url} target="_blank" rel="noopener noreferrer" title="Live Demo"
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:text-green-500 hover:border-green-500/40 active:scale-95 transition-all min-w-0">
+                            <Zap size={13} className="flex-shrink-0" /><span className="hidden xs:inline truncate">Live</span>
+                            </a>
+                        ) : (
+                            <span className="flex-1 flex items-center justify-center py-2.5 rounded-xl border border-(--brd) text-(--t2) opacity-30 cursor-not-allowed min-w-0">
+                            <Zap size={13} />
+                            </span>
+                        )}
+                        {(() => {
+                            const rf = (activeWork.files ?? []).find(f => f.name?.toLowerCase().includes("readme") && f.url);
+                            return rf?.url ? (
+                                <button onClick={() => setReadmeModal(rf.url!)} title="README"
+                                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:text-blue-600 hover:border-blue-600/40 active:scale-95 transition-all min-w-0">
+                                <Eye size={13} className="flex-shrink-0" /><span className="hidden xs:inline truncate">README</span>
+                                </button>
+                            ) : (
+                                <span className="flex-1 flex items-center justify-center py-2.5 rounded-xl border border-(--brd) text-(--t2) opacity-30 cursor-not-allowed min-w-0">
+                                <Eye size={13} />
+                                </span>
+                            );
+                        })()}
+                        </div>
+                        </div>
+
+                        {/* ── Desktop layout ── */}
+                        <div className="hidden sm:flex items-stretch">
                         {/* LEFT — avatar + team info */}
                         <div className="flex items-center gap-4 p-5 sm:p-6 flex-1 min-w-0">
-                        {/* Large avatar */}
                         <div className="flex-shrink-0">
                         <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-(--brd) shadow-md">
                         {activeWork.team_avatar_url
@@ -880,56 +988,31 @@ export default function JuryEvaluationPage() {
                         }
                         </div>
                         </div>
-                        {/* Team info */}
                         <div className="flex flex-col justify-center gap-1 min-w-0">
-                        <h2 className="font-black text-(--t1) text-lg sm:text-xl uppercase tracking-tight truncate">
-                        {activeWork.team_name}
-                        </h2>
-                        {activeWork.team_org && (
-                            <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider truncate">
-                            {activeWork.team_org}
-                            </p>
-                        )}
+                        <h2 className="font-black text-(--t1) text-xl uppercase tracking-tight truncate">{activeWork.team_name}</h2>
+                        {activeWork.team_org && <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider truncate">{activeWork.team_org}</p>}
                         {(activeWork as any).team_leader && (
                             <div className="flex items-center gap-1.5 mt-0.5">
                             <Shield size={11} className="text-(--t2) flex-shrink-0" />
-                            <span className="text-[11px] font-bold text-(--t2) truncate">
-                            {(activeWork as any).team_leader}
-                            </span>
+                            <span className="text-[11px] font-bold text-(--t2) truncate">{(activeWork as any).team_leader}</span>
                             <span className="ml-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-400 border border-orange-500/20">капітан</span>
                             </div>
                         )}
                         <div className="flex items-center gap-1.5 mt-0.5">
                         <Clock size={11} className="text-(--t2) flex-shrink-0" />
-                        <span className="text-[11px] font-bold text-(--t2)">
-                        Здано: {fmtDate(activeWork.submitted_at)}
-                        </span>
+                        <span className="text-[11px] font-bold text-(--t2)">Здано: {fmtDate(activeWork.submitted_at)}</span>
                         </div>
                         </div>
                         </div>
-
-                        {/* RIGHT — video preview + 3 buttons */}
+                        {/* RIGHT — video + buttons */}
                         <div className="flex items-stretch border-l border-(--brd)">
-
-                        {/* Video preview + YouTube button below */}
                         <div className="flex flex-col items-center justify-center p-3 bg-(--bg)/40 gap-2">
                         <div className="w-28 h-[72px] rounded-xl overflow-hidden border border-(--brd) shadow-sm relative flex-shrink-0">
                         {activeWork.youtube_url ? (
-                            <a
-                            href={activeWork.youtube_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block w-full h-full group"
-                            >
-                            <img
-                            src={`https://img.youtube.com/vi/${activeWork.youtube_url.match(/(?:v=|youtu\.be\/)([^&\n?#]+)/)?.[1]}/hqdefault.jpg`}
-                            alt="preview"
-                            className="w-full h-full object-cover"
-                            />
+                            <a href={activeWork.youtube_url} target="_blank" rel="noopener noreferrer" className="block w-full h-full group">
+                            <img src={`https://img.youtube.com/vi/${activeWork.youtube_url.match(/(?:v=|youtu\.be\/)([^&\n?#]+)/)?.[1]}/hqdefault.jpg`} alt="preview" className="w-full h-full object-cover" />
                             <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-7 h-7 rounded-full bg-black/60 flex items-center justify-center">
-                            <Video size={12} className="text-white ml-0.5" />
-                            </div>
+                            <div className="w-7 h-7 rounded-full bg-black/60 flex items-center justify-center"><Video size={12} className="text-white ml-0.5" /></div>
                             </div>
                             </a>
                         ) : (
@@ -939,80 +1022,39 @@ export default function JuryEvaluationPage() {
                             </div>
                         )}
                         </div>
-                        {/* YouTube button below preview */}
                         {activeWork.youtube_url ? (
-                            <a
-                            href={activeWork.youtube_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-(--bg) border border-(--brd) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 transition-all active:scale-95"
-                            >
-                            <Video size={10} /> YouTube
-                            </a>
+                            <a href={activeWork.youtube_url} target="_blank" rel="noopener noreferrer" className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-(--bg) border border-(--brd) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 transition-all active:scale-95"><Video size={10} /> YouTube</a>
                         ) : (
-                            <span className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-(--brd) text-(--t2) opacity-30 font-black text-[9px] uppercase tracking-widest cursor-not-allowed">
-                            <Video size={10} /> YouTube
-                            </span>
+                            <span className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-(--brd) text-(--t2) opacity-30 font-black text-[9px] uppercase tracking-widest cursor-not-allowed"><Video size={10} /> YouTube</span>
                         )}
                         </div>
-
-                        {/* 3 action buttons — GitHub / Live Demo / README */}
                         <div className="flex flex-col justify-center gap-2 px-4 py-4 min-w-[120px]">
-                        {/* Button 1 — GitHub */}
                         {activeWork.github_url ? (
-                            <a
-                            href={activeWork.github_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"
-                            >
-                            <Github size={11} /> GitHub
-                            </a>
+                            <a href={activeWork.github_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"><Github size={11} /> GitHub</a>
                         ) : (
-                            <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed">
-                            <Github size={11} /> GitHub
-                            </span>
+                            <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed"><Github size={11} /> GitHub</span>
                         )}
-                        {/* Button 2 — Live Demo */}
                         {activeWork.live_url ? (
-                            <a
-                            href={activeWork.live_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-green-500/40 hover:text-green-500 transition-all active:scale-95"
-                            >
-                            <Zap size={11} /> Live Demo
-                            </a>
+                            <a href={activeWork.live_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-green-500/40 hover:text-green-500 transition-all active:scale-95"><Zap size={11} /> Live Demo</a>
                         ) : (
-                            <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed">
-                            <Zap size={11} /> Live Demo
-                            </span>
+                            <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed"><Zap size={11} /> Live Demo</span>
                         )}
-                        {/* Button 3 — README modal */}
                         {(() => {
-                            const readmeFile = (activeWork.files ?? []).find(f => f.name?.toLowerCase().includes("readme") && f.url);
-                            const readmeUrl = readmeFile?.url ?? null;
-                            return readmeUrl ? (
-                                <button
-                                onClick={() => setReadmeModal(readmeUrl)}
-                                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"
-                                >
-                                <Eye size={11} /> README
-                                </button>
+                            const rf = (activeWork.files ?? []).find(f => f.name?.toLowerCase().includes("readme") && f.url);
+                            return rf?.url ? (
+                                <button onClick={() => setReadmeModal(rf.url!)} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"><Eye size={11} /> README</button>
                             ) : (
-                                <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed">
-                                <Eye size={11} /> README
-                                </span>
+                                <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed"><Eye size={11} /> README</span>
                             );
                         })()}
                         </div>
+                        </div>
+                        </div>
 
                         </div>
-                        </div>
-                        </div>
 
-                        {/* SCORE ISLAND — separate card */}
-                        <div className="flex-shrink-0 bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm flex flex-col items-center justify-center px-6 py-5 gap-2" style={{ width: 140, minWidth: 140 }}>
+                        {/* SCORE ISLAND — hidden on mobile (shown inline above), visible on sm+ */}
+                        <div className="hidden sm:flex flex-shrink-0 bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm flex-col items-center justify-center px-6 py-5 gap-2" style={{ width: 140, minWidth: 140 }}>
                         <div className={`text-4xl font-black rounded-2xl border flex items-center justify-center ${
                             activeTotal >= 80 ? "text-green-500 bg-green-500/10 border-green-500/20" :
                             activeTotal >= 50 ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
@@ -1124,12 +1166,13 @@ export default function JuryEvaluationPage() {
                         </div>
 
                         {/* Action bar */}
-                        <div className="cdIn flex flex-col sm:flex-row items-start sm:items-center gap-3" style={{ animationDelay: "130ms" }}>
-                        {/* Save button */}
+                        <div className="cdIn flex flex-col gap-3" style={{ animationDelay: "130ms" }}>
+                        {/* Save + Cancel */}
+                        <div className="flex items-center gap-3">
                         <button
                         onClick={handleSave}
                         disabled={saving}
-                        className={`flex items-center gap-2 px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all active:scale-95 shadow-lg ${
+                        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all active:scale-95 shadow-lg ${
                             saving
                             ? "bg-(--brd) text-(--t2) cursor-not-allowed shadow-none"
                             : allCriteriaFilled
@@ -1144,43 +1187,36 @@ export default function JuryEvaluationPage() {
                             : <><Save size={14} /> Зберегти оцінку</>
                         }
                         </button>
-
-                        {/* Cancel (reset to saved) */}
                         <button
                         onClick={() => { fetchData(); setSaveMsg(null); }}
-                        className="flex items-center gap-2 px-5 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest border border-(--brd) bg-(--bg) text-(--t2) hover:bg-(--card) hover:text-(--t1) active:scale-95 transition-all"
+                        className="flex items-center gap-2 px-4 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest border border-(--brd) bg-(--bg) text-(--t2) hover:bg-(--card) hover:text-(--t1) active:scale-95 transition-all"
                         >
-                        <RefreshCw size={14} /> Відмінити
+                        <RefreshCw size={14} /><span className="hidden sm:inline"> Відмінити</span>
                         </button>
-
-                        {/* Status message */}
                         {saveMsg && (
                             <div className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest ${
                                 saveMsg.type === "ok"
                                 ? "bg-green-500/10 border border-green-500/20 text-green-500"
                                 : "bg-red-500/10 border border-red-500/20 text-red-500"
                             }`}>
-                            {saveMsg.type === "ok"
-                                ? <CheckCircle2 size={13} />
-                                : <AlertCircle size={13} />
-                            }
-                            {saveMsg.text}
+                            {saveMsg.type === "ok" ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+                            <span className="hidden sm:inline">{saveMsg.text}</span>
                             </div>
                         )}
-
-                        {/* Navigate prev/next */}
-                        <div className="flex items-center gap-2 ml-auto">
+                        </div>
+                        {/* Prev / Next — full width on mobile */}
+                        <div className="flex items-center gap-2">
                         <button
                         onClick={() => setActiveIdx(i => (i !== null && i > 0) ? i - 1 : i)}
                         disabled={activeIdx === 0 || activeIdx === null}
-                        className="px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all disabled:opacity-30"
+                        className="flex-1 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all disabled:opacity-30 text-center"
                         >
                         ← Попередня
                         </button>
                         <button
                         onClick={() => setActiveIdx(i => (i !== null && i < works.length - 1) ? i + 1 : i)}
                         disabled={activeIdx === works.length - 1 || activeIdx === null}
-                        className="px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all disabled:opacity-30"
+                        className="flex-1 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all disabled:opacity-30 text-center"
                         >
                         Наступна →
                         </button>

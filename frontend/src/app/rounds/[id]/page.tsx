@@ -416,24 +416,24 @@ export default function RoundPage() {
             if (isJuryInvited) {
                 return (
                     <Card>
-                    <SectionLabel icon={<Gavel size={13} />}>Панель журі</SectionLabel>
-                    <div className="flex flex-col gap-3">
-                    <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-green-600 text-xs font-bold">
-                    <CheckCircle2 size={13} className="flex-shrink-0" />
-                    Ви запрошені як журі для цього турніру
-                    </div>
-                    {roundActive ? (
-                        <button onClick={() => router.push(`/jury/rounds/${id}/evaluate`)}
-                        className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all">
-                        <Gavel size={15} /> Оцінити роботи
-                        </button>
-                    ) : (
-                        <InfoBanner icon={<Clock size={16} />}>
-                        Оцінювання буде доступне після початку активної фази раунду.
-                        Поточний статус: <b>{round.status ?? "невідомо"}</b>
-                        </InfoBanner>
-                    )}
-                    </div>
+                        <SectionLabel icon={<Gavel size={13} />}>Панель журі</SectionLabel>
+                        <div className="flex flex-col gap-3">
+                            <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-green-600 text-xs font-bold">
+                                <CheckCircle2 size={13} className="flex-shrink-0" />
+                                Ви запрошені як журі для цього турніру
+                            </div>
+                            {(roundActive || round.status === "finished" || round.status === "closed" || isEnded) ? (
+                                <a href={`/jury/rounds/${id}/evaluate`} onClick={(e) => { e.preventDefault(); router.push(`/jury/rounds/${id}/evaluate`); }}
+                                    className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all">
+                                    <Gavel size={15} /> Оцінити роботи
+                                </a>
+                            ) : (
+                                <InfoBanner icon={<Clock size={16} />}>
+                                    Оцінювання буде доступне після початку активної фази раунду.
+                                    Поточний статус: <b>{round.status ?? "невідомо"}</b>
+                                </InfoBanner>
+                            )}
+                        </div>
                     </Card>
                 );
             }
