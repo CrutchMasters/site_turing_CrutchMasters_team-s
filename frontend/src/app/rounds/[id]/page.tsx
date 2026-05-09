@@ -307,7 +307,9 @@ export default function RoundPage() {
     /* ── loading guards ── */
     if (authLoading || loading) return (
         <div className="flex min-h-screen bg-(--bg)">
+        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <Sidebar />
+        </div>
         <main className="flex-1 flex items-center justify-center">
         <Loader2 size={32} className="animate-spin text-(--t2)" />
         </main>
@@ -316,7 +318,9 @@ export default function RoundPage() {
 
     if (!round) return (
         <div className="flex min-h-screen bg-(--bg)">
+        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <Sidebar />
+        </div>
         <main className="flex-1 flex flex-col items-center justify-center gap-4">
         <AlertCircle size={28} className="text-(--t2)" />
         <p className="text-(--t2) font-bold">Раунд не знайдено</p>
@@ -568,12 +572,13 @@ export default function RoundPage() {
         <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] blur-sm ${dark ? "invert" : ""}`} />
         </div>
 
-        <Sidebar />
-
         {isMobileSidebarOpen && (
             <div className="fixed inset-0 bg-black/50 z-40 lg:hidden"
             onClick={() => setIsMobileSidebarOpen(false)} />
         )}
+        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+        <Sidebar />
+        </div>
 
         <main className="flex-1 flex flex-col overflow-y-auto relative z-10">
         <MobileHeader
