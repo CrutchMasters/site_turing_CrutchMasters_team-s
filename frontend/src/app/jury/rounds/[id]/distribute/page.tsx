@@ -245,11 +245,12 @@ export default function DistributePage() {
     return (
         <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
             {/* Mobile sidebar overlay */}
-            
-            <Sidebar
-        mobileOpen={isMobileSidebarOpen}
-        onMobileClose={() => setIsMobileSidebarOpen(false)}
-      />
+            {isMobileSidebarOpen && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+            )}
+            <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+                <Sidebar />
+            </div>
 
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 <MobileHeader
@@ -262,7 +263,7 @@ export default function DistributePage() {
 
                     {/* Breadcrumb */}
                     <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2) flex-wrap">
-                        <a href={"/"} onClick={(e) => { e.preventDefault(); router.push("/"); }} className="hover:text-blue-600 transition-colors">Головна</a>
+                        <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
                         <ChevronRight size={10} />
                         <button onClick={() => round && router.push(`/tournaments/${round.tournament_id}`)} className="hover:text-blue-600 transition-colors truncate max-w-[100px]">
                             {round?.tournament_name ?? "Турнір"}

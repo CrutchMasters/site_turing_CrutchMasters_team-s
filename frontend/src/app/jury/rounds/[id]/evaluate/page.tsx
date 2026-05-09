@@ -86,10 +86,9 @@ function computeTotal(criteria: CriterionScore[]): number {
 
 function fmtDate(iso?: string) {
     if (!iso) return "—";
-    return new Date(iso).toLocaleDateString("uk-UA", {
+    return new Date(iso).toLocaleString("uk-UA", {
         day: "numeric", month: "short", year: "numeric",
-        hour: "2-digit", minute: "2-digit",
-    });
+        hour: "2-digit", minute: "2-digit" });
 }
 
 // ── Readme Modal ──────────────────────────────────────────────────────────────
@@ -765,29 +764,6 @@ export default function JuryEvaluationPage() {
                     <p className="text-[11px] font-black uppercase tracking-widest text-(--t2)">Завантаження...</p>
                     </div>
                     </div>
-                ) : round && round.status !== "finished" ? (
-                    /* Round not finished — block evaluation */
-                    <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2rem] border border-amber-500/30 shadow-sm flex flex-col items-center justify-center py-20 text-center gap-5 px-8">
-                    <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-                    <Clock size={30} className="text-amber-500" />
-                    </div>
-                    <div>
-                    <p className="font-black text-(--t1) text-lg uppercase tracking-tight mb-2">
-                    Раунд ще не завершено
-                    </p>
-                    <p className="text-sm text-(--t2) max-w-sm leading-relaxed">
-                    Оцінювання робіт відкриється після закінчення раунду.
-                    {round.end_at && (
-                        <span className="block mt-2 font-bold text-amber-500">
-                        Кінець раунду: {fmtDate(round.end_at)}
-                        </span>
-                    )}
-                    </p>
-                    </div>
-                    <div className="px-5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-500">
-                    Статус раунду: {round.status === "active" ? "Активний" : round.status === "pending" ? "Очікується" : round.status}
-                    </div>
-                    </div>
                 ) : (
                     <div className="flex flex-col xl:flex-row gap-4 w-full">
 
@@ -859,12 +835,12 @@ export default function JuryEvaluationPage() {
                     {/* Admin redistribute */}
                     {isAdmin && (
                         <div className="px-4 pb-4 flex flex-col gap-2">
-                        <a
-                        href={`/jury/rounds/${roundId}/distribute`} onClick={(e) => { e.preventDefault(); router.push(`/jury/rounds/${roundId}/distribute`); }}
+                        <button
+                        onClick={() => router.push(`/jury/rounds/${roundId}/distribute`)}
                         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-blue-600/30 bg-blue-600/10 text-blue-600 font-black text-[10px] uppercase tracking-widest hover:bg-blue-600/20 active:scale-95 transition-all"
                         >
                         <Shuffle size={12} /> Ручний розподіл робіт
-                        </a>
+                        </button>
                         <button
                         onClick={handleRedistribute}
                         disabled={redistributing}
@@ -1279,4 +1255,3 @@ export default function JuryEvaluationPage() {
                 </div>
         );
 }
-

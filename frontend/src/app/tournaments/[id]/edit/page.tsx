@@ -45,19 +45,10 @@ interface RoundRow {
     attachments?: { id: string; name: string; url: string; type: string }[];
 }
 
-function toDateStr(iso?: string) {
-    if (!iso) return "";
-    return new Date(iso).toISOString().slice(0, 10);
-}
-function toTimeStr(iso?: string) {
-    if (!iso) return "";
-    return new Date(iso).toISOString().slice(11, 16);
-}
-function toIso(date: string, time: string) {
-    if (!date) return null;
-    const localStr = `${date}T${time || "00:00"}:00`;
-    return new Date(localStr).toISOString();
-}
+// Імпортуємо утиліти з lib/datetime для коректної роботи з часовими поясами.
+// isoToLocalDate/isoToLocalTime → конвертують UTC з БД у ЛОКАЛЬНИЙ час браузера для пікера.
+// localToIso → зворотна конвертація локального часу → UTC для збереження в БД.
+import { isoToLocalDate as toDateStr, isoToLocalTime as toTimeStr, localToIso as toIso } from "@/lib/datetime";
 
 async function getToken(): Promise<string> {
     const stored = typeof window !== "undefined" ? localStorage.getItem("access_token") ?? "" : "";
@@ -128,8 +119,6 @@ export default function TournamentEditPage() {
     const [initialRoundsData, setInitialRoundsData] = useState<Record<number, Partial<RoundData>>>({});
 
     const isAdmin = user?.role === "admin" || user?.role === "superadmin";
-    const isOwner = !!tourney && tourney.created_by === user?.id;
-    const canEdit = isAdmin || isOwner;
 
     const API_URL =
     typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -138,8 +127,8 @@ export default function TournamentEditPage() {
 
     useEffect(() => {
         if (!authLoading && !user) router.push("/login");
-        if (!authLoading && user && !loading && !canEdit) router.push("/tournaments");
-    }, [authLoading, user, loading, canEdit, router]);
+        if (!authLoading && user && !isAdmin) router.push("/tournaments");
+    }, [authLoading, user, isAdmin, router]);
 
         const fetchTourney = useCallback(async () => {
             if (!id) return;
@@ -407,7 +396,7 @@ export default function TournamentEditPage() {
                 <div className="min-h-screen bg-(--bg) flex items-center justify-center flex-col gap-4">
                 <Trophy size={48} className="text-(--t2) opacity-30" />
                 <p className="font-black text-(--t1) uppercase">{t.editTourney?.errNotFound ?? "Турнір не знайдено"}</p>
-                <a href={"/tournaments"} onClick={(e) => { e.preventDefault(); router.push("/tournaments"); }} className="text-blue-600 text-sm font-bold">{t.editTourney?.backToTournaments ?? "← До турнірів"}</a>
+                <button onClick={() => router.push("/tournaments")} className="text-blue-600 text-sm font-bold">{t.editTourney?.backToTournaments ?? "← До турнірів"}</button>
                 </div>
             );
         }
@@ -430,11 +419,12 @@ export default function TournamentEditPage() {
                 <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
                 </div>
 
-                
-                <Sidebar
-        mobileOpen={isMobileSidebarOpen}
-        onMobileClose={() => setIsMobileSidebarOpen(false)}
-      />
+                {isMobileSidebarOpen && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+                )}
+                <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+                <Sidebar />
+                </div>
 
                 <main className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
                 <MobileHeader
@@ -446,11 +436,11 @@ export default function TournamentEditPage() {
                 <div className="flex-1 p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
 
                 <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2) flex-wrap">
-                <a href={"/"} onClick={(e) => { e.preventDefault(); router.push("/"); }} className="hover:text-blue-600 transition-colors">{t.nav?.home ?? "Головна"}</a>
+                <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">{t.nav?.home ?? "Головна"}</button>
                 <ChevronRight size={10} />
-                <a href={"/tournaments"} onClick={(e) => { e.preventDefault(); router.push("/tournaments"); }} className="hover:text-blue-600 transition-colors">{t.editTourney?.breadcrumbTournaments ?? "Турніри"}</a>
+                <button onClick={() => router.push("/tournaments")} className="hover:text-blue-600 transition-colors">{t.editTourney?.breadcrumbTournaments ?? "Турніри"}</button>
                 <ChevronRight size={10} />
-                <a href={`/tournaments/${id}`} onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${id}`); }} className="hover:text-blue-600 transition-colors truncate max-w-[120px]">{tourney.name}</a>
+                <button onClick={() => router.push(`/tournaments/${id}`)} className="hover:text-blue-600 transition-colors truncate max-w-[120px]">{tourney.name}</button>
                 <ChevronRight size={10} />
                 <span className="text-(--t1)">{t.editTourney?.breadcrumbEdit ?? "Редагування"}</span>
                 </nav>
@@ -685,10 +675,10 @@ export default function TournamentEditPage() {
                     : <><Save size={15} /> {t.editTourney?.saveBtn ?? "Зберегти зміни"}</>
                 }
                 </button>
-                <a href={`/tournaments/${id}`} onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${id}`); }}
-                className="flex-1 px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all">
+                <button type="button" onClick={() => router.push(`/tournaments/${id}`)} disabled={saving}
+                className="flex-1 px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60">
                 {t.editTourney?.cancelBtn ?? "Скасувати"}
-                </a>
+                </button>
                 <button type="button" onClick={() => setShowDeleteModal(true)} disabled={saving || deleting}
                 className="flex items-center justify-center gap-2 px-6 py-4 bg-red-500/10 border border-red-500/30 text-red-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-500/20 hover:border-red-500/50 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
                 <Trash2 size={15} /> {t.editTourney?.deleteBtn ?? "Видалити"}

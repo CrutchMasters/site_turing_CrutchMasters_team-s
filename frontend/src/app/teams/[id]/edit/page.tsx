@@ -14,8 +14,11 @@ import AvatarEditorModal from "@/components/AvatarEditorModal";
 import {
     Users, Crown, ChevronRight, ArrowLeft, Loader,
     Save, Send, Pencil,
-    UserPlus, UserMinus, Search, Check, AlertCircle, X, Camera,
+    UserPlus, UserMinus, Search, Check, AlertCircle, X, Camera, ShieldOff,
 } from "lucide-react";
+
+// ─── Ролі, яким заборонено вступати в команди ─────────────────────────────────
+const RESTRICTED_ROLES = ["admin", "jury", "superadmin"];
 
 // ─── Discord SVG Icon ─────────────────────────────────────────────────────────
 function DiscordIcon({ size = 10, className = "" }: { size?: number; className?: string }) {
@@ -54,6 +57,22 @@ interface Team {
     created_at?: string;
 }
 
+// ─── Повідомлення про помилку для конкретного юзера у списку результатів ──────
+function RoleErrorBadge({ role }: { role: string }) {
+    const label =
+    role === "jury"
+    ? "Журі не можна додавати до команди"
+    : role === "admin"
+    ? "Адміністраторів не можна додавати до команди"
+    : "Цього користувача не можна додавати до команди";
+    return (
+        <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-red-500 bg-red-500/10 border border-red-500/20 rounded-lg px-2 py-1 flex-shrink-0">
+        <ShieldOff size={10} />
+        {label}
+        </span>
+    );
+}
+
 export default function EditTeamPage() {
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const router = useRouter();
@@ -77,199 +96,247 @@ export default function EditTeamPage() {
     const [telegramUrl, setTelegramUrl] = useState("");
     const [discordUrl, setDiscordUrl] = useState("");
 
-    const [teamAvatarUrl, setTeamAvatarUrl] = useState<string | null>(null);
-    const [showAvatarModal, setShowAvatarModal] = useState(false);
+    const draftKey = teamId ? `team_edit_draft_${teamId}` : null;
+    const saveDraft = () => {
+        if (!draftKey) return;
+        sessionStorage.setItem(draftKey, JSON.stringify({ name, citySchoolOrg, telegramUrl, discordUrl }));
+    };
+    const clearDraft = () => {
+        if (draftKey) sessionStorage.removeItem(draftKey);
+    };
 
-    const [memberSearch, setMemberSearch] = useState("");
-    const [searchResults, setSearchResults] = useState<TeamMember[]>([]);
-    const [isSearching, setIsSearching] = useState(false);
-    const [removingId, setRemovingId] = useState<string | null>(null);
-    const [addingId, setAddingId] = useState<string | null>(null);
-    const [confirmRemove, setConfirmRemove] = useState<TeamMember | null>(null);
-    const [inviteSent, setInviteSent] = useState<string | null>(null);
+        const [teamAvatarUrl, setTeamAvatarUrl] = useState<string | null>(null);
+        const [showAvatarModal, setShowAvatarModal] = useState(false);
 
-    useEffect(() => {
-        if (!authLoading && !user) router.push("/login");
-    }, [authLoading, user, router]);
+        const [memberSearch, setMemberSearch] = useState("");
+        const [searchResults, setSearchResults] = useState<TeamMember[]>([]);
+        const [isSearching, setIsSearching] = useState(false);
+        const [removingId, setRemovingId] = useState<string | null>(null);
+        const [addingId, setAddingId] = useState<string | null>(null);
+        const [confirmRemove, setConfirmRemove] = useState<TeamMember | null>(null);
+        const [inviteSent, setInviteSent] = useState<string | null>(null);
+
+        // ── Помилка на конкретного юзера (наприклад «jury не можна») ──────────────
+        const [perUserError, setPerUserError] = useState<Record<string, string>>({});
 
         useEffect(() => {
-            if (!user || !teamId) return;
-            const fetchTeam = async () => {
-                setIsLoading(true);
+            if (!authLoading && !user) router.push("/login");
+        }, [authLoading, user, router]);
+
+            useEffect(() => {
+                if (!user || !teamId) return;
+                const fetchTeam = async () => {
+                    setIsLoading(true);
+                    try {
+                        const { data: teamData, error: teamErr } = await supabase
+                        .from("teams")
+                        .select("id, name, city_school_org, captain_id, members_ids, telegram_url, discord_url, created_at, avatar_url")
+                        .eq("id", teamId)
+                        .single();
+
+                        if (teamErr || !teamData) throw new Error(t.editTeam.errLoadTeam);
+
+                        if (teamData.captain_id !== user.id) {
+                            router.push(`/teams/${teamId}`);
+                            return;
+                        }
+
+                        setTeam(teamData);
+                        setTeamAvatarUrl(teamData.avatar_url ?? null);
+
+                        const savedDraft = teamId ? sessionStorage.getItem(`team_edit_draft_${teamId}`) : null;
+                        if (savedDraft) {
+                            try {
+                                const draft = JSON.parse(savedDraft);
+                                setName(draft.name ?? teamData.name ?? "");
+                                setCitySchoolOrg(draft.citySchoolOrg ?? teamData.city_school_org ?? "");
+                                setTelegramUrl(draft.telegramUrl ?? teamData.telegram_url ?? "");
+                                setDiscordUrl(draft.discordUrl ?? teamData.discord_url ?? "");
+                            } catch {
+                                setName(teamData.name ?? "");
+                                setCitySchoolOrg(teamData.city_school_org ?? "");
+                                setTelegramUrl(teamData.telegram_url ?? "");
+                                setDiscordUrl(teamData.discord_url ?? "");
+                            }
+                        } else {
+                            setName(teamData.name ?? "");
+                            setCitySchoolOrg(teamData.city_school_org ?? "");
+                            setTelegramUrl(teamData.telegram_url ?? "");
+                            setDiscordUrl(teamData.discord_url ?? "");
+                        }
+
+                        const allIds: string[] = [];
+                        if (teamData.captain_id) allIds.push(teamData.captain_id);
+                        if (teamData.members_ids?.length) allIds.push(...teamData.members_ids);
+                        const uniqueIds = [...new Set(allIds)];
+
+                        if (uniqueIds.length > 0) {
+                            const { data: accounts, error: accountsErr } = await supabase
+                            .from("account")
+                            .select("id, username, login, email, role, avatar_url, status")
+                            .in("id", uniqueIds);
+                            if (accountsErr) {
+                                console.warn("[EditTeamPage] Some account rows missing:", accountsErr.message);
+                            }
+
+                            const accountMap: Record<string, TeamMember> = {};
+                            (accounts ?? []).forEach(a => { accountMap[a.id] = a; });
+
+                            if (teamData.captain_id && accountMap[teamData.captain_id]) {
+                                setCaptain(accountMap[teamData.captain_id]);
+                            }
+                            const memberList = (teamData.members_ids ?? [])
+                            .map((id: string) => accountMap[id])
+                            .filter(Boolean);
+                            setMembers(memberList);
+                        }
+                    } catch (e: any) {
+                        setError(e.message ?? t.editTeam.errLoadFailed);
+                    } finally {
+                        setIsLoading(false);
+                    }
+                };
+                fetchTeam();
+            }, [user, teamId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+            const handleSearch = useCallback(async (forceQuery?: string) => {
+                const q = (forceQuery ?? memberSearch).trim();
+                if (!q) { setSearchResults([]); return; }
+                setIsSearching(true);
+                setPerUserError({});
                 try {
-                    // ── Fetch team ──────────────────────────────────────────────
-                    const { data: teamData, error: teamErr } = await supabase
-                    .from("teams")
-                    .select("id, name, city_school_org, captain_id, members_ids, telegram_url, discord_url, created_at, avatar_url")
-                    .eq("id", teamId)
-                    .single(); // teams must exist — .single() is correct here
-
-                    if (teamErr || !teamData) throw new Error(t.editTeam.errLoadTeam);
-
-                    if (teamData.captain_id !== user.id) {
-                        router.push(`/teams/${teamId}`);
-                        return;
-                    }
-
-                    setTeam(teamData);
-                    setTeamAvatarUrl(teamData.avatar_url ?? null);
-                    setName(teamData.name ?? "");
-                    setCitySchoolOrg(teamData.city_school_org ?? "");
-                    setTelegramUrl(teamData.telegram_url ?? "");
-                    setDiscordUrl(teamData.discord_url ?? "");
-
-                    // ── Fetch members ───────────────────────────────────────────
-                    // Uses .in() — safe, never throws PGRST116 even if some rows missing
-                    const allIds: string[] = [];
-                    if (teamData.captain_id) allIds.push(teamData.captain_id);
-                    if (teamData.members_ids?.length) allIds.push(...teamData.members_ids);
-                    const uniqueIds = [...new Set(allIds)];
-
-                    if (uniqueIds.length > 0) {
-                        const { data: accounts, error: accountsErr } = await supabase
-                        .from("account")
-                        .select("id, username, login, email, role, avatar_url, status")
-                        .in("id", uniqueIds);
-                        // .in() never throws 406 — missing rows are just absent from results.
-                        // We intentionally ignore accountsErr here: if some accounts are missing
-                        // (PGRST116 source), we still render the rest of the team gracefully.
-                        if (accountsErr) {
-                            console.warn("[EditTeamPage] Some account rows missing:", accountsErr.message);
-                        }
-
-                        const accountMap: Record<string, TeamMember> = {};
-                        (accounts ?? []).forEach(a => { accountMap[a.id] = a; });
-
-                        if (teamData.captain_id && accountMap[teamData.captain_id]) {
-                            setCaptain(accountMap[teamData.captain_id]);
-                        }
-                        const memberList = (teamData.members_ids ?? [])
-                        .map((id: string) => accountMap[id])
-                        .filter(Boolean);
-                        setMembers(memberList);
-                    }
-                } catch (e: any) {
-                    setError(e.message ?? t.editTeam.errLoadFailed);
+                    const token = localStorage.getItem("access_token");
+                    const res = await fetch(
+                        `${API_URL}/api/users/search?q=${encodeURIComponent(q)}`,
+                                            { headers: { Authorization: `Bearer ${token}` } }
+                    );
+                    if (!res.ok) throw new Error("Search failed");
+                    const json = await res.json();
+                    const currentIds = new Set([team?.captain_id, ...(team?.members_ids ?? [])]);
+                    // Показуємо всіх знайдених юзерів (включно з restricted),
+                    // але заблокуємо кнопку "Запросити" для них і покажемо RoleErrorBadge
+                    setSearchResults((json.users ?? []).filter((u: TeamMember) => !currentIds.has(u.id)));
+                } catch (e) {
+                    console.error(e);
+                    setSearchResults([]);
                 } finally {
-                    setIsLoading(false);
+                    setIsSearching(false);
+                }
+            }, [memberSearch, team]);
+
+            useEffect(() => {
+                if (!memberSearch.trim()) { setSearchResults([]); setPerUserError({}); return; }
+                const timer = setTimeout(() => { handleSearch(memberSearch); }, 400);
+                return () => clearTimeout(timer);
+            }, [memberSearch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+            const handleAddMember = async (member: TeamMember) => {
+                if (!team) return;
+
+                // ── Перевірка ролі — головна захист ──────────────────────────────────
+                if (RESTRICTED_ROLES.includes(member.role)) {
+                    const roleLabel =
+                    member.role === "jury"       ? "Журі"
+                    : member.role === "admin"      ? "Адміністратора"
+                    : "Суперадміністратора";
+                    setPerUserError(prev => ({
+                        ...prev,
+                        [member.id]: `${roleLabel} не можна додавати до команди`,
+                    }));
+                    return;
+                }
+
+                setAddingId(member.id);
+                // Очищаємо попередню помилку для цього юзера якщо є
+                setPerUserError(prev => { const n = { ...prev }; delete n[member.id]; return n; });
+                try {
+                    const token = localStorage.getItem("access_token");
+                    const res = await fetch(`${API_URL}/api/invitations/send`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({ team_id: team.id, invitee_id: member.id }),
+                    });
+                    if (!res.ok) {
+                        const json = await res.json();
+                        throw new Error(json.detail ?? t.editTeam.errAddMember);
+                    }
+                    setInviteSent(member.id);
+                    setSearchResults(prev => prev.filter(u => u.id !== member.id));
+                } catch (e: any) {
+                    setError(e.message ?? t.editTeam.errAddMember);
+                } finally {
+                    setAddingId(null);
                 }
             };
-            fetchTeam();
-        }, [user, teamId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-        const handleSearch = useCallback(async (forceQuery?: string) => {
-            const q = (forceQuery ?? memberSearch).trim();
-            if (!q) { setSearchResults([]); return; }
-            setIsSearching(true);
-            try {
-                const token = localStorage.getItem("access_token");
-                const res = await fetch(
-                    `${API_URL}/api/users/search?q=${encodeURIComponent(q)}`,
-                                        { headers: { Authorization: `Bearer ${token}` } }
-                );
-                if (!res.ok) throw new Error("Search failed");
-                const json = await res.json();
-                const currentIds = new Set([team?.captain_id, ...(team?.members_ids ?? [])]);
-                setSearchResults((json.users ?? []).filter((u: TeamMember) => !currentIds.has(u.id)));
-            } catch (e) {
-                console.error(e);
-                setSearchResults([]);
-            } finally {
-                setIsSearching(false);
-            }
-        }, [memberSearch, team]);
-
-        useEffect(() => {
-            if (!memberSearch.trim()) { setSearchResults([]); return; }
-            const timer = setTimeout(() => { handleSearch(memberSearch); }, 400);
-            return () => clearTimeout(timer);
-        }, [memberSearch]); // eslint-disable-line react-hooks/exhaustive-deps
-
-        const handleAddMember = async (member: TeamMember) => {
-            if (!team) return;
-            setAddingId(member.id);
-            try {
-                const token = localStorage.getItem("access_token");
-                const res = await fetch(`${API_URL}/api/invitations/send`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({ team_id: team.id, invitee_id: member.id }),
-                });
-                if (!res.ok) {
-                    const json = await res.json();
-                    throw new Error(json.detail ?? t.editTeam.errAddMember);
+            const handleRemoveMember = useCallback(async (member: TeamMember) => {
+                if (!team) return;
+                setRemovingId(member.id);
+                try {
+                    const { data, error } = await supabase.rpc("remove_team_member", {
+                        p_team_id: team.id,
+                        p_member_id: member.id,
+                    });
+                    if (error) throw error;
+                    if (data?.error) throw new Error(data.error);
+                    const newIds: string[] = (data.members_ids ?? []);
+                    setTeam(prev => prev ? { ...prev, members_ids: newIds } : prev);
+                    setMembers(prev => prev.filter(m => m.id !== member.id));
+                    setConfirmRemove(null);
+                } catch (e: any) {
+                    setError(e.message ?? t.editTeam.errRemoveMember);
+                } finally {
+                    setRemovingId(null);
                 }
-                setInviteSent(member.id);
-                setSearchResults(prev => prev.filter(u => u.id !== member.id));
-            } catch (e: any) {
-                setError(e.message ?? t.editTeam.errAddMember);
-            } finally {
-                setAddingId(null);
+            }, [team, t]);
+
+            const handleSave = async () => {
+                if (!team || !name.trim()) return;
+                setIsSaving(true);
+                setError(null);
+                try {
+                    const { error } = await supabase
+                    .from("teams")
+                    .update({
+                        name: name.trim(),
+                            city_school_org: citySchoolOrg.trim() || null,
+                            telegram_url: telegramUrl.trim() || null,
+                            discord_url: discordUrl.trim() || null,
+                    })
+                    .eq("id", team.id);
+                    if (error) throw error;
+                    clearDraft();
+                    setSaveSuccess(true);
+                    setTimeout(() => setSaveSuccess(false), 2500);
+                } catch (e: any) {
+                    setError(e.message ?? t.editTeam.errSave);
+                } finally {
+                    setIsSaving(false);
+                }
+            };
+
+            if (authLoading || isLoading) {
+                return (
+                    <div className="min-h-screen bg-(--bg) flex items-center justify-center">
+                    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                );
             }
-        };
 
-        const handleRemoveMember = useCallback(async (member: TeamMember) => {
-            if (!team) return;
-            setRemovingId(member.id);
-            try {
-                const { data, error } = await supabase.rpc("remove_team_member", {
-                    p_team_id: team.id,
-                    p_member_id: member.id,
-                });
-                if (error) throw error;
-                if (data?.error) throw new Error(data.error);
-                const newIds: string[] = (data.members_ids ?? []);
-                setTeam(prev => prev ? { ...prev, members_ids: newIds } : prev);
-                setMembers(prev => prev.filter(m => m.id !== member.id));
-                setConfirmRemove(null);
-            } catch (e: any) {
-                setError(e.message ?? t.editTeam.errRemoveMember);
-            } finally {
-                setRemovingId(null);
-            }
-        }, [team, t]);
+            if (!user) return null;
 
-        const handleSave = async () => {
-            if (!team || !name.trim()) return;
-            setIsSaving(true);
-            setError(null);
-            try {
-                const { error } = await supabase
-                .from("teams")
-                .update({
-                    name: name.trim(),
-                        city_school_org: citySchoolOrg.trim() || null,
-                        telegram_url: telegramUrl.trim() || null,
-                        discord_url: discordUrl.trim() || null,
-                })
-                .eq("id", team.id);
-                if (error) throw error;
-                setSaveSuccess(true);
-                setTimeout(() => setSaveSuccess(false), 2500);
-            } catch (e: any) {
-                setError(e.message ?? t.editTeam.errSave);
-            } finally {
-                setIsSaving(false);
-            }
-        };
-
-        if (authLoading || isLoading) {
-            return (
-                <div className="min-h-screen bg-(--bg) flex items-center justify-center">
-                <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                </div>
-            );
-        }
-
-        if (!user) return null;
-
-        const inputClass = "w-full px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm transition-all placeholder:text-(--t2)/50 font-medium";
+            const inputClass = "w-full px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm transition-all placeholder:text-(--t2)/50 font-medium";
 
     return (
         <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
+        <div
+        id="team-edit-draft-data"
+        data-draft={JSON.stringify({ name, citySchoolOrg, telegramUrl, discordUrl })}
+        style={{ display: "none" }}
+        />
         <style dangerouslySetInnerHTML={{
             __html: `
             @keyframes fadeUp   { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
@@ -320,12 +387,12 @@ export default function EditTeamPage() {
         <img src="/logo_background1.png" alt="" className={`w-[min(700px,85vw)] object-contain ${dark ? "invert" : ""}`} />
         </div>
 
-        {/* Mobile sidebar overlay */}
-        
-        <Sidebar
-        mobileOpen={isMobileSidebarOpen}
-        onMobileClose={() => setIsMobileSidebarOpen(false)}
-      />
+        {isMobileSidebarOpen && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+        )}
+        <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+        <Sidebar />
+        </div>
 
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <MobileHeader
@@ -338,23 +405,25 @@ export default function EditTeamPage() {
 
         {/* Breadcrumb */}
         <nav className="fuIn flex items-center gap-2 text-[11px] font-bold mb-5 text-(--t2) uppercase tracking-wider">
-        <a href={"/dashboard"} onClick={(e) => { e.preventDefault(); router.push("/dashboard"); }} className="hover:text-blue-500 transition-colors">{t.editTeam.breadcrumbHome}</a>
+        <button onClick={() => router.push("/dashboard")} className="hover:text-blue-500 transition-colors">{t.editTeam.breadcrumbHome}</button>
         <ChevronRight size={10} />
-        <a href={"/teams"} onClick={(e) => { e.preventDefault(); router.push("/teams"); }} className="hover:text-blue-500 transition-colors">{t.editTeam.breadcrumbTeams}</a>
+        <button onClick={() => router.push("/teams")} className="hover:text-blue-500 transition-colors">{t.editTeam.breadcrumbTeams}</button>
         <ChevronRight size={10} />
-        <a href={`/teams/${teamId}`} onClick={(e) => { e.preventDefault(); router.push(`/teams/${teamId}`); }} className="hover:text-blue-500 transition-colors truncate max-w-[120px]">{team?.name}</a>
+        <button onClick={() => router.push(`/teams/${teamId}`)} className="hover:text-blue-500 transition-colors truncate max-w-[120px]">{team?.name}</button>
         <ChevronRight size={10} />
         <span className="text-(--t1)">{t.editTeam.breadcrumbEdit}</span>
         </nav>
 
         {/* Back + Title row */}
         <div className="fuIn flex items-center gap-4 mb-6">
-        <a
-        href={`/teams/${teamId}`} onClick={(e) => { e.preventDefault(); router.push(`/teams/${teamId}`); }}
-        className="w-9 h-9 rounded-xl border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-500 hover:border-blue-500/40 transition-all flex-shrink-0"
+        <button
+        onClick={() => router.push(`/teams/${teamId}`)}
+        className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-500 transition-colors flex-shrink-0"
         >
-        <ArrowLeft size={16} />
-        </a>
+        <ArrowLeft size={13} />
+        {t.editTeam.backToTeam ?? "Назад до команди"}
+        </button>
+        <div className="w-px h-6 bg-(--brd) flex-shrink-0" />
         <div>
         <h1 className="text-xl sm:text-2xl font-black text-(--t1) tracking-tight uppercase">{t.editTeam.pageTitle}</h1>
         <p className="text-xs text-(--t2) font-medium mt-0.5">{team?.name}</p>
@@ -394,7 +463,6 @@ export default function EditTeamPage() {
         <div className="p-4 sm:p-6 md:p-8 space-y-6">
         {/* Avatar + fields */}
         <div className="flex gap-5 items-start">
-        {/* Avatar block */}
         <div className="relative flex-shrink-0">
         <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-(--brd) bg-(--bg) flex items-center justify-center">
         {teamAvatarUrl
@@ -424,7 +492,6 @@ export default function EditTeamPage() {
         )}
         </div>
 
-        {/* Name + Org fields */}
         <div className="flex-1 min-w-0 space-y-3">
         <div>
         <label className="block text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1.5">
@@ -456,10 +523,9 @@ export default function EditTeamPage() {
         </div>
         </div>
 
-        {/* Divider */}
         <div className="border-t border-(--brd)" />
 
-        {/* Social links section */}
+        {/* Social links */}
         <div>
         <div className="flex items-center gap-2 mb-4">
         <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center">
@@ -470,7 +536,6 @@ export default function EditTeamPage() {
         </h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Telegram */}
         <div>
         <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1.5">
         <Send size={10} className="text-sky-500" /> Telegram
@@ -483,7 +548,6 @@ export default function EditTeamPage() {
         className={inputClass}
         />
         </div>
-        {/* Discord */}
         <div>
         <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1.5">
         <DiscordIcon size={10} className="text-indigo-400" /> Discord
@@ -601,39 +665,85 @@ export default function EditTeamPage() {
             {/* Search results */}
             {searchResults.length > 0 && (
                 <div className="mt-3 space-y-1.5">
-                {searchResults.map((person, i) => (
-                    <div
-                    key={person.id}
-                    className="siIn flex items-center gap-3 px-3 py-2.5 rounded-xl bg-(--card) border border-(--brd) hover:border-blue-500/30 transition-all"
-                    style={{ animationDelay: `${i * 35}ms` }}
-                    >
-                    <div className="w-8 h-8 rounded-full bg-blue-500/10 border border-(--brd) flex items-center justify-center font-black text-blue-500 text-xs flex-shrink-0 overflow-hidden">
-                    {person.avatar_url
-                        ? <img src={person.avatar_url} alt="" className="w-full h-full object-cover" />
-                        : (person.username?.charAt(0).toUpperCase() || "?")
-                    }
-                    </div>
-                    <div className="flex-1 min-w-0">
-                    <p className="font-black text-(--t1) text-xs truncate">{person.username}</p>
-                    <p className="text-[10px] font-bold text-(--t2)">@{person.login}</p>
-                    </div>
-                    <button
-                    onClick={() => handleAddMember(person)}
-                    disabled={addingId === person.id || inviteSent === person.id}
-                    className={`flex-shrink-0 flex items-center gap-1 font-black text-[9px] uppercase tracking-wider rounded-lg px-2.5 py-1.5 transition-all active:scale-95 border ${inviteSent === person.id
-                        ? "bg-green-500/10 border-green-500/20 text-green-500 cursor-default"
-                        : "bg-blue-500/10 border-blue-500/20 text-blue-500 hover:bg-blue-500 hover:text-white"
-                    }`}
-                    >
-                    {addingId === person.id
-                        ? <Loader size={11} className="animate-spin" />
-                        : inviteSent === person.id
-                        ? <><Check size={11} /> Надіслано</>
-                        : <><Send size={11} /> Запросити</>
-                    }
-                    </button>
-                    </div>
-                ))}
+                {searchResults.map((person, i) => {
+                    const isRestricted = RESTRICTED_ROLES.includes(person.role);
+                    const userError = perUserError[person.id];
+                    return (
+                        <div
+                        key={person.id}
+                        className={`siIn flex flex-col gap-1.5 px-3 py-2.5 rounded-xl border transition-all ${
+                            isRestricted
+                            ? "bg-red-500/5 border-red-500/20"
+                            : "bg-(--card) border-(--brd) hover:border-blue-500/30"
+                        }`}
+                        style={{ animationDelay: `${i * 35}ms` }}
+                        >
+                        <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-blue-500/10 border border-(--brd) flex items-center justify-center font-black text-blue-500 text-xs flex-shrink-0 overflow-hidden">
+                        {person.avatar_url
+                            ? <img src={person.avatar_url} alt="" className="w-full h-full object-cover" />
+                            : (person.username?.charAt(0).toUpperCase() || "?")
+                        }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                        <p className="font-black text-(--t1) text-xs truncate">{person.username}</p>
+                        <div className="flex items-center gap-1.5">
+                        <p className="text-[10px] font-bold text-(--t2)">@{person.login}</p>
+                        {/* Бейдж ролі */}
+                        <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded border ${
+                            isRestricted
+                            ? "bg-red-500/10 text-red-500 border-red-500/20"
+                            : "bg-(--bg) text-(--t2) border-(--brd)"
+                        }`}>
+                        {person.role}
+                        </span>
+                        </div>
+                        </div>
+                        {/* Кнопка або заблокований стан */}
+                        {isRestricted ? (
+                            <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-red-500/60 bg-red-500/5 border border-red-500/15 rounded-lg px-2 py-1 flex-shrink-0 cursor-not-allowed">
+                            <ShieldOff size={10} />
+                            Заборонено
+                            </span>
+                        ) : (
+                            <button
+                            onClick={() => handleAddMember(person)}
+                            disabled={addingId === person.id || inviteSent === person.id}
+                            className={`flex-shrink-0 flex items-center gap-1 font-black text-[9px] uppercase tracking-wider rounded-lg px-2.5 py-1.5 transition-all active:scale-95 border ${inviteSent === person.id
+                                ? "bg-green-500/10 border-green-500/20 text-green-500 cursor-default"
+                                : "bg-blue-500/10 border-blue-500/20 text-blue-500 hover:bg-blue-500 hover:text-white"
+                            }`}
+                            >
+                            {addingId === person.id
+                                ? <Loader size={11} className="animate-spin" />
+                                : inviteSent === person.id
+                                ? <><Check size={11} /> Надіслано</>
+                                : <><Send size={11} /> Запросити</>
+                            }
+                            </button>
+                        )}
+                        </div>
+
+                        {/* Inline помилка (якщо хтось натиснув кнопку попри заборону — подвійний захист) */}
+                        {userError && (
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-red-500 bg-red-500/8 rounded-lg px-2.5 py-1.5">
+                            <AlertCircle size={11} />
+                            {userError}
+                            </div>
+                        )}
+
+                        {/* Пояснення для restricted ролі */}
+                        {isRestricted && (
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-red-500/70">
+                            <ShieldOff size={10} />
+                            {person.role === "jury"
+                                ? "Журі не може бути учасником команди"
+                                : "Адміністратори не можуть бути учасниками команди"}
+                                </div>
+                        )}
+                        </div>
+                    );
+                })}
                 </div>
             )}
 
@@ -648,7 +758,7 @@ export default function EditTeamPage() {
         </div>
         </div>
 
-        {/* Save button — below Members card */}
+        {/* Save button */}
         <div className="fuIn flex items-center justify-between gap-4 max-w-6xl mx-auto w-full mt-5">
         {saveSuccess && (
             <span className="siIn flex items-center gap-2 text-sm font-bold text-green-500">
@@ -692,10 +802,28 @@ export default function EditTeamPage() {
 }
 
 function MemberRowDisplay({ member, isCaptain }: { member: TeamMember; isCaptain?: boolean }) {
+    const router = useRouter();
     const letter = (member.username || member.login || "?").charAt(0).toUpperCase();
     return (
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-        <div className="w-9 h-9 rounded-full bg-blue-500/10 border-2 border-(--brd) flex items-center justify-center font-black text-blue-500 text-sm flex-shrink-0 overflow-hidden">
+        <button
+        type="button"
+        onClick={() => {
+            if (typeof window !== "undefined" && member.id) {
+                const pathParts = window.location.pathname.split("/");
+                const tid = pathParts[pathParts.indexOf("teams") + 1];
+                if (tid) {
+                    const draftEl = document.getElementById("team-edit-draft-data");
+                    if (draftEl) {
+                        sessionStorage.setItem(`team_edit_draft_${tid}`, draftEl.dataset.draft || "{}");
+                    }
+                }
+            }
+            router.push(`/user/${member.id}`);
+        }}
+        className="flex items-center gap-3 flex-1 min-w-0 text-left group hover:opacity-80 transition-opacity cursor-pointer"
+        title={`Перейти до профілю ${member.username}`}
+        >
+        <div className="w-9 h-9 rounded-full bg-blue-500/10 border-2 border-(--brd) group-hover:border-blue-500/40 transition-colors flex items-center justify-center font-black text-blue-500 text-sm flex-shrink-0 overflow-hidden">
         {member.avatar_url
             ? <img src={member.avatar_url} alt="avatar" className="w-full h-full object-cover" />
             : letter
@@ -703,11 +831,11 @@ function MemberRowDisplay({ member, isCaptain }: { member: TeamMember; isCaptain
         </div>
         <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-        <p className="font-black text-(--t1) text-sm truncate">{member.username}</p>
+        <p className="font-black text-(--t1) text-sm truncate group-hover:text-blue-500 transition-colors">{member.username}</p>
         {isCaptain && <Crown size={10} className="text-amber-500 flex-shrink-0" />}
         </div>
         <p className="text-[10px] font-bold text-(--t2)">@{member.login}</p>
         </div>
-        </div>
+        </button>
     );
 }
