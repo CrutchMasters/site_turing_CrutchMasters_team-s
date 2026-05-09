@@ -51,7 +51,7 @@ function timeAgo(iso: string): string {
         if (diff < 60)    return `${diff}с тому`;
         if (diff < 3600)  return `${Math.floor(diff / 60)}хв тому`;
         if (diff < 86400) return `${Math.floor(diff / 3600)}год тому`;
-        return new Date(iso).toLocaleDateString("uk-UA", { day: "numeric", month: "short", year: "numeric" });
+        return new Date(iso).toLocaleString("uk-UA", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
     } catch { return ""; }
 }
 
@@ -170,11 +170,12 @@ export default function NotificationsPage() {
         <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
         </div>
 
-        
-        <Sidebar
-        mobileOpen={isMobileSidebarOpen}
-        onMobileClose={() => setIsMobileSidebarOpen(false)}
-      />
+        {isMobileSidebarOpen && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+        )}
+        <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+        <Sidebar />
+        </div>
 
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <MobileHeader
@@ -185,7 +186,7 @@ export default function NotificationsPage() {
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
         <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-        <a href={"/"} onClick={(e) => { e.preventDefault(); router.push("/"); }} className="hover:text-blue-600 transition-colors">Головна</a>
+        <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
         <ChevronRight size={10} />
         <span className="text-(--t1)">Сповіщення</span>
         </nav>

@@ -429,11 +429,12 @@ export default function TeamProfilePage() {
         <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
         </div>
 
-        
-        <Sidebar
-        mobileOpen={isMobileSidebarOpen}
-        onMobileClose={() => setIsMobileSidebarOpen(false)}
-      />
+        {isMobileSidebarOpen && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+        )}
+        <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+        <Sidebar />
+        </div>
 
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <MobileHeader
@@ -446,9 +447,9 @@ export default function TeamProfilePage() {
 
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-        <a href={"/"} onClick={(e) => { e.preventDefault(); router.push("/"); }} className="hover:text-blue-600 transition-colors">{t.teamProfile.breadcrumbHome}</a>
+        <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">{t.teamProfile.breadcrumbHome}</button>
         <ChevronRight size={10} />
-        <a href={"/teams"} onClick={(e) => { e.preventDefault(); router.push("/teams"); }} className="hover:text-blue-600 transition-colors">{t.teamProfile.breadcrumbTeams}</a>
+        <button onClick={() => router.push("/teams")} className="hover:text-blue-600 transition-colors">{t.teamProfile.breadcrumbTeams}</button>
         <ChevronRight size={10} />
         <span className="text-(--t1) truncate max-w-[120px]">{isLoading ? t.teamProfile.breadcrumbLoading : team?.name ?? t.teamProfile.breadcrumbFallback}</span>
         </nav>
@@ -611,8 +612,8 @@ export default function TeamProfilePage() {
                 <h2 className="text-xs font-black uppercase tracking-widest text-blue-500">{t.teamProfile.tournamentTitle}</h2>
                 </div>
                 <div className="p-6 sm:p-8">
-                <a
-                href={`/tournaments/${tournament.id}`} onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${tournament.id}`); }}
+                <button
+                onClick={() => router.push(`/tournaments/${tournament.id}`)}
                 className="w-full flex items-center gap-4 group text-left"
                 >
                 <div className="w-11 h-11 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 flex-shrink-0">
@@ -640,7 +641,7 @@ export default function TeamProfilePage() {
                 )}
                 </div>
                 <ExternalLink size={14} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </a>
+                </button>
                 </div>
                 </section>
             )}
@@ -690,12 +691,12 @@ export default function TeamProfilePage() {
             {/* Edit button — only for captain */}
             {isMyTeam && (
                 <div className="fuIn pt-2" style={{ animationDelay: "300ms" }}>
-                <a
-                href={`/teams/${teamId}/edit`} onClick={(e) => { e.preventDefault(); router.push(`/teams/${teamId}/edit`); }}
+                <button
+                onClick={() => router.push(`/teams/${teamId}/edit`)}
                 className="w-full sm:w-auto flex items-center justify-center gap-2 bg-(--card) border border-(--brd) text-(--t2) font-black text-xs uppercase tracking-widest rounded-2xl px-8 py-4 hover:bg-(--bg) hover:text-(--t1) transition-all active:scale-95"
                 >
                 {t.teamProfile.editBtn}
-                </a>
+                </button>
                 </div>
             )}
             </div>

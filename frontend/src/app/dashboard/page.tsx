@@ -83,12 +83,12 @@ const STATUS_COLORS: Record<string, string> = {
 
 function fmtDate(iso?: string) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return new Date(iso).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function fmtDateTime(iso?: string) {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("uk-UA", {
+  return new Date(iso).toLocaleString("uk-UA", {
     day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
 }
@@ -646,10 +646,13 @@ export default function DashboardPage() {
       <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
 
-      <Sidebar
-        mobileOpen={isMobileSidebarOpen}
-        onMobileClose={() => setIsMobileSidebarOpen(false)}
-      />
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+      )}
+
+      <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+      <Sidebar />
+      </div>
 
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
       <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title={t.mainPage.dashboard} />
@@ -657,7 +660,7 @@ export default function DashboardPage() {
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
       <header className="mb-8 sm:mb-12">
       <div className="flex items-center gap-2 text-[10px] font-black mb-3 uppercase tracking-widest text-(--t2)">
-      <a href={"/"} onClick={(e) => { e.preventDefault(); router.push("/"); }} className="hover:text-blue-600 transition-colors">{t.nav.home}</a>
+      <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">{t.nav.home}</button>
       <ChevronRight size={10} /><span className="text-(--t1)">{t.mainPage.dashboard}</span>
       </div>
       <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-(--t1) uppercase">{t.mainPage.overview}</h1>
@@ -818,45 +821,30 @@ export default function DashboardPage() {
         {filteredTournaments.map(tourney => {
           const cfg = STATUS_CONFIG[tourney.status] ?? STATUS_CONFIG.upcoming;
           return (
-            <tr key={tourney.id} className="transition-colors hover:bg-(--bg)/30">
-            <td className="px-4 sm:px-6 py-4 sm:py-5 font-bold text-(--t1) relative">
-              <a
-                href={`/tournaments/${tourney.id}`}
-                onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${tourney.id}`); }}
-                className="absolute inset-0"
-                aria-label={tourney.name}
-              />
-              <span className="relative z-10">{tourney.name}</span>
+            <tr key={tourney.id} className="transition-colors hover:bg-(--bg)/30 cursor-pointer" onClick={() => router.push(`/tournaments/${tourney.id}`)}>
+            <td className="px-4 sm:px-6 py-4 sm:py-5 font-bold text-(--t1)">{tourney.name}</td>
+            <td className="px-4 sm:px-6 py-4 sm:py-5">
+            <span className={`text-[9px] font-black uppercase px-2.5 py-1.5 rounded border ${cfg.color}`}>{cfg.label}</span>
             </td>
-            <td className="px-4 sm:px-6 py-4 sm:py-5 relative">
-              <a href={`/tournaments/${tourney.id}`} onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${tourney.id}`); }} className="absolute inset-0" tabIndex={-1} aria-hidden />
-              <span className="relative z-10"><span className={`text-[9px] font-black uppercase px-2.5 py-1.5 rounded border ${cfg.color}`}>{cfg.label}</span></span>
+            <td className="px-4 sm:px-6 py-4 sm:py-5 font-bold text-(--t2) text-xs">{fmtDate(tourney.start_at)}</td>
+            <td className="px-4 sm:px-6 py-4 sm:py-5 font-bold text-(--t2) text-xs">
+            {tourney.team_count ?? 0}{tourney.max_teams ? ` / ${tourney.max_teams}` : ""}
             </td>
-            <td className="px-4 sm:px-6 py-4 sm:py-5 font-bold text-(--t2) text-xs relative">
-              <a href={`/tournaments/${tourney.id}`} onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${tourney.id}`); }} className="absolute inset-0" tabIndex={-1} aria-hidden />
-              <span className="relative z-10">{fmtDate(tourney.start_at)}</span>
-            </td>
-            <td className="px-4 sm:px-6 py-4 sm:py-5 font-bold text-(--t2) text-xs relative">
-              <a href={`/tournaments/${tourney.id}`} onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${tourney.id}`); }} className="absolute inset-0" tabIndex={-1} aria-hidden />
-              <span className="relative z-10">{tourney.team_count ?? 0}{tourney.max_teams ? ` / ${tourney.max_teams}` : ""}</span>
-            </td>
-            <td className="px-4 sm:px-6 py-4 sm:py-5 text-right relative z-10">
+            <td className="px-4 sm:px-6 py-4 sm:py-5 text-right">
             {tourney.status === "registration" ? (
-              <a
-              href={`/tournaments/${tourney.id}`}
-              onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${tourney.id}`); }}
+              <button
+              onClick={e => { e.stopPropagation(); router.push(`/tournaments/${tourney.id}`); }}
               className="font-black text-[9px] uppercase tracking-tighter px-3 py-2 rounded-lg border border-blue-600 bg-blue-600/10 text-blue-600 hover:bg-blue-600 hover:text-white transition-all"
               >
               {t.mainPage.actionRegister}
-              </a>
+              </button>
             ) : (
-              <a
-              href={`/tournaments/${tourney.id}`}
-              onClick={(e) => { e.preventDefault(); router.push(`/tournaments/${tourney.id}`); }}
-              className="p-2 rounded-lg text-(--t2) hover:bg-blue-600/10 hover:text-blue-600 transition-colors inline-flex"
+              <button
+              onClick={e => { e.stopPropagation(); router.push(`/tournaments/${tourney.id}`); }}
+              className="p-2 rounded-lg text-(--t2) hover:bg-blue-600/10 hover:text-blue-600 transition-colors"
               >
               <ExternalLink size={16} />
-              </a>
+              </button>
             )}
             </td>
             </tr>
