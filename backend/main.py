@@ -220,6 +220,84 @@ def _auto_assign_submission(submission_id: str, round_id: str, tournament_id: st
         return 0
 
 
+def _recalc_round_status(round_id: str) -> str | None:
+    """
+    Негайно перераховує та зберігає статус одного раунду на основі поточного часу.
+    Повертає новий статус або None якщо помилка.
+    """
+    if not supabase:
+        return None
+    try:
+        r = fetch_one(
+            supabase.table("rounds")
+                .select("id, status, start_at, end_at")
+                .eq("id", round_id)
+        )
+        if not r:
+            return None
+        current  = r.get("status") or "pending"
+        if current in ("closed", "reviewed"):
+            return current  # не чіпаємо ручні статуси
+        now      = datetime.now(timezone.utc)
+        start_at = _parse_dt(r.get("start_at"))
+        end_at   = _parse_dt(r.get("end_at"))
+        if end_at and now >= end_at:
+            new_status = "finished"
+        elif start_at and now >= start_at:
+            new_status = "active"
+        else:
+            new_status = "pending"
+        if new_status != current:
+            supabase.table("rounds").update({"status": new_status}).eq("id", round_id).execute()
+            print(f"[RECALC] Раунд {round_id}: {current} → {new_status}", flush=True)
+        return new_status
+    except Exception as e:
+        print(f"[RECALC] Помилка перерахунку раунду {round_id}: {e}", flush=True)
+        return None
+
+
+def _recalc_tournament_status(tournament_id: str) -> str | None:
+    """
+    Негайно перераховує та зберігає статус турніру на основі поточного часу.
+    Повертає новий статус або None якщо помилка.
+    """
+    if not supabase:
+        return None
+    try:
+        t = fetch_one(
+            supabase.table("tournaments")
+                .select("id, status, registration_from, registration_to, start_at, end_at")
+                .eq("id", tournament_id)
+        )
+        if not t:
+            return None
+        current = t["status"]
+        if current == "cancelled":
+            return current
+        now      = datetime.now(timezone.utc)
+        reg_from = _parse_dt(t.get("registration_from"))
+        reg_to   = _parse_dt(t.get("registration_to"))
+        start_at = _parse_dt(t.get("start_at"))
+        end_at   = _parse_dt(t.get("end_at"))
+        if end_at and now >= end_at:
+            new_status = "finished"
+        elif start_at and now >= start_at:
+            new_status = "ongoing"
+        elif reg_from and now >= reg_from and (not reg_to or now < reg_to):
+            new_status = "registration"
+        elif reg_to and now >= reg_to and (not start_at or now < start_at):
+            new_status = "upcoming"
+        else:
+            new_status = "upcoming"
+        if new_status != current:
+            supabase.table("tournaments").update({"status": new_status}).eq("id", tournament_id).execute()
+            print(f"[RECALC] Турнір {tournament_id}: {current} → {new_status}", flush=True)
+        return new_status
+    except Exception as e:
+        print(f"[RECALC] Помилка перерахунку турніру {tournament_id}: {e}", flush=True)
+        return None
+
+
 # --- ИНИЦИАЛИЗАЦИЯ ---
 load_dotenv()
 
@@ -293,7 +371,10 @@ def update_tournament_statuses():
 
         for t in tournaments:
             current = t["status"]
-            if current in ("finished", "ongoing"):
+            # НЕ пропускаємо finished/ongoing — адмін міг змінити дати,
+            # тому статус повинен перераховуватися завжди.
+            # Єдиний виняток — статус "cancelled" (ручне скасування).
+            if current == "cancelled":
                 continue
 
             reg_from  = _parse_dt(t.get("registration_from"))
@@ -349,7 +430,10 @@ def update_round_statuses():
             start_at = _parse_dt(r.get("start_at"))
             end_at   = _parse_dt(r.get("end_at"))
 
-            if current == "finished":
+            # НЕ пропускаємо finished — адмін міг відсунути дедлайн,
+            # тому раунд повинен повернутися до active якщо end_at ще не минув.
+            # Єдиний виняток — статуси що встановлюються вручну: closed, reviewed.
+            if current in ("closed", "reviewed"):
                 continue
 
             if end_at and now >= end_at:
@@ -952,6 +1036,14 @@ async def update_tournament(
         .execute()
     )
 
+    # Якщо змінились дати — негайно перераховуємо статус турніру і всіх його раундів
+    date_fields = {"start_at", "end_at", "registration_from", "registration_to"}
+    if date_fields & set(update_data.keys()):
+        _recalc_tournament_status(tournament_id)
+        rounds_res = supabase.table("rounds").select("id").eq("tournament_id", tournament_id).execute()
+        for rr in (rounds_res.data or []):
+            _recalc_round_status(rr["id"])
+
     print(f"[TOURNAMENT] {caller['username']} оновив турнір {tournament_id}: {list(update_data.keys())}", flush=True)
     return {"success": True, "tournament": result.data[0] if result.data else None}
 
@@ -1096,6 +1188,13 @@ async def create_tournament_rounds(
             print(f"[ROUNDS] Помилка створення jury_assignments: {ja_err}", flush=True)
 
     print(f"[ROUNDS] {len(updated)} раундів оновлено для турніру {tournament['name']}", flush=True)
+
+    # Негайно перераховуємо статус кожного оновленого раунду
+    for rr in updated:
+        _recalc_round_status(rr["id"])
+    # І статус самого турніру
+    _recalc_tournament_status(tournament_id)
+
     return {"success": True, "rounds": updated}
 
 
@@ -1974,8 +2073,8 @@ async def save_jury_evaluation(
     caller = get_caller(token)
 
     caller_role = caller.get("role")
-    if caller_role not in ("jury", "admin", "superadmin"):
-        raise HTTPException(status_code=403, detail="Тільки журі або адміністратор може виставляти оцінки")
+    if caller_role not in ("jury", "superadmin"):
+        raise HTTPException(status_code=403, detail="Виставляти оцінки можуть лише журі або суперадмін")
 
     if caller_role == "jury":
         round_ = fetch_one(
@@ -2001,7 +2100,9 @@ async def save_jury_evaluation(
     )
     if not round_:
         raise HTTPException(status_code=404, detail="Раунд не знайдено")
-    if round_.get("status") != "finished":
+
+    # Перевірка статусу раунду тільки для журі — суперадмін може оцінювати завжди
+    if caller_role == "jury" and round_.get("status") not in ("finished", "closed", "reviewed"):
         raise HTTPException(
             status_code=400,
             detail=f"Оцінювання недоступне: раунд ще не завершено (статус: '{round_.get('status')}'). "
@@ -2448,6 +2549,14 @@ async def get_round_submissions(round_id: str, authorization: str = Header(...))
         if not invited:
             raise HTTPException(status_code=403, detail="Ви не є журі цього турніру")
 
+        # Журі може переглядати роботи тільки після завершення раунду;
+        # суперадмін може переглядати завжди
+        if caller.get("role") == "jury" and round_.get("status") not in ("finished", "closed", "reviewed"):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Оцінювання недоступне: раунд ще не завершено (статус: '{round_.get('status')}')."
+            )
+
         assignment = fetch_one(
             supabase.table("jury_assignments")
                 .select("id")
@@ -2516,7 +2625,7 @@ async def get_round_submissions(round_id: str, authorization: str = Header(...))
                 enriched_files.append({"name": f.get("name", ""), "path": f["path"], "url": url})
         sub["files"] = enriched_files
 
-        if caller.get("role") == "jury":
+        if caller.get("role") in ("jury", "superadmin"):
             eval_res = fetch_one(
                 supabase.table("jury_evaluations")
                     .select("id, total_score, criteria_scores, general_comment, updated_at")
