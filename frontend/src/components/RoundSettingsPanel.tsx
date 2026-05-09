@@ -14,6 +14,10 @@ export interface RoundData {
     startTime: string;
     deadlineDate: string;
     deadlineTime: string;
+    evalStartDate: string;
+    evalStartTime: string;
+    evalEndDate: string;
+    evalEndTime: string;
     requirements: string[];
     criteria: string[];
     links: string[];
@@ -69,6 +73,8 @@ const defaultRound = (): RoundData => ({
     name: '', description: '',
     startDate: '', startTime: '',
     deadlineDate: '', deadlineTime: '',
+    evalStartDate: '', evalStartTime: '',
+    evalEndDate: '', evalEndTime: '',
     requirements: [], criteria: [], links: [], files: [],
 });
 
