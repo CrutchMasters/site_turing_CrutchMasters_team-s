@@ -35,11 +35,13 @@ function DateTimePair({
   dateVal, onDate,
   timeVal, onTime,
   required,
+  requiredLabel,
 }: {
   label: string;
   dateVal: string; onDate: (v: string) => void;
   timeVal: string; onTime: (v: string) => void;
   required?: boolean;
+  requiredLabel?: string;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -47,7 +49,7 @@ function DateTimePair({
     <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">{label}</span>
     {required && (
       <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1">
-      <Zap className="w-2.5 h-2.5 fill-red-500" /> Обов&apos;язково
+      <Zap className="w-2.5 h-2.5 fill-red-500" /> {requiredLabel ?? "Обов'язково"}
       </span>
     )}
     </div>
@@ -130,7 +132,7 @@ export default function RegisterTourney() {
   // Повертає signed URL (10 років), який зберігаємо в attachments.
   const uploadFile = async (file: File, roundNumber: number): Promise<string> => {
     const token = await getToken();
-    if (!token) throw new Error('Не вдалося отримати токен авторизації. Спробуйте увійти знову.');
+    if (!token) throw new Error('Не вдалося отримати токен авторизації. Спробуйте увійти знову. [upload]');
 
     const form = new FormData();
     form.append('round_number', String(roundNumber));
@@ -153,8 +155,8 @@ export default function RegisterTourney() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
-    if (!tourneyName.trim()) { setSubmitError("Назва турніру є обов'язковою"); return; }
-    if (!startDate)          { setSubmitError("Дата старту турніру є обов'язковою"); return; }
+    if (!tourneyName.trim()) { setSubmitError(t.tourney?.errNameRequired ?? "Назва турніру є обов'язковою"); return; }
+    if (!startDate)          { setSubmitError(t.tourney?.errStartRequired ?? "Дата старту турніру є обов'язковою"); return; }
     setIsSubmitting(true);
     try {
       // Перевірка дублікату назви
@@ -164,7 +166,7 @@ export default function RegisterTourney() {
       .ilike("name", tourneyName.trim())
       .limit(1);
       if (!checkError && existing && existing.length > 0) {
-        setSubmitError(`Турнір з назвою "${tourneyName.trim()}" вже існує. Оберіть іншу назву.`);
+        setSubmitError((t.tourney?.errDuplicate ?? 'Турнір з назвою "{name}" вже існує. Оберіть іншу назву.').replace('{name}', tourneyName.trim()));
         setIsSubmitting(false);
         return;
       }
@@ -243,15 +245,15 @@ export default function RegisterTourney() {
                                                                          p_created_by:        user?.id ?? null,
       });
       if (rpcError) throw new Error(rpcError.message || rpcError.details || JSON.stringify(rpcError));
-      if (!tournamentId) throw new Error('Турнір створено, але ID не повернуто');
+      if (!tournamentId) throw new Error(t.tourney?.errNoId ?? 'Турнір створено, але ID не повернуто');
 
       // Вставляємо раунди через бекенд (service_role) — anon key не має прав на INSERT в rounds (RLS 401)
       // БАГ 8 fix: перевіряємо ліміт constraint (1-8) перед відправкою
       if (roundsPayload.length > 8) {
-        throw new Error('Максимальна кількість раундів — 8');
+        throw new Error(t.tourney?.errMaxRounds ?? 'Максимальна кількість раундів — 8');
       }
       const token = await getToken();
-      if (!token) throw new Error('Не вдалося отримати токен авторизації. Спробуйте увійти знову.');
+      if (!token) throw new Error(t.tourney?.errNoToken ?? 'Не вдалося отримати токен авторизації. Спробуйте увійти знову.');
       const roundsRes = await fetch(`${API_URL}/api/tournaments/${tournamentId}/rounds`, {
         method: 'POST',
         headers: {
@@ -264,9 +266,9 @@ export default function RegisterTourney() {
         const err = await roundsRes.json().catch(() => ({}));
         const errMsg: string = err.detail ?? JSON.stringify(err);
         if (errMsg.includes('rounds_number_check') || errMsg.includes('number_check')) {
-          throw new Error('Номер раунду має бути від 1 до 8. Перевірте кількість раундів.');
+          throw new Error(t.tourney?.errRoundNumber ?? 'Номер раунду має бути від 1 до 8. Перевірте кількість раундів.');
         }
-        throw new Error(`Турнір створено, але раунди не збережено: ${errMsg}`);
+        throw new Error((t.tourney?.errRoundsSave ?? 'Турнір створено, але раунди не збережено: {detail}').replace('{detail}', errMsg));
       }
 
       router.push('/dashboard');
@@ -275,11 +277,11 @@ export default function RegisterTourney() {
       // БАГ 8 fix: зрозуміле повідомлення про constraint раундів
       const msg: string = err?.message ?? '';
       if (msg.includes('rounds_number_check') || msg.includes('number_check')) {
-        setSubmitError('Номер раунду має бути від 1 до 8. Перевірте кількість раундів.');
-      } else if (msg.includes('Максимальна кількість раундів')) {
+        setSubmitError(t.tourney?.errRoundNumber ?? 'Номер раунду має бути від 1 до 8. Перевірте кількість раундів.');
+      } else if (msg.includes('Максимальна кількість раундів') || msg.includes('Maximum number of rounds') || msg.includes('Максимальное количество')) {
         setSubmitError(msg);
       } else {
-        setSubmitError(msg || 'Виникла помилка. Спробуйте ще раз.');
+        setSubmitError(msg || (t.tourney?.errGeneric ?? 'Виникла помилка. Спробуйте ще раз.'));
       }
     } finally {
       setIsSubmitting(false);
@@ -325,19 +327,19 @@ export default function RegisterTourney() {
         <span className="text-2xl font-black tabular-nums text-red-500">{countdown}</span>
         </div>
         </div>
-        <h2 className="text-xl font-black uppercase tracking-tight text-center mb-1 text-(--t1)">⚠️ Обмежений доступ</h2>
-        <p className="text-sm text-center text-(--t2)">У вас немає прав для перегляду цієї сторінки</p>
+        <h2 className="text-xl font-black uppercase tracking-tight text-center mb-1 text-(--t1)">{t.tourney?.accessDeniedTitle ?? '⚠️ Обмежений доступ'}</h2>
+        <p className="text-sm text-center text-(--t2)">{t.tourney?.accessDeniedDesc ?? 'У вас немає прав для перегляду цієї сторінки'}</p>
         </div>
         <div className="h-px mb-6 bg-(--brd)" />
-        <p className="text-base font-black uppercase tracking-tight text-center mb-2 text-(--t1)">Точно хочете переглянути цю сторінку?</p>
+        <p className="text-base font-black uppercase tracking-tight text-center mb-2 text-(--t1)">{t.tourney?.accessDeniedQuestion ?? 'Точно хочете переглянути цю сторінку?'}</p>
         <p className="text-xs text-center mb-6 text-(--t2)">
-        Через <span className="font-black text-red-500">{countdown} сек</span> ви автоматично побачите, що чекає на порушників 🐇
+        {(t.tourney?.accessDeniedCountdown ?? 'Через {sec} сек ви автоматично побачите, що чекає на порушників 🐇').replace('{sec}', String(countdown))}
         </p>
         <div className="flex gap-3">
-        <button onClick={handleConfirmYes} className="pulse-btn flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest text-white bg-red-500 active:scale-95 transition-all">Так, показати</button>
-        <button onClick={handleConfirmNo}  className="flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) text-(--t2) bg-(--bg) active:scale-95 transition-all hover:opacity-80">Ні, піти</button>
+        <button onClick={handleConfirmYes} className="pulse-btn flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest text-white bg-red-500 active:scale-95 transition-all">{t.tourney?.accessDeniedYes ?? 'Так, показати'}</button>
+        <button onClick={handleConfirmNo}  className="flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) text-(--t2) bg-(--bg) active:scale-95 transition-all hover:opacity-80">{t.tourney?.accessDeniedNo ?? 'Ні, піти'}</button>
         </div>
-        <p className="text-center text-[10px] mt-4 text-(--t2) opacity-50">«Ні» → повернути на сторінку входу</p>
+        <p className="text-center text-[10px] mt-4 text-(--t2) opacity-50">{t.tourney?.accessDeniedNoHint ?? '«Ні» → повернути на сторінку входу'}</p>
         </div>
         </div>
     );
@@ -383,12 +385,12 @@ export default function RegisterTourney() {
         </div>
         <div className="relative z-10 flex flex-col items-center text-center px-4">
         <div className="glitch-text text-[120px] sm:text-[160px] font-black leading-none mb-4 select-none fade-up text-(--t1)" data-text="403" style={{ letterSpacing: '-0.05em' }}>403</div>
-        <p className="fade-up-1 text-lg sm:text-2xl font-black uppercase tracking-tight mb-2 text-(--t1)">Ах ти хитрий шукач потаємних шляхів,</p>
-        <p className="fade-up-1 text-lg sm:text-2xl font-black uppercase tracking-tight mb-8 text-blue-600">привіт від Білого Кролика 🐇</p>
-        <p className="fade-up-2 text-xs font-black uppercase tracking-[0.3em] mb-10 text-(--t2)">Ця сторінка тільки для адміністраторів</p>
+        <p className="fade-up-1 text-lg sm:text-2xl font-black uppercase tracking-tight mb-2 text-(--t1)">{t.tourney?.deniedTitle ?? 'Ах ти хитрий шукач потаємних шляхів,'}</p>
+        <p className="fade-up-1 text-lg sm:text-2xl font-black uppercase tracking-tight mb-8 text-blue-600">{t.tourney?.deniedSubtitle ?? 'привіт від Білого Кролика 🐇'}</p>
+        <p className="fade-up-2 text-xs font-black uppercase tracking-[0.3em] mb-10 text-(--t2)">{t.tourney?.deniedDesc ?? 'Ця сторінка тільки для адміністраторів'}</p>
         <div className="fade-up-2 flex flex-col sm:flex-row gap-3 justify-center">
-        <a href={'/dashboard'} onClick={(e) => { e.preventDefault(); router.push('/dashboard'); }} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20">← Повернутись на дашборд</a>
-        <a href={'/'} onClick={(e) => { e.preventDefault(); router.push('/'); }} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) text-(--t2) bg-(--bg) active:scale-95 transition-all hover:opacity-80">На головну</a>
+        <a href={'/dashboard'} onClick={(e) => { e.preventDefault(); router.push('/dashboard'); }} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20">{t.tourney?.deniedBackDashboard ?? '← Повернутись на дашборд'}</a>
+        <a href={'/'} onClick={(e) => { e.preventDefault(); router.push('/'); }} className="px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) text-(--t2) bg-(--bg) active:scale-95 transition-all hover:opacity-80">{t.tourney?.deniedBackHome ?? 'На головну'}</a>
         </div>
         </div>
         </div>
@@ -431,15 +433,15 @@ export default function RegisterTourney() {
 
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
-      <a href={'/'} onClick={(e) => { e.preventDefault(); router.push('/'); }} className="hover:text-blue-600 transition-colors">Головна</a>
+      <a href={'/'} onClick={(e) => { e.preventDefault(); router.push('/'); }} className="hover:text-blue-600 transition-colors">{t.tourney?.home ?? 'Головна'}</a>
       <ChevronRight size={10} />
-      <a href={'/dashboard'} onClick={(e) => { e.preventDefault(); router.push('/dashboard'); }} className="hover:text-blue-600 transition-colors">Дашборд</a>
+      <a href={'/dashboard'} onClick={(e) => { e.preventDefault(); router.push('/dashboard'); }} className="hover:text-blue-600 transition-colors">{t.tourney?.dashboard ?? 'Дашборд'}</a>
       <ChevronRight size={10} />
       <span className="text-(--t1)">{t.tourney?.createAdmin ?? 'Створення турніру'}</span>
       </nav>
 
       <button onClick={() => router.back()} className="mb-6 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
-      <ArrowLeft size={14} /> Назад
+      <ArrowLeft size={14} /> {t.tourney?.back ?? 'Назад'}
       </button>
 
       <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-(--t1) mb-8 sm:mb-10">
@@ -487,7 +489,7 @@ export default function RegisterTourney() {
         {t.tourney?.name ?? 'Назва турніру'}
         </label>
         <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1">
-        <Zap className="w-2.5 h-2.5 fill-red-500" /> Обов'язково
+        <Zap className="w-2.5 h-2.5 fill-red-500" /> {t.tourney?.required ?? "Обов'язково"}
         </span>
         </div>
         <input
@@ -521,12 +523,12 @@ export default function RegisterTourney() {
         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white flex-shrink-0">
         <Users size={16} />
         </div>
-        <span className="text-xs font-black uppercase tracking-widest text-(--t2)">Реєстрація команд</span>
+        <span className="text-xs font-black uppercase tracking-widest text-(--t2)">{t.tourney?.regTeams ?? 'Реєстрація команд'}</span>
         </div>
         <div className="p-6 space-y-4 flex-1">
-        <DateTimePair label="Початок реєстрації" dateVal={regStartDate} onDate={setRegStartDate} timeVal={regStartTime} onTime={setRegStartTime} />
+        <DateTimePair label={t.tourney?.regStart ?? 'Початок реєстрації'} dateVal={regStartDate} onDate={setRegStartDate} timeVal={regStartTime} onTime={setRegStartTime} />
         <div className="border-t border-(--brd)" />
-        <DateTimePair label="Кінець реєстрації" dateVal={regEndDate} onDate={setRegEndDate} timeVal={regEndTime} onTime={setRegEndTime} />
+        <DateTimePair label={t.tourney?.regEnd ?? 'Кінець реєстрації'} dateVal={regEndDate} onDate={setRegEndDate} timeVal={regEndTime} onTime={setRegEndTime} />
         </div>
         </div>
 
@@ -535,12 +537,12 @@ export default function RegisterTourney() {
         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
         <Clock size={16} />
         </div>
-        <span className="text-xs font-black uppercase tracking-widest text-(--t2)">Дати старту</span>
+        <span className="text-xs font-black uppercase tracking-widest text-(--t2)">{t.tourney?.startDates ?? 'Дати старту'}</span>
         </div>
         <div className="p-6 space-y-4 flex-1">
-        <DateTimePair label="Початок турніру" dateVal={startDate} onDate={setStartDate} timeVal={startTime} onTime={setStartTime} required />
+        <DateTimePair label={t.tourney?.tourStart ?? 'Початок турніру'} dateVal={startDate} onDate={setStartDate} timeVal={startTime} onTime={setStartTime} required requiredLabel={t.tourney?.required} />
         <div className="border-t border-(--brd)" />
-        <DateTimePair label="Кінець турніру" dateVal={endDate} onDate={setEndDate} timeVal={endTime} onTime={setEndTime} />
+        <DateTimePair label={t.tourney?.tourEnd ?? 'Кінець турніру'} dateVal={endDate} onDate={setEndDate} timeVal={endTime} onTime={setEndTime} />
         </div>
         </div>
         </section>
@@ -553,16 +555,16 @@ export default function RegisterTourney() {
         <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
         <Layers size={14} />
         </div>
-        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">3. Формат</span>
+        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">{t.tourney?.block3format ?? '3. Формат'}</span>
         <span className="text-[9px] font-black uppercase text-red-500 flex items-center gap-1 whitespace-nowrap">
-        <Zap className="w-2 h-2 fill-red-500" /> Обов'язково
+        <Zap className="w-2 h-2 fill-red-500" /> {t.tourney?.required ?? "Обов'язково"}
         </span>
         </div>
         <div className="p-5 flex flex-col gap-3 flex-1">
         <div className="flex items-center justify-between">
-        <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Кількість раундів</p>
+        <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{t.tourney?.roundCount ?? 'Кількість раундів'}</p>
         <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">
-        Вибрано: <span className="text-blue-500">{roundCount}</span> {roundCount === 1 ? 'раунд' : roundCount < 5 ? 'раунди' : 'раундів'}
+        {t.tourney?.roundSelected ?? 'Вибрано:'} <span className="text-blue-500">{roundCount}</span> {roundCount === 1 ? (t.tourney?.roundWord_1 ?? 'раунд') : roundCount < 5 ? (t.tourney?.roundWord_2 ?? 'раунди') : (t.tourney?.roundWord_5 ?? 'раундів')}
         </p>
         </div>
         <div className="grid grid-cols-4 gap-1.5">
@@ -588,13 +590,13 @@ export default function RegisterTourney() {
         <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
         <Users size={14} />
         </div>
-        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">Команди</span>
+        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">{t.tourney?.teamCount ?? 'Команди'}</span>
         <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full whitespace-nowrap">
         {t.common?.optional ?? 'Опціонально'}
         </span>
         </div>
         <div className="p-5 flex flex-col gap-3 flex-1">
-        <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Кількість команд</p>
+        <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{t.tourney?.teamCount ?? 'Кількість команд'}</p>
         <div className="flex items-center justify-center gap-3 flex-1">
         <button type="button"
         onClick={() => setTeamCount(Math.max(0, teamCount - 1))}
@@ -622,7 +624,7 @@ export default function RegisterTourney() {
             ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/30'
             : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600'
           }`}>
-          {n === 0 ? 'Без ліміту' : n}
+          {n === 0 ? (t.tourney?.noLimit ?? 'Без ліміту') : n}
           </button>
         ))}
         </div>
@@ -636,7 +638,7 @@ export default function RegisterTourney() {
         <button type="submit" disabled={isSubmitting}
         className="flex-1 px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
         {isSubmitting && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
-        {isSubmitting ? 'Зберігається...' : (t.tourney?.createBtn ?? 'Створити турнір')}
+        {isSubmitting ? (t.tourney?.saving ?? 'Зберігається...') : (t.tourney?.createBtn ?? 'Створити турнір')}
         </button>
         <button type="button" onClick={() => router.back()} disabled={isSubmitting}
         className="flex-1 px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60">
@@ -654,6 +656,7 @@ export default function RegisterTourney() {
         selectedRound={selectedRoundTab}
         onSelectRound={setSelectedRoundTab}
         onRoundsChange={setRoundsData}
+        labels={t.roundPanel}
         />
         </div>
 
