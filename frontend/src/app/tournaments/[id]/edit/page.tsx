@@ -9,7 +9,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { supabase, authedSupabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
-import RoundSettingsPanel, { type RoundData } from "@/components/RoundSettingsPanel";
+import RoundSettingsPanel, { type RoundData, type Criterion, validateRoundsData } from "@/components/RoundSettingsPanel";
 import JuryInvitePanel from "@/components/JuryInvitePanel";
 import { DatePicker, TimePicker } from "@/components/DateTimePicker";
 import {
@@ -38,7 +38,7 @@ interface RoundRow {
     number: number;
     name?: string;
     description?: string;
-    criteria?: string;
+    criteria?: string | any[];
     technologies?: string[];
     start_at?: string;
     end_at?: string;
@@ -173,9 +173,25 @@ export default function TournamentEditPage() {
                                          deadlineDate: toDateStr(r.end_at),
                                          deadlineTime: toTimeStr(r.end_at),
                                          requirements: r.technologies ?? [],
-                                         criteria:     r.criteria
-                                         ? r.criteria.split("\n").filter(Boolean)
-                                         : [],
+                                         criteria:     (() => {
+                                             if (!r.criteria) return [];
+                                             // New format: already an array of {key,label,weight}
+                                             if (Array.isArray(r.criteria)) {
+                                                 return (r.criteria as any[]).map((c, idx) => ({
+                                                     key:    c.key   ?? `criterion_${idx}`,
+                                                     label:  c.label ?? c.name ?? String(c),
+                                                                                               weight: typeof c.weight === 'number' ? c.weight : Math.floor(100 / (r.criteria as any[]).length),
+                                                 })) as Criterion[];
+                                             }
+                                             // Legacy format: newline-separated strings → convert to equal-weight criteria
+                                             const labels = (r.criteria as string).split('\n').filter(Boolean);
+                                             const w = labels.length > 0 ? Math.floor(100 / labels.length) : 0;
+                                             return labels.map((lbl, idx) => ({
+                                                 key:    `criterion_${idx}`,
+                                                 label:  lbl,
+                                                 weight: idx < labels.length - 1 ? w : 100 - w * (labels.length - 1),
+                                             })) as Criterion[];
+                                         })(),
                                          links: (r.attachments ?? [])
                                          .filter((a: any) => a.type === "link")
                                          .map((a: any) => a.url),
@@ -227,6 +243,10 @@ export default function TournamentEditPage() {
 
             if (!name.trim()) { setError(t.editTourney?.errNameRequired ?? "Назва обов'язкова"); return; }
             if (!startDate)   { setError(t.editTourney?.errStartRequired ?? "Дата старту обов'язкова"); return; }
+
+            // Перевірка критеріїв оцінювання у кожному раунді
+            const criteriaErr = validateRoundsData(roundsData, roundCount);
+            if (criteriaErr) { setError(criteriaErr); return; }
 
             setSaving(true);
             try {
@@ -313,7 +333,9 @@ export default function TournamentEditPage() {
                             number:       n,
                             name:         rd?.name?.trim()                         || `Раунд ${n}`,
                                description:  rd?.description?.trim()                  || null,
-                               criteria:     rd?.criteria?.filter(Boolean).join("\n") || null,
+                               criteria:     (rd?.criteria && rd.criteria.length > 0)
+                               ? rd.criteria.filter(c => c.label.trim())
+                               : null,
                                technologies: rd?.requirements?.filter(Boolean)        ?? [],
                                start_at:     toIso(rd?.startDate ?? "", rd?.startTime ?? "") ?? null,
                                end_at:       toIso(rd?.deadlineDate ?? "", rd?.deadlineTime ?? "") ?? null,
@@ -550,201 +572,201 @@ export default function TournamentEditPage() {
                     : roundCount < 5
                     ? (t.editTourney?.roundWord_2 ?? "раунди")
                     : (t.editTourney?.roundWord_5 ?? "раундів")}
-                </p>
-                </div>
-                <div className="grid grid-cols-4 gap-1.5">
-                {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-                    <button key={n} type="button"
-                    onClick={() => { setRoundCount(n); if (selectedRoundTab > n) setSelectedRoundTab(1); }}
-                    className={`h-10 rounded-xl font-black text-sm border transition-all duration-150 active:scale-90 ${
-                        n === roundCount
-                        ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/30"
-                        : n <= roundCount
-                        ? "bg-blue-500/10 border-blue-500/40 text-blue-500"
-                        : "bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600"
-                    }`}>
-                    {n}
-                    </button>
-                ))}
-                </div>
-                </div>
-                </div>
-
-                <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
-                <div className="flex items-center gap-3 px-5 py-4 border-b border-(--brd) bg-(--bg)/50">
-                <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
-                <Users size={14} />
-                </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">{t.editTourney?.teamsBlock ?? "Команди"}</span>
-                <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full">{t.editTourney?.optional ?? "Опціонально"}</span>
-                </div>
-                <div className="p-5 flex flex-col gap-3 flex-1">
-                <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{t.editTourney?.teamCountLabel ?? "Кількість команд"}</p>
-                <div className="flex items-center justify-center gap-3 flex-1">
-                <button type="button" onClick={() => setMaxTeams(Math.max(0, maxTeams - 1))}
-                className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">−</button>
-                <input
-                type="number" min={0}
-                value={maxTeams === 0 ? "" : maxTeams}
-                onChange={e => { const v = parseInt(e.target.value, 10); setMaxTeams(isNaN(v) || v < 0 ? 0 : v); }}
-                placeholder="∞"
-                className="w-16 text-center text-2xl font-black bg-transparent outline-none text-(--t1) placeholder:text-(--t2)/60 border-b-2 border-(--brd) focus:border-blue-500 transition-colors tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-                <button type="button" onClick={() => setMaxTeams(maxTeams + 1)}
-                className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">+</button>
-                </div>
-                <div className="flex gap-1.5 flex-wrap justify-center">
-                {[0, 8, 16, 32, 64].map(n => (
-                    <button key={n} type="button" onClick={() => setMaxTeams(n)}
-                    className={`text-[10px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest transition-all active:scale-95 ${
-                        maxTeams === n
-                        ? "bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/30"
-                        : "bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600"
-                    }`}>
-                    {n === 0 ? (t.editTourney?.noLimit ?? "Без ліміту") : n}
-                    </button>
-                ))}
-                </div>
-                </div>
-                </div>
-                </section>
-
-                {/* Jury per submission block */}
-                <section className="flex flex-col gap-4">
-                <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
-                <div className="flex items-center gap-3 px-5 py-4 border-b border-(--brd) bg-(--bg)/50">
-                <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white flex-shrink-0">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">Оцінювання журі</span>
-                <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full">Розподіл робіт</span>
-                </div>
-                <div className="p-5 flex flex-col gap-3 flex-1">
-                <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Журі на роботу (K)</p>
-                <p className="text-[10px] text-(--t2)/70">Скільки членів журі оцінює кожну подану роботу</p>
-                <div className="flex items-center justify-center gap-3 flex-1">
-                <button type="button" onClick={() => setJuryPerSubmission(Math.max(1, juryPerSubmission - 1))}
-                className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-amber-600 hover:border-amber-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">−</button>
-                <input
-                type="number" min={1}
-                value={juryPerSubmission}
-                onChange={e => { const v = parseInt(e.target.value, 10); setJuryPerSubmission(isNaN(v) || v < 1 ? 1 : v); }}
-                className="w-16 text-center text-2xl font-black bg-transparent outline-none text-(--t1) border-b-2 border-(--brd) focus:border-amber-500 transition-colors tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-                <button type="button" onClick={() => setJuryPerSubmission(juryPerSubmission + 1)}
-                className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-amber-600 hover:border-amber-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">+</button>
-                </div>
-                <div className="flex gap-1.5 flex-wrap justify-center">
-                {[1, 2, 3, 5].map(n => (
-                    <button key={n} type="button" onClick={() => setJuryPerSubmission(n)}
-                    className={`text-[10px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest transition-all active:scale-95 ${
-                        juryPerSubmission === n
-                        ? "bg-amber-500 border-amber-500 text-white shadow-sm shadow-amber-500/30"
-                        : "bg-(--bg) border-(--brd) text-(--t2) hover:border-amber-500/50 hover:text-amber-600"
-                    }`}>
-                    {n === 1 ? "1 — швидко" : n === 2 ? "2 — стандарт" : n === 3 ? "3 — суворо" : `${n}`}
-                    </button>
-                ))}
-                </div>
-                </div>
-                </div>
-                </section>
-
-                {error && (
-                    <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl">
-                    <AlertCircle size={16} className="text-red-500 flex-shrink-0" />
-                    <p className="text-sm font-bold text-red-500">{error}</p>
-                    </div>
-                )}
-                {success && (
-                    <div className="flex items-center gap-3 p-4 bg-green-500/10 border border-green-500/30 rounded-2xl">
-                    <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
-                    <p className="text-sm font-bold text-green-500">{success}</p>
-                    </div>
-                )}
-
-                <div className="cdIn" style={{ animationDelay: "160ms" }}>
-                <JuryInvitePanel tournamentId={id as string} tournamentName={name} />
-                </div>
-
-                <div className="cdIn flex flex-col sm:flex-row gap-3 pb-8" style={{ animationDelay: "180ms" }}>
-                <button type="submit" disabled={saving}
-                className="flex-1 flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed">
-                {saving
-                    ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {t.editTourney?.saving ?? "Збереження..."}</>
-                    : <><Save size={15} /> {t.editTourney?.saveBtn ?? "Зберегти зміни"}</>
-                }
-                </button>
-                <button type="button" onClick={() => router.push(`/tournaments/${id}`)} disabled={saving}
-                className="flex-1 px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60">
-                {t.editTourney?.cancelBtn ?? "Скасувати"}
-                </button>
-                <button type="button" onClick={() => setShowDeleteModal(true)} disabled={saving || deleting}
-                className="flex items-center justify-center gap-2 px-6 py-4 bg-red-500/10 border border-red-500/30 text-red-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-500/20 hover:border-red-500/50 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
-                <Trash2 size={15} /> {t.editTourney?.deleteBtn ?? "Видалити"}
-                </button>
-                </div>
-
-                </div>
-                {/* end LEFT COLUMN */}
-
-                {/* ── RIGHT COLUMN ── */}
-                <div className="w-full xl:sticky xl:top-6 xl:flex-1 xl:min-w-0">
-                <RoundSettingsPanel
-                roundCount={roundCount}
-                selectedRound={selectedRoundTab}
-                onSelectRound={setSelectedRoundTab}
-                onRoundsChange={setRoundsData}
-                initialData={initialRoundsData}
-                />
-                </div>
-
-                </div>
-                </form>
-                </div>
-                </main>
-
-                {/* ── DELETE CONFIRMATION MODAL ── */}
-                {showDeleteModal && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                    <div className="bg-(--card) border border-(--brd) rounded-3xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-5 animate-[cardDrop_300ms_cubic-bezier(.22,1,.36,1)_both]">
-                    <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center flex-shrink-0">
-                    <Trash2 size={18} className="text-red-500" />
-                    </div>
-                    <h2 className="text-base font-black uppercase tracking-widest text-(--t1)">
-                    {t.editTourney?.deleteConfirmTitle ?? "Видалити турнір?"}
-                    </h2>
-                    </div>
-                    <p className="text-sm text-(--t2) leading-relaxed">
-                    {t.editTourney?.deleteConfirmText ?? "Цю дію неможливо скасувати. Всі раунди та реєстрації команд будуть видалені назавжди."}
                     </p>
-                    <div className="px-4 py-3 bg-(--bg) border border-(--brd) rounded-2xl">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1">{t.editTourney?.deleteConfirmName ?? "Турнір:"}</p>
-                    <p className="text-sm font-black text-(--t1) truncate">{tourney?.name}</p>
                     </div>
-                    <div className="flex gap-3">
-                    <button
-                    type="button"
-                    onClick={() => setShowDeleteModal(false)}
-                    disabled={deleting}
-                    className="flex-1 px-5 py-3 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60">
-                    {t.editTourney?.deleteCancelBtn ?? "Скасувати"}
-                    </button>
-                    <button
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="flex-1 flex items-center justify-center gap-2 px-5 py-3 bg-red-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-700 active:scale-95 transition-all shadow-lg shadow-red-600/25 disabled:opacity-60 disabled:cursor-not-allowed">
-                    {deleting
-                        ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {t.editTourney?.deleteConfirming ?? "Видалення..."}</>
-                        : <><Trash2 size={14} /> {t.editTourney?.deleteConfirmBtn ?? "Так, видалити"}</>
+                    <div className="grid grid-cols-4 gap-1.5">
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                        <button key={n} type="button"
+                        onClick={() => { setRoundCount(n); if (selectedRoundTab > n) setSelectedRoundTab(1); }}
+                        className={`h-10 rounded-xl font-black text-sm border transition-all duration-150 active:scale-90 ${
+                            n === roundCount
+                            ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/30"
+                            : n <= roundCount
+                            ? "bg-blue-500/10 border-blue-500/40 text-blue-500"
+                            : "bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600"
+                        }`}>
+                        {n}
+                        </button>
+                    ))}
+                    </div>
+                    </div>
+                    </div>
+
+                    <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
+                    <div className="flex items-center gap-3 px-5 py-4 border-b border-(--brd) bg-(--bg)/50">
+                    <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
+                    <Users size={14} />
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">{t.editTourney?.teamsBlock ?? "Команди"}</span>
+                    <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full">{t.editTourney?.optional ?? "Опціонально"}</span>
+                    </div>
+                    <div className="p-5 flex flex-col gap-3 flex-1">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{t.editTourney?.teamCountLabel ?? "Кількість команд"}</p>
+                    <div className="flex items-center justify-center gap-3 flex-1">
+                    <button type="button" onClick={() => setMaxTeams(Math.max(0, maxTeams - 1))}
+                    className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">−</button>
+                    <input
+                    type="number" min={0}
+                    value={maxTeams === 0 ? "" : maxTeams}
+                    onChange={e => { const v = parseInt(e.target.value, 10); setMaxTeams(isNaN(v) || v < 0 ? 0 : v); }}
+                    placeholder="∞"
+                    className="w-16 text-center text-2xl font-black bg-transparent outline-none text-(--t1) placeholder:text-(--t2)/60 border-b-2 border-(--brd) focus:border-blue-500 transition-colors tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <button type="button" onClick={() => setMaxTeams(maxTeams + 1)}
+                    className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">+</button>
+                    </div>
+                    <div className="flex gap-1.5 flex-wrap justify-center">
+                    {[0, 8, 16, 32, 64].map(n => (
+                        <button key={n} type="button" onClick={() => setMaxTeams(n)}
+                        className={`text-[10px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest transition-all active:scale-95 ${
+                            maxTeams === n
+                            ? "bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/30"
+                            : "bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600"
+                        }`}>
+                        {n === 0 ? (t.editTourney?.noLimit ?? "Без ліміту") : n}
+                        </button>
+                    ))}
+                    </div>
+                    </div>
+                    </div>
+                    </section>
+
+                    {/* Jury per submission block */}
+                    <section className="flex flex-col gap-4">
+                    <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
+                    <div className="flex items-center gap-3 px-5 py-4 border-b border-(--brd) bg-(--bg)/50">
+                    <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">Оцінювання журі</span>
+                    <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full">Розподіл робіт</span>
+                    </div>
+                    <div className="p-5 flex flex-col gap-3 flex-1">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Журі на роботу (K)</p>
+                    <p className="text-[10px] text-(--t2)/70">Скільки членів журі оцінює кожну подану роботу</p>
+                    <div className="flex items-center justify-center gap-3 flex-1">
+                    <button type="button" onClick={() => setJuryPerSubmission(Math.max(1, juryPerSubmission - 1))}
+                    className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-amber-600 hover:border-amber-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">−</button>
+                    <input
+                    type="number" min={1}
+                    value={juryPerSubmission}
+                    onChange={e => { const v = parseInt(e.target.value, 10); setJuryPerSubmission(isNaN(v) || v < 1 ? 1 : v); }}
+                    className="w-16 text-center text-2xl font-black bg-transparent outline-none text-(--t1) border-b-2 border-(--brd) focus:border-amber-500 transition-colors tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <button type="button" onClick={() => setJuryPerSubmission(juryPerSubmission + 1)}
+                    className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-amber-600 hover:border-amber-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">+</button>
+                    </div>
+                    <div className="flex gap-1.5 flex-wrap justify-center">
+                    {[1, 2, 3, 5].map(n => (
+                        <button key={n} type="button" onClick={() => setJuryPerSubmission(n)}
+                        className={`text-[10px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest transition-all active:scale-95 ${
+                            juryPerSubmission === n
+                            ? "bg-amber-500 border-amber-500 text-white shadow-sm shadow-amber-500/30"
+                            : "bg-(--bg) border-(--brd) text-(--t2) hover:border-amber-500/50 hover:text-amber-600"
+                        }`}>
+                        {n === 1 ? "1 — швидко" : n === 2 ? "2 — стандарт" : n === 3 ? "3 — суворо" : `${n}`}
+                        </button>
+                    ))}
+                    </div>
+                    </div>
+                    </div>
+                    </section>
+
+                    {error && (
+                        <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl">
+                        <AlertCircle size={16} className="text-red-500 flex-shrink-0" />
+                        <p className="text-sm font-bold text-red-500">{error}</p>
+                        </div>
+                    )}
+                    {success && (
+                        <div className="flex items-center gap-3 p-4 bg-green-500/10 border border-green-500/30 rounded-2xl">
+                        <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
+                        <p className="text-sm font-bold text-green-500">{success}</p>
+                        </div>
+                    )}
+
+                    <div className="cdIn" style={{ animationDelay: "160ms" }}>
+                    <JuryInvitePanel tournamentId={id as string} tournamentName={name} />
+                    </div>
+
+                    <div className="cdIn flex flex-col sm:flex-row gap-3 pb-8" style={{ animationDelay: "180ms" }}>
+                    <button type="submit" disabled={saving}
+                    className="flex-1 flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed">
+                    {saving
+                        ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {t.editTourney?.saving ?? "Збереження..."}</>
+                        : <><Save size={15} /> {t.editTourney?.saveBtn ?? "Зберегти зміни"}</>
                     }
                     </button>
+                    <button type="button" onClick={() => router.push(`/tournaments/${id}`)} disabled={saving}
+                    className="flex-1 px-8 py-4 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60">
+                    {t.editTourney?.cancelBtn ?? "Скасувати"}
+                    </button>
+                    <button type="button" onClick={() => setShowDeleteModal(true)} disabled={saving || deleting}
+                    className="flex items-center justify-center gap-2 px-6 py-4 bg-red-500/10 border border-red-500/30 text-red-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-500/20 hover:border-red-500/50 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
+                    <Trash2 size={15} /> {t.editTourney?.deleteBtn ?? "Видалити"}
+                    </button>
                     </div>
+
                     </div>
+                    {/* end LEFT COLUMN */}
+
+                    {/* ── RIGHT COLUMN ── */}
+                    <div className="w-full xl:sticky xl:top-6 xl:flex-1 xl:min-w-0">
+                    <RoundSettingsPanel
+                    roundCount={roundCount}
+                    selectedRound={selectedRoundTab}
+                    onSelectRound={setSelectedRoundTab}
+                    onRoundsChange={setRoundsData}
+                    initialData={initialRoundsData}
+                    />
                     </div>
-                )}
-                </div>
+
+                    </div>
+                    </form>
+                    </div>
+                    </main>
+
+                    {/* ── DELETE CONFIRMATION MODAL ── */}
+                    {showDeleteModal && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                        <div className="bg-(--card) border border-(--brd) rounded-3xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-5 animate-[cardDrop_300ms_cubic-bezier(.22,1,.36,1)_both]">
+                        <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center flex-shrink-0">
+                        <Trash2 size={18} className="text-red-500" />
+                        </div>
+                        <h2 className="text-base font-black uppercase tracking-widest text-(--t1)">
+                        {t.editTourney?.deleteConfirmTitle ?? "Видалити турнір?"}
+                        </h2>
+                        </div>
+                        <p className="text-sm text-(--t2) leading-relaxed">
+                        {t.editTourney?.deleteConfirmText ?? "Цю дію неможливо скасувати. Всі раунди та реєстрації команд будуть видалені назавжди."}
+                        </p>
+                        <div className="px-4 py-3 bg-(--bg) border border-(--brd) rounded-2xl">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1">{t.editTourney?.deleteConfirmName ?? "Турнір:"}</p>
+                        <p className="text-sm font-black text-(--t1) truncate">{tourney?.name}</p>
+                        </div>
+                        <div className="flex gap-3">
+                        <button
+                        type="button"
+                        onClick={() => setShowDeleteModal(false)}
+                        disabled={deleting}
+                        className="flex-1 px-5 py-3 bg-(--bg) border border-(--brd) text-(--t2) rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all disabled:opacity-60">
+                        {t.editTourney?.deleteCancelBtn ?? "Скасувати"}
+                        </button>
+                        <button
+                        type="button"
+                        onClick={handleDelete}
+                        disabled={deleting}
+                        className="flex-1 flex items-center justify-center gap-2 px-5 py-3 bg-red-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-700 active:scale-95 transition-all shadow-lg shadow-red-600/25 disabled:opacity-60 disabled:cursor-not-allowed">
+                        {deleting
+                            ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {t.editTourney?.deleteConfirming ?? "Видалення..."}</>
+                            : <><Trash2 size={14} /> {t.editTourney?.deleteConfirmBtn ?? "Так, видалити"}</>
+                        }
+                        </button>
+                        </div>
+                        </div>
+                        </div>
+                    )}
+                    </div>
         );
 }

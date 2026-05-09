@@ -37,6 +37,7 @@ interface SubmissionWork {
     github_url?: string;
     youtube_url?: string;
     live_url?: string;
+    description?: string;
     files?: { name: string; path: string; url: string | null }[];
     status: "not_evaluated" | "in_progress" | "evaluated";
     // filled after evaluation load
@@ -49,6 +50,7 @@ interface RoundInfo {
     id: string;
     number: number;
     name: string;
+    description?: string;
     tournament_id: string;
     tournament_name?: string;
     end_at?: string;
@@ -93,66 +95,98 @@ function fmtDate(iso?: string) {
 }
 
 // ── Readme Modal ──────────────────────────────────────────────────────────────
+// source="html"  → description з таблиці rounds (HTML від RichTextEditor)
+// source="file"  → файл з bucket (завантажуємо, рендеримо як Markdown або plain text)
 
-function ReadmeModal({ url, onClose }: { url: string; onClose: () => void }) {
-    const [content, setContent] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+function ReadmeModal({
+    htmlContent,
+    fileUrl,
+    title,
+    onClose,
+}: {
+    htmlContent?: string | null;   // description з БД — готовий HTML
+    fileUrl?: string | null;       // URL файлу з bucket
+    title?: string;
+    onClose: () => void;
+}) {
+    const [fileText, setFileText]     = useState<string | null>(null);
+    const [loading, setLoading]       = useState(!!fileUrl);
+    const [error, setError]           = useState<string | null>(null);
 
+    // Завантажуємо файл тільки якщо передано fileUrl
     useEffect(() => {
+        if (!fileUrl) return;
         setLoading(true);
         setError(null);
-        fetch(url)
-        .then(r => {
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            return r.text();
-        })
-        .then(text => { setContent(text); setLoading(false); })
+        fetch(fileUrl)
+        .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
+        .then(t  => { setFileText(t); setLoading(false); })
         .catch(e => { setError(e.message); setLoading(false); });
-    }, [url]);
+    }, [fileUrl]);
 
-    // Simple markdown → HTML renderer (no external dep)
-    const renderMarkdown = (md: string): string => {
-        return md
-        // Escape HTML
-        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-        // Code blocks
-        .replace(/```[\w]*\n?([\s\S]*?)```/g, '<pre class="md-pre"><code>$1</code></pre>')
-        // Inline code
-        .replace(/`([^`]+)`/g, '<code class="md-code">$1</code>')
-        // Headings
-        .replace(/^### (.+)$/gm, '<h3 class="md-h3">$1</h3>')
-        .replace(/^## (.+)$/gm, '<h2 class="md-h2">$1</h2>')
-        .replace(/^# (.+)$/gm, '<h1 class="md-h1">$1</h1>')
-        // Bold + italic
-        .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        // Links
-        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="md-link">$1</a>')
-        // Images
-        .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="md-img" />')
-        // Horizontal rule
-        .replace(/^---$/gm, '<hr class="md-hr" />')
-        // Unordered lists
-        .replace(/^\s*[-*+] (.+)$/gm, '<li class="md-li">$1</li>')
-        .replace(/(<li[\s\S]*?<\/li>)(\s*(?!<li))/g, '<ul class="md-ul">$1</ul>$2')
-        // Ordered lists
-        .replace(/^\d+\. (.+)$/gm, '<li class="md-oli">$1</li>')
-        .replace(/(<li class="md-oli"[\s\S]*?<\/li>)(\s*(?!<li))/g, '<ol class="md-ol">$1</ol>$2')
-        // Blockquotes
-        .replace(/^> (.+)$/gm, '<blockquote class="md-blockquote">$1</blockquote>')
-        // Paragraphs (lines not already wrapped)
-        .replace(/^(?!<[hupoba]|<li|<pre|<blockquote|<hr)(.+)$/gm, '<p class="md-p">$1</p>')
-        // Clean up empty lines
-        .replace(/\n{2,}/g, '\n');
-    };
-
+    // Escape + Backdrop click
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
         document.addEventListener("keydown", onKey);
         return () => document.removeEventListener("keydown", onKey);
     }, [onClose]);
+
+    // Markdown → HTML (для файлів з bucket)
+    const renderMarkdown = (md: string): string => {
+        return md
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/```[\w]*\n?([\s\S]*?)```/g, '<pre class="md-pre"><code>$1</code></pre>')
+        .replace(/`([^`]+)`/g, '<code class="md-code">$1</code>')
+        .replace(/^### (.+)$/gm, '<h3 class="md-h3">$1</h3>')
+        .replace(/^## (.+)$/gm,  '<h2 class="md-h2">$1</h2>')
+        .replace(/^# (.+)$/gm,   '<h1 class="md-h1">$1</h1>')
+        .replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>")
+        .replace(/\*\*(.+?)\*\*/g,   "<strong>$1</strong>")
+        .replace(/\*(.+?)\*/g,     "<em>$1</em>")
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="md-link">$1</a>')
+        .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="md-img" />')
+        .replace(/^---$/gm, '<hr class="md-hr" />')
+        .replace(/^\s*[-*+] (.+)$/gm, '<li class="md-li">$1</li>')
+        .replace(/(<li[\s\S]*?<\/li>)(\s*(?!<li))/g, '<ul class="md-ul">$1</ul>$2')
+        .replace(/^\d+\. (.+)$/gm, '<li class="md-oli">$1</li>')
+        .replace(/(<li class="md-oli"[\s\S]*?<\/li>)(\s*(?!<li))/g, '<ol class="md-ol">$1</ol>$2')
+        .replace(/^> (.+)$/gm, '<blockquote class="md-blockquote">$1</blockquote>')
+        .replace(/^(?!<[hupobaldio]|<li|<pre|<blockquote|<hr)(.+)$/gm, '<p class="md-p">$1</p>')
+        .replace(/\n{2,}/g, "\n");
+    };
+
+    // Що рендерити:
+    // 1. Якщо є fileUrl → показуємо fileText (markdown) або loading/error
+    // 2. Якщо є htmlContent → рендеримо HTML напряму
+    const renderBody = () => {
+        if (fileUrl) {
+            if (loading) return (
+                <div className="flex items-center justify-center py-16">
+                <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+            );
+            if (error) return (
+                <div className="flex flex-col items-center gap-3 py-16 text-center">
+                <AlertCircle size={28} className="text-red-400" />
+                <p className="text-sm font-bold text-(--t2)">Не вдалося завантажити файл</p>
+                <p className="text-xs text-(--t2) opacity-60">{error}</p>
+                <a href={fileUrl} target="_blank" rel="noopener noreferrer"
+                className="text-xs font-black text-blue-600 hover:underline mt-1">
+                Відкрити напряму ↗
+                </a>
+                </div>
+            );
+            if (fileText !== null) return (
+                <div className="md-body"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(fileText) }} />
+            );
+        }
+        if (htmlContent) return (
+            <div className="rich-body"
+            dangerouslySetInnerHTML={{ __html: htmlContent }} />
+        );
+        return null;
+    };
 
     return (
         <div
@@ -167,38 +201,27 @@ function ReadmeModal({ url, onClose }: { url: string; onClose: () => void }) {
         {/* Header */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd)" style={{ background: "var(--bg)" }}>
         <FileText size={16} className="text-blue-600 flex-shrink-0" />
-        <span className="text-[11px] font-black uppercase tracking-widest text-(--t1) flex-1">README</span>
-        <button
-        onClick={onClose}
-        className="w-8 h-8 rounded-xl flex items-center justify-center border border-(--brd) text-(--t2) hover:text-(--t1) hover:border-blue-600/40 transition-all active:scale-95"
-        >
+        <span className="text-[11px] font-black uppercase tracking-widest text-(--t1) flex-1">
+        {title ?? (fileUrl ? "README" : "Опис раунду")}
+        </span>
+        {fileUrl && (
+            <a href={fileUrl} target="_blank" rel="noopener noreferrer"
+            className="mr-2 text-[9px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
+            ↗ Відкрити
+            </a>
+        )}
+        <button onClick={onClose}
+        className="w-8 h-8 rounded-xl flex items-center justify-center border border-(--brd) text-(--t2) hover:text-(--t1) hover:border-blue-600/40 transition-all active:scale-95">
         <X size={14} />
         </button>
         </div>
-        {/* Content */}
+        {/* Body */}
         <div className="flex-1 overflow-y-auto px-8 py-6">
-        {loading && (
-            <div className="flex items-center justify-center py-16">
-            <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            </div>
-        )}
-        {error && (
-            <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <AlertCircle size={28} className="text-red-400" />
-            <p className="text-sm font-bold text-(--t2)">Не вдалося завантажити файл</p>
-            <p className="text-xs text-(--t2) opacity-60">{error}</p>
-            <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-black text-blue-600 hover:underline mt-1">Відкрити напряму ↗</a>
-            </div>
-        )}
-        {!loading && !error && content !== null && (
-            <div
-            className="md-body"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
-            />
-        )}
+        {renderBody()}
         </div>
         </div>
         <style>{`
+            /* Markdown styles (файл з bucket) */
             .md-body { color: var(--t1); font-size: 14px; line-height: 1.7; }
             .md-h1 { font-size: 1.6em; font-weight: 900; margin: 1.2em 0 0.5em; color: var(--t1); }
             .md-h2 { font-size: 1.3em; font-weight: 900; margin: 1em 0 0.4em; color: var(--t1); border-bottom: 1px solid var(--brd); padding-bottom: 0.3em; }
@@ -213,6 +236,21 @@ function ReadmeModal({ url, onClose }: { url: string; onClose: () => void }) {
             .md-ul, .md-ol { padding-left: 1.5em; margin: 0.4em 0; }
             .md-li, .md-oli { margin: 0.2em 0; color: var(--t2); }
             .md-blockquote { border-left: 3px solid #3b82f6; padding-left: 1em; margin: 0.6em 0; color: var(--t2); opacity: 0.8; font-style: italic; }
+            /* Rich HTML styles (опис з БД) */
+            .rich-body { color: var(--t1); font-size: 14px; line-height: 1.7; }
+            .rich-body h1 { font-size: 1.6em; font-weight: 900; margin: 1.2em 0 0.5em; }
+            .rich-body h2 { font-size: 1.3em; font-weight: 900; margin: 1em 0 0.4em; border-bottom: 1px solid var(--brd); padding-bottom: 0.3em; }
+            .rich-body h3 { font-size: 1.1em; font-weight: 800; margin: 0.8em 0 0.3em; }
+            .rich-body p  { margin: 0.5em 0; color: var(--t2); }
+            .rich-body ul { padding-left: 1.5em; margin: 0.4em 0; list-style: disc; }
+            .rich-body ol { padding-left: 1.5em; margin: 0.4em 0; list-style: decimal; }
+            .rich-body li { margin: 0.2em 0; color: var(--t2); }
+            .rich-body a  { color: #3b82f6; text-decoration: underline; text-underline-offset: 2px; }
+            .rich-body blockquote { border-left: 3px solid #3b82f6; padding-left: 1em; margin: 0.6em 0; color: var(--t2); font-style: italic; }
+            .rich-body code { background: var(--bg); border: 1px solid var(--brd); border-radius: 6px; padding: 1px 6px; font-size: 12px; font-family: monospace; color: #3b82f6; }
+            .rich-body pre { background: var(--bg); border: 1px solid var(--brd); border-radius: 12px; padding: 14px 16px; overflow-x: auto; margin: 0.8em 0; font-size: 12px; }
+            .rich-body strong { font-weight: 800; color: var(--t1); }
+            .rich-body em { font-style: italic; }
             `}</style>
             </div>
     );
@@ -392,7 +430,7 @@ export default function JuryEvaluationPage() {
     const [saveMsg, setSaveMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
     const [redistributing, setRedistributing] = useState(false);
     const [showAllInfo, setShowAllInfo] = useState(false);
-    const [readmeModal, setReadmeModal] = useState<string | null>(null);
+    const [readmeModal, setReadmeModal] = useState<{ fileUrl?: string; htmlContent?: string; title?: string } | null>(null);
     const [mobileTab, setMobileTab] = useState<"list" | "form">("list");
     const saveMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -420,7 +458,7 @@ export default function JuryEvaluationPage() {
             // 1. Round info (через Supabase — публічні дані)
             const { data: roundData } = await supabase
             .from("rounds")
-            .select("id, number, name, tournament_id, end_at, status, criteria")
+            .select("id, number, name, description, tournament_id, end_at, status, criteria")
             .eq("id", roundId)
             .single();
             if (!roundData) throw new Error("Раунд не знайдено");
@@ -507,6 +545,7 @@ export default function JuryEvaluationPage() {
                     github_url: s.github_url,
                     youtube_url: s.youtube_url,
                     live_url: s.live_url ?? undefined,
+                    description: s.description ?? undefined,
                     files: s.files ?? [],
                     status,
                     criteria,
@@ -974,14 +1013,24 @@ export default function JuryEvaluationPage() {
                             </span>
                         )}
                         {(() => {
+                            // README: перевіряємо файл README у submission АБО текстовий опис submission
                             const rf = (activeWork.files ?? []).find(f => f.name?.toLowerCase().includes("readme") && f.url);
-                            return rf?.url ? (
-                                <button onClick={() => setReadmeModal(rf.url!)} title="README"
+                            const subDescStripped = (activeWork.description ?? "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+                            const hasReadme = !!rf?.url || subDescStripped.length > 0;
+                            const openReadme = () => {
+                                if (rf?.url) {
+                                    setReadmeModal({ fileUrl: rf.url, title: "README" });
+                                } else {
+                                    setReadmeModal({ htmlContent: activeWork.description!, title: `Опис від команди: ${activeWork.team_name}` });
+                                }
+                            };
+                            return hasReadme ? (
+                                <button onClick={openReadme} title="README"
                                 className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:text-blue-600 hover:border-blue-600/40 active:scale-95 transition-all min-w-0">
                                 <Eye size={13} className="flex-shrink-0" /><span className="hidden xs:inline truncate">README</span>
                                 </button>
                             ) : (
-                                <span className="flex-1 flex items-center justify-center py-2.5 rounded-xl border border-(--brd) text-(--t2) opacity-30 cursor-not-allowed min-w-0">
+                                <span className="flex-1 flex items-center justify-center py-2.5 rounded-xl border border-(--brd) text-(--t2) opacity-30 cursor-not-allowed min-w-0" title="Команда не надала опис">
                                 <Eye size={13} />
                                 </span>
                             );
@@ -1053,11 +1102,21 @@ export default function JuryEvaluationPage() {
                             <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed"><Zap size={11} /> Live Demo</span>
                         )}
                         {(() => {
-                            const rf = (activeWork.files ?? []).find(f => f.name?.toLowerCase().includes("readme") && f.url);
-                            return rf?.url ? (
-                                <button onClick={() => setReadmeModal(rf.url!)} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"><Eye size={11} /> README</button>
+                            // README: перевіряємо файл README у submission АБО текстовий опис submission
+                            const rf2 = (activeWork.files ?? []).find(f => f.name?.toLowerCase().includes("readme") && f.url);
+                            const subDescStripped2 = (activeWork.description ?? "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+                            const hasReadme2 = !!rf2?.url || subDescStripped2.length > 0;
+                            const openReadme2 = () => {
+                                if (rf2?.url) {
+                                    setReadmeModal({ fileUrl: rf2.url, title: "README" });
+                                } else {
+                                    setReadmeModal({ htmlContent: activeWork.description!, title: `Опис від команди: ${activeWork.team_name}` });
+                                }
+                            };
+                            return hasReadme2 ? (
+                                <button onClick={openReadme2} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"><Eye size={11} /> README</button>
                             ) : (
-                                <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed"><Eye size={11} /> README</span>
+                                <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed" title="Команда не надала опис"><Eye size={11} /> README</span>
                             );
                         })()}
                         </div>
@@ -1263,7 +1322,7 @@ export default function JuryEvaluationPage() {
                 </main>
                 {/* README Modal */}
                 {readmeModal && (
-                    <ReadmeModal url={readmeModal} onClose={() => setReadmeModal(null)} />
+                    <ReadmeModal fileUrl={readmeModal.fileUrl} htmlContent={readmeModal.htmlContent} title={readmeModal.title} onClose={() => setReadmeModal(null)} />
                 )}
                 </div>
         );
