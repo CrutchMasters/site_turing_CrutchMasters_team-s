@@ -1105,7 +1105,7 @@ export default function DashboardPage() {
         onClick={() => router.push(`/rounds/${currentInfo.round!.id}/submit`)}
         className="flex items-center justify-center gap-1.5 w-40 bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl px-4 py-2.5 hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-95 transition-all whitespace-nowrap"
         >
-        <Upload size={13} /> {(t.mainPage as any).submitTask ?? "Сдать задание"}
+        <Upload size={13} /> {t.mainPage.submitTask ?? "Сдать задание"}
         </button>
         </div>
       )}
