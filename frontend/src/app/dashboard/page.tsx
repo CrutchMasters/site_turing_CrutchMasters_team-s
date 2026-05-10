@@ -20,11 +20,35 @@ typeof window !== "undefined" && window.location.hostname === "localhost"
 ? "http://localhost:8000"
 : "https://site-turing-crutchmasters-team-s.onrender.com";
 
+// ─── Countdown hook ───────────────────────────────────────────────────────────
+
+function useCountdown(endAt?: string | null) {
+  const [time, setTime] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+  useEffect(() => {
+    if (!endAt) return;
+    const tick = () => {
+      const diff = Math.max(0, new Date(endAt).getTime() - Date.now());
+      setTime({
+        days:    Math.floor(diff / 86400000),
+              hours:   Math.floor((diff % 86400000) / 3600000),
+              minutes: Math.floor((diff % 3600000) / 60000),
+              seconds: Math.floor((diff % 60000) / 1000),
+      });
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [endAt]);
+  return time;
+}
+
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Tournament {
   id: string;
   name: string;
+  rules?: string;
   status: "upcoming" | "registration" | "ongoing" | "finished";
   start_at: string;
   end_at?: string;
@@ -32,6 +56,29 @@ interface Tournament {
   registration_to?: string;
   max_teams?: number;
   team_count?: number;
+}
+
+interface Round {
+  id: string;
+  name: string;
+  description?: string;
+  status?: string;
+  start_at?: string;
+  end_at?: string;
+}
+
+interface Submission {
+  id: string;
+  is_draft: boolean;
+  status: string;
+  submitted_at?: string;
+}
+
+interface CurrentInfo {
+  tournament: { id: string; name: string; rules?: string } | null;
+  round: Round | null;
+  status: string | null;
+  submission: Submission | null;
 }
 
 interface Announcement {
@@ -216,7 +263,7 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
 
     {/* Header */}
     <div className="flex items-center justify-between px-6 py-5 border-b border-(--brd)">
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2 w-full">
     <div className="w-9 h-9 rounded-xl bg-blue-600/15 border border-blue-600/30 flex items-center justify-center">
     <Megaphone className="text-blue-600" size={16} />
     </div>
@@ -470,6 +517,163 @@ function AnnouncementCard({ a, isAdmin, onDelete, onEdit, onTogglePin }: Announc
   );
 }
 
+// ─── CurrentRoundCard ────────────────────────────────────────────────────────
+
+function TimeBox({ value, label, urgent }: { value: number; label: string; urgent?: boolean }) {
+  return (
+    <div className="flex flex-col items-center gap-1 flex-1">
+    <div className={`w-full py-3 rounded-xl border flex items-center justify-center ${urgent ? "bg-red-500/10 border-red-500/25" : "bg-(--bg) border-(--brd)"}`}>
+    <span className={`text-2xl font-black tabular-nums ${urgent ? "text-red-500" : "text-(--t1)"}`}
+    style={{ fontVariantNumeric: "tabular-nums" }}>
+    {String(value).padStart(2, "0")}
+    </span>
+    </div>
+    <span className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{label}</span>
+    </div>
+  );
+}
+
+interface CurrentRoundCardProps {
+  info: {
+    tournament: { id: string; name: string; rules?: string } | null;
+    round: { id: string; name: string; status?: string; start_at?: string; end_at?: string } | null;
+    status: string | null;
+    submission: { id: string; is_draft: boolean; status: string; submitted_at?: string } | null;
+  };
+  statusConfig: Record<string, { label: string; color: string }>;
+  statusColors: Record<string, string>;
+  onNavigate: (path: string) => void;
+  t: any;
+}
+
+function CurrentRoundCard({ info, statusConfig, statusColors, onNavigate, t }: CurrentRoundCardProps) {
+  const countdown = useCountdown(info.round?.end_at);
+
+  const endTs   = info.round?.end_at   ? new Date(info.round.end_at).getTime()   : 0;
+  const startTs = info.round?.start_at ? new Date(info.round.start_at).getTime() : 0;
+  const now     = Date.now();
+
+  let progressPct = 0;
+  if (endTs > 0 && startTs > 0 && endTs > startTs) {
+    progressPct = Math.min(100, Math.max(0, ((now - startTs) / (endTs - startTs)) * 100));
+  }
+  const isUrgent = progressPct > 80;
+  const isEnded  = endTs > 0 && now > endTs;
+
+  function fmtShort(iso?: string) {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  }
+
+  function stripHtml(html: string) {
+    return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 relative z-10">
+
+    {/* Tournament */}
+    <div className="px-3 py-2.5 rounded-xl bg-(--bg) border border-(--brd) flex flex-col gap-1 min-w-0 overflow-hidden">
+    <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{t.mainPage.currentTournament}</p>
+    {info.tournament ? (
+      <>
+      <button
+      onClick={() => onNavigate(`/tournaments/${info.tournament!.id}`)}
+      className="font-black text-sm text-left leading-snug hover:opacity-75 transition-opacity w-full overflow-hidden text-ellipsis whitespace-nowrap block"
+      style={{ color: "#C6CFDA" }}
+      >
+      {info.tournament.name}
+      </button>
+      {info.tournament.rules && (
+        <p className="text-xs text-(--t2) font-medium leading-snug mt-0.5 overflow-hidden"
+        style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+        {stripHtml(info.tournament.rules)}
+        </p>
+      )}
+      </>
+    ) : (
+      <p className="font-bold text-xs text-(--t2) italic">{t.mainPage.noActiveTournament}</p>
+    )}
+    </div>
+
+    {/* Round */}
+    <div className="px-3 py-2.5 rounded-xl bg-(--bg) border border-(--brd) flex flex-col gap-1 min-w-0 overflow-hidden">
+    <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{t.mainPage.currentRound}</p>
+    {info.round ? (
+      <>
+      <button
+      onClick={() => onNavigate(`/rounds/${info.round!.id}`)}
+      className="font-black text-sm text-left leading-snug hover:opacity-75 transition-opacity w-full overflow-hidden text-ellipsis whitespace-nowrap block"
+      style={{ color: "#C6CFDA" }}
+      >
+      {info.round.name}
+      </button>
+      {info.round.description && (
+        <p className="text-xs text-(--t2) font-medium leading-snug mt-0.5 overflow-hidden"
+        style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+        {stripHtml(info.round.description)}
+        </p>
+      )}
+      </>
+    ) : (
+      <p className="font-bold text-xs text-(--t2) italic">{t.mainPage.noActiveRound}</p>
+    )}
+    </div>
+
+    {/* Status block — по шаблону */}
+    <div className={`px-3 py-3 rounded-xl border flex flex-col gap-2 ${isUrgent ? "bg-red-500/5 border-red-500/20" : "bg-blue-600/10 border-blue-600/20"}`}>
+
+    {/* Заголовок */}
+    <p className={`text-[9px] font-black uppercase tracking-widest ${isUrgent ? "text-red-500" : "text-blue-600"}`}>
+    {t.mainPage.colStatus}
+    </p>
+
+    {/* Строка: [дни] ·· [часы]  +  пилюльки справа */}
+    <div className="flex items-center gap-3">
+
+    {/* Два бокса с двумя точками — 60% ширины */}
+    <div className="flex items-center gap-1.5 w-[60%] min-w-0">
+    <TimeBox value={countdown.days}  label="дней" urgent={isUrgent || isEnded} />
+    <div className="flex flex-col items-center gap-[5px] pb-4 flex-shrink-0">
+    <span className={`block w-[4px] h-[4px] rounded-full ${isUrgent || isEnded ? "bg-red-500" : "bg-(--t2)"}`} />
+    <span className={`block w-[4px] h-[4px] rounded-full ${isUrgent || isEnded ? "bg-red-500" : "bg-(--t2)"}`} />
+    </div>
+    <TimeBox value={countdown.hours} label="час"  urgent={isUrgent || isEnded} />
+    </div>
+
+    {/* Две пилюльки — 40% ширины */}
+    <div className="flex flex-col gap-1.5 w-[40%]">
+
+    {info.status && (
+      <span className={`flex items-center justify-center gap-1 text-[9px] font-black uppercase px-3 py-1.5 rounded-full border w-full ${statusColors[info.status] ?? statusColors.upcoming}`}>
+      {(statusConfig as any)[info.status]?.label ?? info.status}
+      </span>
+    )}
+
+    <span className={`flex items-center justify-center gap-1 text-[9px] font-black px-3 py-1.5 rounded-full border w-full ${
+      info.submission && !info.submission.is_draft
+      ? "bg-green-500/10 border-green-500/25 text-green-500"
+      : info.submission?.is_draft
+      ? "bg-amber-500/10 border-amber-500/25 text-amber-500"
+      : "bg-(--bg) border-(--brd) text-(--t2)"
+    }`}>
+    {info.submission && !info.submission.is_draft ? (
+      <><svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Работа сдана</>
+    ) : info.submission?.is_draft ? (
+      <><svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Черновик</>
+    ) : (
+      <><svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Не сдано</>
+    )}
+    </span>
+
+    </div>
+    </div>
+
+    </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -478,6 +682,10 @@ export default function DashboardPage() {
   const [tournaments,         setTournaments]          = useState<Tournament[]>([]);
   const [tournamentsLoading,  setTournamentsLoading]   = useState(true);
   const [activeFilter,        setActiveFilter]         = useState<"all" | "upcoming" | "registration" | "ongoing" | "finished">("all");
+
+  // Current tournament/round state
+  const [currentInfo,          setCurrentInfo]          = useState<CurrentInfo | null>(null);
+  const [currentInfoLoading,   setCurrentInfoLoading]   = useState(true);
 
   // Announcements state
   const [announcements,        setAnnouncements]        = useState<Announcement[]>([]);
@@ -558,6 +766,101 @@ export default function DashboardPage() {
       }
     }, []);
 
+    // ── fetch current tournament & round ──────────────────────────────────────
+    const fetchCurrentInfo = useCallback(async () => {
+      if (!user) return;
+      setCurrentInfoLoading(true);
+      try {
+        // Find user's team: try captain first, then member (members_ids is uuid[])
+        // Split into two queries to avoid PostgREST 22P02 on uuid[] containment via or()
+        let team: { id: string; name: string; tournament_id: string } | null = null;
+
+        const { data: captainRows } = await supabase
+        .from("teams")
+        .select("id, name, tournament_id")
+        .eq("captain_id", user.id)
+        .not("tournament_id", "is", null)
+        .limit(1);
+
+        if (captainRows?.[0]) {
+          team = captainRows[0];
+        } else {
+          // members_ids is uuid[] — use contains operator with proper array literal
+          const { data: memberRows } = await supabase
+          .from("teams")
+          .select("id, name, tournament_id")
+          .contains("members_ids", [user.id])
+          .not("tournament_id", "is", null)
+          .limit(1);
+          team = memberRows?.[0] ?? null;
+        }
+
+        if (!team?.tournament_id) {
+          setCurrentInfo({ tournament: null, round: null, status: null, submission: null });
+          return;
+        }
+
+        // Fetch tournament info
+        const { data: tourData } = await supabase
+        .from("tournaments")
+        .select("id, name, rules, status, start_at, end_at, registration_from, registration_to")
+        .eq("id", team.tournament_id)
+        .single();
+
+        if (!tourData) {
+          setCurrentInfo({ tournament: null, round: null, status: null, submission: null });
+          return;
+        }
+
+        const tournamentStatus = computeStatus(tourData);
+
+        // Fetch rounds for this tournament — find active first, then upcoming
+        const { data: roundRows } = await supabase
+        .from("rounds")
+        .select("id, name, description, status, start_at, end_at")
+        .eq("tournament_id", team.tournament_id)
+        .order("start_at", { ascending: true });
+
+        const rounds = roundRows ?? [];
+        const activeRound = rounds.find(r => r.status === "active");
+        const upcomingRound = rounds.find(r => {
+          if (!r.start_at) return false;
+          return new Date(r.start_at).getTime() > Date.now();
+        });
+        const round = activeRound ?? upcomingRound ?? rounds[rounds.length - 1] ?? null;
+
+        const status = round
+        ? (round.status ?? (activeRound ? "active" : "upcoming"))
+        : tournamentStatus;
+
+        // Fetch submission status for the active round
+        let submission: Submission | null = null;
+        if (round && token) {
+          try {
+            const res = await fetch(`${API_URL}/api/rounds/${round.id}/submission`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+              const json = await res.json();
+              if (json.submission) submission = json.submission;
+            }
+          } catch { /* silent */ }
+        }
+
+        setCurrentInfo({
+          tournament: { id: tourData.id, name: tourData.name, rules: tourData.rules },
+          round,
+          status,
+          submission,
+        });
+      } catch (e) {
+        console.error(e);
+        setCurrentInfo(null);
+      } finally {
+        setCurrentInfoLoading(false);
+      }
+    }, [user, token]);
+
     // ── CRUD handlers ──────────────────────────────────────────────────────────
     const handleSaveAnnouncement = async (payload: Partial<Announcement>) => {
       if (editAnnouncement) {
@@ -599,6 +902,7 @@ export default function DashboardPage() {
 
         fetchTournaments();
         fetchAnnouncements();
+        fetchCurrentInfo();
 
         const obs = new IntersectionObserver(
           entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add("fuIn"); }),
@@ -606,7 +910,7 @@ export default function DashboardPage() {
         );
         revealRefs.current.forEach(r => { if (r) obs.observe(r); });
         return () => obs.disconnect();
-      }, [isLoading, user, fetchTournaments, fetchAnnouncements]);
+      }, [isLoading, user, fetchTournaments, fetchAnnouncements, fetchCurrentInfo]);
 
       if (isLoading) return (
         <div className="min-h-screen bg-(--bg) flex items-center justify-center">
@@ -781,8 +1085,56 @@ export default function DashboardPage() {
       </div>
       </section>
 
+      {/* ── Current tournament/round section ── */}
+      <section ref={el => { revealRefs.current[2] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 relative overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
+      <div className="absolute -right-12 -top-12 w-40 h-40 rounded-full blur-3xl opacity-10 bg-blue-600 pointer-events-none" />
+
+      {/* Header: title left, buttons right — vertically centered */}
+      <div className="relative z-10 flex items-center justify-between gap-3 mb-6 sm:mb-8 flex-wrap">
+      <h2 className="font-black text-lg sm:text-xl flex items-center gap-3 text-(--t1) uppercase tracking-tight leading-none">
+      <Users className="text-blue-600 flex-shrink-0" size={24} /> {t.mainPage.currentTournament}
+      </h2>
+      {!currentInfoLoading && currentInfo?.round && (
+        <div className="flex items-center gap-2 flex-shrink-0">
+        <a
+        href={`/rounds/${currentInfo.round.id}`}
+        className="flex items-center justify-center gap-1.5 w-40 bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest rounded-2xl px-[6px] py-2.5 hover:border-blue-600/40 hover:text-(--t1) active:scale-95 transition-all whitespace-nowrap"
+        >
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Скачать шаблон
+        </a>
+        <button
+        onClick={() => router.push(`/rounds/${currentInfo.round!.id}/submit`)}
+        className="flex items-center justify-center gap-1.5 w-40 bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl px-4 py-2.5 hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-95 transition-all whitespace-nowrap"
+        >
+        <Upload size={13} /> {t.mainPage.submitTask}
+        </button>
+        </div>
+      )}
+      </div>
+
+      {currentInfoLoading ? (
+        <div className="flex items-center justify-center py-8 relative z-10">
+        <Loader className="w-6 h-6 text-blue-600 animate-spin" />
+        </div>
+      ) : currentInfo ? (
+        <CurrentRoundCard
+        info={currentInfo}
+        statusConfig={STATUS_CONFIG}
+        statusColors={STATUS_COLORS}
+        onNavigate={router.push}
+        t={t}
+        />
+      ) : (
+        <div className="py-8 text-center relative z-10">
+        <Users className="w-10 h-10 text-(--t2) opacity-20 mx-auto mb-3" />
+        <p className="text-sm font-bold text-(--t2)">{t.mainPage.noActiveTournament}</p>
+        </div>
+      )}
+      </section>
+
       {/* ── Tournaments table ── */}
-      <section ref={el => { revealRefs.current[2] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
+      <section ref={el => { revealRefs.current[3] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
       <div className="p-4 sm:p-6 md:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd)">
       <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">{t.mainPage.tournamentList}</h2>
       <div className="flex flex-wrap gap-2">
@@ -861,34 +1213,6 @@ export default function DashboardPage() {
       className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline"
       >
       {t.mainPage.allTournaments}
-      </button>
-      </div>
-      </section>
-
-      {/* ── Team section ── */}
-      <section ref={el => { revealRefs.current[3] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 relative overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
-      <div className="absolute -right-12 -top-12 w-40 h-40 rounded-full blur-3xl opacity-10 bg-blue-600 pointer-events-none" />
-      <h2 className="font-black text-lg sm:text-xl mb-6 sm:mb-8 flex items-center gap-3 relative z-10 text-(--t1) uppercase tracking-tight">
-      <Users className="text-blue-600" size={24} /> {t.mainPage.currentTournament}
-      </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 relative z-10">
-      <div className="p-4 sm:p-6 rounded-2xl bg-(--bg) border border-(--brd)">
-      <p className="text-[10px] font-black uppercase tracking-wider mb-2 text-(--t2)">{t.mainPage.currentTournament}</p>
-      <p className="font-bold text-sm text-(--t1)">—</p>
-      </div>
-      <div className="p-4 sm:p-6 rounded-2xl bg-(--bg) border border-(--brd)">
-      <p className="text-[10px] font-black uppercase tracking-wider mb-2 text-(--t2)">{t.mainPage.task}</p>
-      <p className="font-bold text-sm text-(--t1)">—</p>
-      </div>
-      <div className="p-4 sm:p-6 rounded-2xl bg-blue-600/10 border border-blue-600/20">
-      <p className="text-[10px] font-black uppercase tracking-wider mb-2 text-blue-600">{t.mainPage.colStatus}</p>
-      <p className="font-bold text-sm text-blue-600 italic">—</p>
-      </div>
-      </div>
-      <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 sm:pt-8 border-t border-(--brd)">
-      <p className="text-xs font-bold text-(--t2) uppercase tracking-widest italic">{t.mainPage.statusChecking}</p>
-      <button className="w-full sm:w-auto bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl px-6 sm:px-8 py-4 flex items-center justify-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-95 transition-all">
-      <Upload size={16} /> {t.mainPage.newVersion}
       </button>
       </div>
       </section>
