@@ -10,6 +10,7 @@ import { supabase, authedSupabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import RoundSettingsPanel, { type RoundData, type Criterion, validateRoundsData } from "@/components/RoundSettingsPanel";
+import TournamentTimeline, { type RoundSlice } from "@/components/TournamentTimeline";
 import JuryInvitePanel from "@/components/JuryInvitePanel";
 import { DatePicker, TimePicker } from "@/components/DateTimePicker";
 import {
@@ -118,6 +119,40 @@ export default function TournamentEditPage() {
     const [roundsData, setRoundsData]               = useState<Record<number, RoundData>>({});
     const [initialRoundsData, setInitialRoundsData] = useState<Record<number, Partial<RoundData>>>({});
 
+    // Хелпер для таймлайну — оновлює окремий раунд в roundsData
+    const handleRoundTimelineChange = useCallback((num: number, patch: Partial<RoundSlice>) => {
+        setRoundsData(prev => ({
+            ...prev,
+            [num]: {
+                ...(prev[num] ?? {
+                    name: `Раунд ${num}`, description: "", startDate: "", startTime: "",
+                    deadlineDate: "", deadlineTime: "", evalStartDate: "", evalStartTime: "",
+                    evalEndDate: "", evalEndTime: "", requirements: [], criteria: [], links: [], files: [],
+                }),
+                ...(patch.startDate    !== undefined ? { startDate:    patch.startDate }    : {}),
+                ...(patch.startTime    !== undefined ? { startTime:    patch.startTime }    : {}),
+                ...(patch.deadlineDate !== undefined ? { deadlineDate: patch.deadlineDate } : {}),
+                ...(patch.deadlineTime !== undefined ? { deadlineTime: patch.deadlineTime } : {}),
+            },
+        }));
+        // Також оновлюємо externalRoundDates щоб RoundSettingsPanel отримав нові дати
+        setExternalRoundDates(prev => ({
+            ...prev,
+            [num]: {
+                ...(prev[num] ?? {}),
+                ...(patch.startDate    !== undefined ? { startDate:    patch.startDate }    : {}),
+                ...(patch.startTime    !== undefined ? { startTime:    patch.startTime }    : {}),
+                ...(patch.deadlineDate !== undefined ? { deadlineDate: patch.deadlineDate } : {}),
+                ...(patch.deadlineTime !== undefined ? { deadlineTime: patch.deadlineTime } : {}),
+            },
+        }));
+    }, []);
+
+    // Зовнішні дати для RoundSettingsPanel (від таймлайну)
+    const [externalRoundDates, setExternalRoundDates] = useState<
+        Record<number, Partial<Pick<RoundData, "startDate"|"startTime"|"deadlineDate"|"deadlineTime">>>
+    >({});
+
     const isAdmin = user?.role === "admin" || user?.role === "superadmin";
 
     const API_URL =
@@ -181,7 +216,7 @@ export default function TournamentEditPage() {
                                                      key:    c.key   ?? `criterion_${idx}`,
                                                      label:  c.label ?? c.name ?? String(c),
                                                                                                weight: typeof c.weight === 'number' ? c.weight : Math.floor(100 / (r.criteria as any[]).length),
-                                                 })) as Criterion[];
+                                                 }));
                                              }
                                              // Legacy format: newline-separated strings → convert to equal-weight criteria
                                              const labels = (r.criteria as string).split('\n').filter(Boolean);
@@ -190,7 +225,7 @@ export default function TournamentEditPage() {
                                                  key:    `criterion_${idx}`,
                                                  label:  lbl,
                                                  weight: idx < labels.length - 1 ? w : 100 - w * (labels.length - 1),
-                                             })) as Criterion[];
+                                             }));
                                          })(),
                                          links: (r.attachments ?? [])
                                          .filter((a: any) => a.type === "link")
@@ -245,6 +280,55 @@ export default function TournamentEditPage() {
             if (!startDate)   { setError(t.editTourney?.errStartRequired ?? "Дата старту обов'язкова"); return; }
 
             // Перевірка критеріїв оцінювання у кожному раунді
+            // ── Валідація часової послідовності ──────────────────────────────
+            const parseLocalDt = (date: string, time: string) => {
+                if (!date) return null;
+                const [y, mo, d] = date.split("-").map(Number);
+                const [h = 0, m = 0] = (time ?? "").split(":").map(Number);
+                return new Date(y, mo - 1, d, h, m).getTime();
+            };
+
+            const rf  = parseLocalDt(regFromDate, regFromTime);
+            const rt  = parseLocalDt(regToDate,   regToTime);
+            const ts  = parseLocalDt(startDate,   startTime);
+            const te  = parseLocalDt(endDate,      endTime);
+
+            if (rf && ts && rf >= ts)
+                { setError("Реєстрація повинна починатися раніше за старт турніру."); return; }
+            if (rt && ts && rt > ts)
+                { setError("Реєстрація повинна закінчуватися не пізніше старту турніру (вони не можуть перетинатися)."); return; }
+            if (rf && rt && rf >= rt)
+                { setError("Початок реєстрації повинен бути раніше за кінець реєстрації."); return; }
+            if (ts && te && ts >= te)
+                { setError("Початок турніру повинен бути раніше за кінець турніру."); return; }
+
+            // Валідація раундів
+            const roundSlices = Array.from({ length: roundCount }, (_, i) => {
+                const n = i + 1;
+                const rd = roundsData[n];
+                return {
+                    n,
+                    start: parseLocalDt(rd?.startDate ?? "", rd?.startTime ?? ""),
+                    end:   parseLocalDt(rd?.deadlineDate ?? "", rd?.deadlineTime ?? ""),
+                };
+            }).filter(r => r.start || r.end);
+
+            for (const r of roundSlices) {
+                if (r.start && r.end && r.start >= r.end)
+                    { setError(`Раунд ${r.n}: початок повинен бути раніше за дедлайн.`); return; }
+                if (ts && r.start && r.start < ts)
+                    { setError(`Раунд ${r.n}: початок раунду не може бути раніше за старт турніру.`); return; }
+                if (te && r.end && r.end > te)
+                    { setError(`Раунд ${r.n}: дедлайн раунду не може виходити за межі турніру.`); return; }
+            }
+            for (let i = 0; i < roundSlices.length - 1; i++) {
+                const cur = roundSlices[i];
+                const nxt = roundSlices[i + 1];
+                if (cur.end && nxt.start && cur.end > nxt.start)
+                    { setError(`Раунд ${nxt.n} починається до завершення раунду ${cur.n}. Раунди не можуть перекриватися.`); return; }
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             const criteriaErr = validateRoundsData(roundsData, roundCount);
             if (criteriaErr) { setError(criteriaErr); return; }
 
@@ -549,6 +633,34 @@ export default function TournamentEditPage() {
                 </div>
                 </section>
 
+                {/* TIMELINE */}
+                <section className="cdIn" style={{ animationDelay: "90ms" }}>
+                <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden p-5">
+                <TournamentTimeline
+                    regFromDate={regFromDate} setRegFromDate={setRegFromDate}
+                    regFromTime={regFromTime} setRegFromTime={setRegFromTime}
+                    regToDate={regToDate}     setRegToDate={setRegToDate}
+                    regToTime={regToTime}     setRegToTime={setRegToTime}
+                    startDate={startDate}     setStartDate={setStartDate}
+                    startTime={startTime}     setStartTime={setStartTime}
+                    endDate={endDate}         setEndDate={setEndDate}
+                    endTime={endTime}         setEndTime={setEndTime}
+                    rounds={Array.from({ length: roundCount }, (_, i) => {
+                        const n  = i + 1;
+                        const rd = roundsData[n];
+                        return {
+                            number:       n,
+                            startDate:    rd?.startDate    ?? "",
+                            startTime:    rd?.startTime    ?? "",
+                            deadlineDate: rd?.deadlineDate ?? "",
+                            deadlineTime: rd?.deadlineTime ?? "",
+                        } satisfies RoundSlice;
+                    })}
+                    onRoundChange={handleRoundTimelineChange}
+                />
+                </div>
+                </section>
+
                 {/* BLOCK 3: Формат + Команди */}
                 <section className="cdIn grid grid-cols-1 sm:grid-cols-2 gap-5 items-stretch" style={{ animationDelay: "120ms" }}>
 
@@ -718,6 +830,7 @@ export default function TournamentEditPage() {
                     onSelectRound={setSelectedRoundTab}
                     onRoundsChange={setRoundsData}
                     initialData={initialRoundsData}
+                    externalData={externalRoundDates}
                     />
                     </div>
 

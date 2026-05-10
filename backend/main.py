@@ -298,7 +298,73 @@ def _recalc_tournament_status(tournament_id: str) -> str | None:
         return None
 
 
-# --- ИНИЦИАЛИЗАЦИЯ ---
+def _validate_tournament_timeline(
+    reg_from:   str | None,
+    reg_to:     str | None,
+    tour_start: str | None,
+    tour_end:   str | None,
+    rounds:     list[dict] | None = None,
+) -> str | None:
+    """
+    Перевіряє часову послідовність турніру.
+    Повертає рядок з описом помилки або None якщо все ок.
+    Правила:
+      1. Реєстрація повністю до початку турніру (reg_to <= tour_start).
+      2. Раунди не виходять за межі турніру.
+      3. Раунди йдуть послідовно без перекриттів (кінець N <= початок N+1).
+    """
+    def p(s: str | None) -> datetime | None:
+        if not s:
+            return None
+        try:
+            return _parse_dt(s)
+        except Exception:
+            return None
+
+    rf  = p(reg_from)
+    rt  = p(reg_to)
+    ts  = p(tour_start)
+    te  = p(tour_end)
+
+    if rf and ts and rf >= ts:
+        return "Реєстрація повинна починатися раніше за старт турніру."
+    if rt and ts and rt > ts:
+        return "Реєстрація повинна закінчуватися не пізніше старту турніру (вони не можуть перетинатися)."
+    if rf and rt and rf >= rt:
+        return "Початок реєстрації повинен бути раніше за кінець реєстрації."
+    if ts and te and ts >= te:
+        return "Початок турніру повинен бути раніше за кінець турніру."
+
+    if rounds:
+        try:
+            sorted_rounds = sorted(
+                [r for r in rounds if r.get("start_at") and r.get("end_at")],
+                key=lambda r: r.get("number", 0)
+            )
+            for r in sorted_rounds:
+                rs = p(r.get("start_at"))
+                re = p(r.get("end_at"))
+                n  = r.get("number", "?")
+                if rs and re and rs >= re:
+                    return f"Раунд {n}: початок повинен бути раніше за дедлайн."
+                if ts and rs and rs < ts:
+                    return f"Раунд {n}: початок раунду не може бути раніше за старт турніру."
+                if te and re and re > te:
+                    return f"Раунд {n}: дедлайн раунду не може виходити за межі турніру."
+            for i in range(len(sorted_rounds) - 1):
+                cur       = sorted_rounds[i]
+                nxt       = sorted_rounds[i + 1]
+                cur_end   = p(cur.get("end_at"))
+                nxt_start = p(nxt.get("start_at"))
+                if cur_end and nxt_start and cur_end > nxt_start:
+                    return (
+                        f"Раунд {nxt.get('number','?')} починається до завершення "
+                        f"раунду {cur.get('number','?')}. Раунди не можуть перекриватися."
+                    )
+        except Exception as e:
+            print(f"[TIMELINE VALIDATION] Помилка: {e}", flush=True)
+
+    return None
 load_dotenv()
 
 SUPABASE_URL         = os.getenv("SUPABASE_URL")
@@ -1018,16 +1084,30 @@ async def update_tournament(
         raise HTTPException(status_code=403, detail="Тільки адміністратор може редагувати турнір")
 
     tournament = fetch_one(
-        supabase.table("tournaments").select("id, status, created_by").eq("id", tournament_id)
+        supabase.table("tournaments")
+            .select("id, status, created_by, start_at, end_at, registration_from, registration_to")
+            .eq("id", tournament_id)
     )
     if not tournament:
         raise HTTPException(status_code=404, detail="Турнір не знайдено")
     if caller.get("role") not in ("admin", "superadmin") and tournament.get("created_by") != caller["id"]:
         raise HTTPException(status_code=403, detail="Ви не є власником цього турніру")
 
-    update_data = {k: v for k, v in body.model_dump().items() if v is not None}
+    update_data = {k: v for k, v in body.model_dump().items() if v is not None and v != ""}
     if not update_data:
         raise HTTPException(status_code=400, detail="Немає полів для оновлення")
+
+    # Валідація часової послідовності — мерджимо нові дати з поточними
+    date_fields = {"start_at", "end_at", "registration_from", "registration_to"}
+    if date_fields & set(update_data.keys()):
+        timeline_err = _validate_tournament_timeline(
+            reg_from   = update_data.get("registration_from") or tournament.get("registration_from"),
+            reg_to     = update_data.get("registration_to")   or tournament.get("registration_to"),
+            tour_start = update_data.get("start_at")          or tournament.get("start_at"),
+            tour_end   = update_data.get("end_at")            or tournament.get("end_at"),
+        )
+        if timeline_err:
+            raise HTTPException(status_code=400, detail=timeline_err)
 
     result = (
         supabase.table("tournaments")
@@ -1108,12 +1188,27 @@ async def create_tournament_rounds(
         raise HTTPException(status_code=400, detail="Максимальна кількість раундів — 8 (rounds_number_check)")
 
     tournament = fetch_one(
-        supabase.table("tournaments").select("id, name, created_by").eq("id", tournament_id)
+        supabase.table("tournaments")
+            .select("id, name, created_by, start_at, end_at, registration_from, registration_to")
+            .eq("id", tournament_id)
     )
     if not tournament:
         raise HTTPException(status_code=404, detail="Турнір не знайдено")
     if caller.get("role") not in ("admin", "superadmin") and tournament.get("created_by") != caller["id"]:
         raise HTTPException(status_code=403, detail="Ви не є власником цього турніру")
+
+    # Валідація часової послідовності раундів
+    rounds_with_dates = [r for r in rounds if r.get("start_at") or r.get("end_at")]
+    if rounds_with_dates:
+        timeline_err = _validate_tournament_timeline(
+            reg_from   = tournament.get("registration_from"),
+            reg_to     = tournament.get("registration_to"),
+            tour_start = tournament.get("start_at"),
+            tour_end   = tournament.get("end_at"),
+            rounds     = rounds,
+        )
+        if timeline_err:
+            raise HTTPException(status_code=400, detail=timeline_err)
 
     updated = []
     failed_numbers = []
