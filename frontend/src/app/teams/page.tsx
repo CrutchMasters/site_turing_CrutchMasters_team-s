@@ -349,7 +349,7 @@ export default function TeamsPage() {
                 icon={<Users size={18} className="text-blue-600" />}
                 />
 
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 pb-12 sm:pb-16 relative z-10">
                 {/* Breadcrumb */}
                 <nav className="max-w-6xl mx-auto flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
                 <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">
@@ -415,7 +415,8 @@ export default function TeamsPage() {
                     <p className="text-(--t2) text-sm">{searchQuery ? t.common.na : t.teams.notFoundHint}</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 justify-items-center md:justify-items-stretch">
+                    // ✅ FIXED: прибрано justify-items-center, додано w-full до карточок
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {filtered.map((team, idx) => (
                         <SearchTeamCard
                         key={team.id}
@@ -553,8 +554,9 @@ function SearchTeamCard({
     const gradient = gradients[idx % gradients.length];
 
     return (
+        // ✅ FIXED: додано w-full щоб карточка займала всю ширину колонки
         <div
-        className="fuIn spr bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) overflow-hidden cursor-pointer group hover:border-blue-600/50 hover:shadow-lg hover:shadow-blue-600/10 transition-all"
+        className="fuIn spr w-full bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) overflow-hidden cursor-pointer group hover:border-blue-600/50 hover:shadow-lg hover:shadow-blue-600/10 transition-all"
         style={{ animationDelay: `${idx * 60}ms` }}
         onClick={onOpen}
         >

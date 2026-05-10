@@ -647,11 +647,13 @@ export default function DashboardPage() {
       </div>
 
       {isMobileSidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+        <div
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
       )}
-
-      <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
-      <Sidebar />
+      <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+        <Sidebar />
       </div>
 
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -782,8 +784,9 @@ export default function DashboardPage() {
       </section>
 
       {/* ── Tournaments table ── */}
-      <section ref={el => { revealRefs.current[2] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
-      <div className="p-4 sm:p-6 md:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd)">
+      <section ref={el => { revealRefs.current[2] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] bg-(--card) border border-(--brd) shadow-xl" style={{overflow: "visible"}}>
+      {/* header */}
+      <div className="p-4 sm:p-6 md:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd) rounded-t-2xl sm:rounded-t-[2.5rem] overflow-hidden">
       <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">{t.mainPage.tournamentList}</h2>
       <div className="flex flex-wrap gap-2">
       {filterLabels.map(({ key, label }) => (
@@ -808,54 +811,50 @@ export default function DashboardPage() {
         <p className="text-sm font-bold text-(--t2)">{t.mainPage.noTournaments}</p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[500px]">
-        <thead>
-        <tr className="bg-(--bg)/50 border-b border-(--brd)">
-        {[t.mainPage.colTournament, t.mainPage.colStatus, t.mainPage.colStart, t.mainPage.colTeams, t.mainPage.colActions].map(h => (
-          <th key={h} className="px-4 sm:px-6 py-4 text-[10px] font-black uppercase tracking-widest text-(--t2) last:text-right">{h}</th>
-        ))}
-        </tr>
-        </thead>
-        <tbody className="text-sm divide-y divide-(--brd)">
+        <>
+        <div className="divide-y divide-(--brd)">
         {filteredTournaments.map(tourney => {
           const cfg = STATUS_CONFIG[tourney.status] ?? STATUS_CONFIG.upcoming;
           return (
-            <tr key={tourney.id} className="transition-colors hover:bg-(--bg)/30 cursor-pointer" onClick={() => router.push(`/tournaments/${tourney.id}`)}>
-            <td className="px-4 sm:px-6 py-4 sm:py-5 font-bold text-(--t1)">{tourney.name}</td>
-            <td className="px-4 sm:px-6 py-4 sm:py-5">
-            <span className={`text-[9px] font-black uppercase px-2.5 py-1.5 rounded border ${cfg.color}`}>{cfg.label}</span>
-            </td>
-            <td className="px-4 sm:px-6 py-4 sm:py-5 font-bold text-(--t2) text-xs">{fmtDate(tourney.start_at)}</td>
-            <td className="px-4 sm:px-6 py-4 sm:py-5 font-bold text-(--t2) text-xs">
-            {tourney.team_count ?? 0}{tourney.max_teams ? ` / ${tourney.max_teams}` : ""}
-            </td>
-            <td className="px-4 sm:px-6 py-4 sm:py-5 text-right">
-            {tourney.status === "registration" ? (
-              <button
-              onClick={e => { e.stopPropagation(); router.push(`/tournaments/${tourney.id}`); }}
-              className="font-black text-[9px] uppercase tracking-tighter px-3 py-2 rounded-lg border border-blue-600 bg-blue-600/10 text-blue-600 hover:bg-blue-600 hover:text-white transition-all"
-              >
-              {t.mainPage.actionRegister}
-              </button>
-            ) : (
-              <button
-              onClick={e => { e.stopPropagation(); router.push(`/tournaments/${tourney.id}`); }}
-              className="p-2 rounded-lg text-(--t2) hover:bg-blue-600/10 hover:text-blue-600 transition-colors"
-              >
-              <ExternalLink size={16} />
-              </button>
-            )}
-            </td>
-            </tr>
+            <div
+              key={tourney.id}
+              className="px-4 md:px-6 py-4 flex items-center gap-3 cursor-pointer hover:bg-(--bg)/40 active:bg-(--bg)/60 transition-colors"
+              onClick={() => router.push(`/tournaments/${tourney.id}`)}
+            >
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                tourney.status === "ongoing"      ? "bg-blue-500" :
+                tourney.status === "registration" ? "bg-green-500" :
+                tourney.status === "upcoming"     ? "bg-amber-500" : "bg-gray-400"
+              }`} />
+              <div className="flex-1 min-w-0">
+                <p className="font-black text-sm text-(--t1) truncate leading-tight">{tourney.name}</p>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border whitespace-nowrap ${cfg.color}`}>{cfg.label}</span>        
+                  <span className="text-[10px] font-bold text-(--t2)">{fmtDate(tourney.start_at)}</span>
+                  <span className="text-[10px] font-bold text-(--t2) flex items-center gap-0.5">
+                    <Users size={9} className="inline" />
+                    {tourney.team_count ?? 0}{tourney.max_teams ? `/${tourney.max_teams}` : ""}
+                  </span>
+                </div>
+              </div>
+              {tourney.status === "registration" ? (
+                <button
+                  onClick={e => { e.stopPropagation(); router.push(`/tournaments/${tourney.id}`); }}
+                  className="flex-shrink-0 font-black text-[9px] uppercase tracking-tighter px-3 py-2 rounded-lg border border-blue-600 bg-blue-600/10 text-blue-600 hover:bg-blue-600 hover:text-white active:scale-95 transition-all"
+                >
+                  {t.mainPage.actionRegister}
+                </button>
+              ) : (
+                <ChevronRight size={16} className="flex-shrink-0 text-(--t2) opacity-50" />
+              )}
+            </div>
           );
         })}
-        </tbody>
-        </table>
         </div>
+        </>
       )}
 
-      <div className="px-4 sm:px-6 py-3 border-t border-(--brd)">
+      <div className="px-4 sm:px-6 py-3 border-t border-(--brd) rounded-b-2xl sm:rounded-b-[2.5rem] overflow-hidden">
       <button
       onClick={() => router.push("/tournaments")}
       className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline"
