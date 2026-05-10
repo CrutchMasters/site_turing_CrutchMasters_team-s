@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Zap, Trophy, Clock, Users, Layers, ChevronRight, ArrowLeft, X, CalendarDays,
@@ -9,6 +9,7 @@ import { RichTextEditor } from '@/components/RichTextEditor';
 import Sidebar from "@/components/Sidebar";
 import { DatePicker, TimePicker } from "@/components/DateTimePicker";
 import RoundSettingsPanel, { type RoundData } from "@/components/RoundSettingsPanel";
+import TournamentTimeline, { type RoundSlice } from "@/components/TournamentTimeline";
 import MobileHeader from "@/components/MobileHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { useT } from "@/context/LanguageContext";
@@ -87,7 +88,41 @@ export default function RegisterTourney() {
   const [isSubmitting, setIsSubmitting]   = useState(false);
   const [submitError, setSubmitError]     = useState<string | null>(null);
 
+  // Зовнішні дати для RoundSettingsPanel (від таймлайну)
+  const [externalRoundDates, setExternalRoundDates] = useState<
+    Record<number, Partial<Pick<RoundData, "startDate"|"startTime"|"deadlineDate"|"deadlineTime">>>
+  >({});
+
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Хелпер для таймлайну — оновлює окремий раунд в roundsData
+  const handleRoundTimelineChange = useCallback((num: number, patch: Partial<RoundSlice>) => {
+    setRoundsData(prev => ({
+      ...prev,
+      [num]: {
+        ...(prev[num] ?? {
+          name: `Раунд ${num}`, description: "", startDate: "", startTime: "",
+          deadlineDate: "", deadlineTime: "", evalStartDate: "", evalStartTime: "",
+          evalEndDate: "", evalEndTime: "", requirements: [], criteria: [], links: [], files: [],
+        }),
+        ...(patch.startDate    !== undefined ? { startDate:    patch.startDate }    : {}),
+        ...(patch.startTime    !== undefined ? { startTime:    patch.startTime }    : {}),
+        ...(patch.deadlineDate !== undefined ? { deadlineDate: patch.deadlineDate } : {}),
+        ...(patch.deadlineTime !== undefined ? { deadlineTime: patch.deadlineTime } : {}),
+      },
+    }));
+    // Також оновлюємо externalRoundDates щоб RoundSettingsPanel отримав нові дати
+    setExternalRoundDates(prev => ({
+      ...prev,
+      [num]: {
+        ...(prev[num] ?? {}),
+        ...(patch.startDate    !== undefined ? { startDate:    patch.startDate }    : {}),
+        ...(patch.startTime    !== undefined ? { startTime:    patch.startTime }    : {}),
+        ...(patch.deadlineDate !== undefined ? { deadlineDate: patch.deadlineDate } : {}),
+        ...(patch.deadlineTime !== undefined ? { deadlineTime: patch.deadlineTime } : {}),
+      },
+    }));
+  }, []);
 
   useEffect(() => {
     if (isLoading) return;
@@ -149,6 +184,56 @@ export default function RegisterTourney() {
     setSubmitError(null);
     if (!tourneyName.trim()) { setSubmitError(t.tourney?.errNameRequired ?? "Назва турніру є обов'язковою"); return; }
     if (!startDate)          { setSubmitError(t.tourney?.errStartRequired ?? "Дата старту турніру є обов'язковою"); return; }
+
+    // ── Валідація часової послідовності (до будь-яких запитів до БД) ──────────
+    const parseLocalDt = (date: string, time: string) => {
+      if (!date) return null;
+      const [y, mo, d] = date.split('-').map(Number);
+      const [h = 0, m = 0] = (time ?? '').split(':').map(Number);
+      return new Date(y, mo - 1, d, h, m).getTime();
+    };
+
+    const rf = parseLocalDt(regStartDate, regStartTime);
+    const rt = parseLocalDt(regEndDate,   regEndTime);
+    const ts = parseLocalDt(startDate,    startTime);
+    const te = parseLocalDt(endDate,      endTime);
+
+    if (rf && ts && rf >= ts)
+      { setSubmitError('Реєстрація повинна починатися раніше за старт турніру.'); return; }
+    if (rt && ts && rt > ts)
+      { setSubmitError('Реєстрація повинна закінчуватися не пізніше старту турніру (вони не можуть перетинатися).'); return; }
+    if (rf && rt && rf >= rt)
+      { setSubmitError('Початок реєстрації повинен бути раніше за кінець реєстрації.'); return; }
+    if (ts && te && ts >= te)
+      { setSubmitError('Початок турніру повинен бути раніше за кінець турніру.'); return; }
+
+    // Валідація раундів
+    const roundSlices = Array.from({ length: roundCount }, (_, i) => {
+      const n = i + 1;
+      const rd = roundsData[n];
+      return {
+        n,
+        start: parseLocalDt(rd?.startDate ?? '', rd?.startTime ?? ''),
+        end:   parseLocalDt(rd?.deadlineDate ?? '', rd?.deadlineTime ?? ''),
+      };
+    }).filter(r => r.start || r.end);
+
+    for (const r of roundSlices) {
+      if (r.start && r.end && r.start >= r.end)
+        { setSubmitError(`Раунд ${r.n}: початок повинен бути раніше за дедлайн.`); return; }
+      if (ts && r.start && r.start < ts)
+        { setSubmitError(`Раунд ${r.n}: початок раунду не може бути раніше за старт турніру.`); return; }
+      if (te && r.end && r.end > te)
+        { setSubmitError(`Раунд ${r.n}: дедлайн раунду не може виходити за межі турніру.`); return; }
+    }
+    for (let i = 0; i < roundSlices.length - 1; i++) {
+      const cur = roundSlices[i];
+      const nxt = roundSlices[i + 1];
+      if (cur.end && nxt.start && cur.end > nxt.start)
+        { setSubmitError(`Раунд ${nxt.n} починається до завершення раунду ${cur.n}. Раунди не можуть перекриватися.`); return; }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     setIsSubmitting(true);
     try {
       // Перевірка дублікату назви
@@ -257,10 +342,25 @@ export default function RegisterTourney() {
       if (!roundsRes.ok) {
         const err = await roundsRes.json().catch(() => ({}));
         const errMsg: string = err.detail ?? JSON.stringify(err);
+
+        // Rollback: видаляємо щойно створений турнір, щоб не було дубліката при наступній спробі
+        try {
+          const rollbackToken = await getToken();
+          if (rollbackToken) {
+            await fetch(`${API_URL}/api/tournaments/${tournamentId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${rollbackToken}` },
+            });
+            console.warn('[ROLLBACK] Турнір видалено через помилку збереження раундів:', tournamentId);
+          }
+        } catch (rollbackErr) {
+          console.error('[ROLLBACK] Не вдалося видалити турнір:', rollbackErr);
+        }
+
         if (errMsg.includes('rounds_number_check') || errMsg.includes('number_check')) {
           throw new Error(t.tourney?.errRoundNumber ?? 'Номер раунду має бути від 1 до 8. Перевірте кількість раундів.');
         }
-        throw new Error((t.tourney?.errRoundsSave ?? 'Турнір створено, але раунди не збережено: {detail}').replace('{detail}', errMsg));
+        throw new Error((t.tourney?.errRoundsSave ?? 'Помилка збереження раундів: {detail}').replace('{detail}', errMsg));
       }
 
       router.push('/dashboard');
@@ -302,71 +402,54 @@ export default function RegisterTourney() {
         .pulse-btn{animation:pulse-ring 1.4s ease-out infinite}
         `}</style>
         <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full opacity-[0.07] blur-3xl bg-red-500" />
+        <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full opacity-[0.07] blur-3xl bg-red-500" />
         <div className="absolute -bottom-40 -right-40 w-[500px] h-[500px] rounded-full opacity-[0.07] blur-3xl bg-orange-500" />
         </div>
-        <div className="modal-card relative z-10 w-full max-w-md mx-4 bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-2xl border border-red-500/30 p-8">
-        <div className="flex flex-col items-center mb-6">
-        <div className="relative w-20 h-20 mb-4">
-        <svg className="w-20 h-20 -rotate-90" viewBox="0 0 64 64">
-        <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(239,68,68,0.15)" strokeWidth="4" />
-        <circle cx="32" cy="32" r="28" fill="none" stroke="#ef4444" strokeWidth="4"
-        strokeLinecap="round" strokeDasharray={circumference}
-        strokeDashoffset={circumference * (progress / 100)}
-        style={{ transition: 'stroke-dashoffset 0.9s linear' }} />
+        <div className="modal-card relative z-10 bg-(--card) border border-(--brd) rounded-3xl shadow-2xl w-full max-w-sm mx-4 p-8 flex flex-col items-center gap-6">
+        <div className="relative w-16 h-16">
+        <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+        <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="3" className="text-(--brd)" />
+        <circle cx="32" cy="32" r="28" fill="none" stroke="#ef4444" strokeWidth="3"
+        strokeDasharray={circumference} strokeDashoffset={circumference - (progress / 100) * circumference}
+        strokeLinecap="round" style={{ transition: 'stroke-dashoffset 0.9s linear' }} />
         </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-2xl font-black tabular-nums text-red-500">{countdown}</span>
+        <span className="absolute inset-0 flex items-center justify-center text-xl font-black text-red-500 tabular-nums">{countdown}</span>
         </div>
+        <div className="text-center space-y-1">
+        <p className="text-sm font-black uppercase tracking-widest text-(--t1)">Підозрілий гість 👀</p>
+        <p className="text-xs text-(--t2) leading-relaxed">Ця сторінка тільки для адміністраторів. Ти точно сюди? Автоматичний вихід через {countdown} сек.</p>
         </div>
-        <h2 className="text-xl font-black uppercase tracking-tight text-center mb-1 text-(--t1)">{t.tourney?.accessDeniedTitle ?? '⚠️ Обмежений доступ'}</h2>
-        <p className="text-sm text-center text-(--t2)">{t.tourney?.accessDeniedDesc ?? 'У вас немає прав для перегляду цієї сторінки'}</p>
+        <div className="flex gap-3 w-full">
+        <button onClick={handleConfirmYes} className="pulse-btn flex-1 py-3 rounded-2xl bg-red-500 text-white font-black text-xs uppercase tracking-widest hover:bg-red-600 active:scale-95 transition-all">
+        Так, я знаю
+        </button>
+        <button onClick={handleConfirmNo} className="flex-1 py-3 rounded-2xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-xs uppercase tracking-widest hover:bg-(--card) active:scale-95 transition-all">
+        На логін
+        </button>
         </div>
-        <div className="h-px mb-6 bg-(--brd)" />
-        <p className="text-base font-black uppercase tracking-tight text-center mb-2 text-(--t1)">{t.tourney?.accessDeniedQuestion ?? 'Точно хочете переглянути цю сторінку?'}</p>
-        <p className="text-xs text-center mb-6 text-(--t2)">
-        {(t.tourney?.accessDeniedCountdown ?? 'Через {sec} сек ви автоматично побачите, що чекає на порушників 🐇').replace('{sec}', String(countdown))}
-        </p>
-        <div className="flex gap-3">
-        <button onClick={handleConfirmYes} className="pulse-btn flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest text-white bg-red-500 active:scale-95 transition-all">{t.tourney?.accessDeniedYes ?? 'Так, показати'}</button>
-        <button onClick={handleConfirmNo}  className="flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest border border-(--brd) text-(--t2) bg-(--bg) active:scale-95 transition-all hover:opacity-80">{t.tourney?.accessDeniedNo ?? 'Ні, піти'}</button>
-        </div>
-        <p className="text-center text-[10px] mt-4 text-(--t2) opacity-50">{t.tourney?.accessDeniedNoHint ?? '«Ні» → повернути на сторінку входу'}</p>
         </div>
         </div>
     );
   }
 
-  /* ── Denied (403) ── */
+  /* ── Denied ── */
   if (accessState === 'denied') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden bg-(--bg) text-(--t1)">
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-(--bg) text-(--t1)">
       <style>{`
-        @keyframes glitch {
-          0%  {clip-path:inset(0 0 95% 0);transform:translate(-4px,0) skewX(-1deg)}
-          10% {clip-path:inset(60% 0 30% 0);transform:translate(4px,0) skewX(1deg)}
-          20% {clip-path:inset(30% 0 60% 0);transform:translate(-2px,0)}
-          30% {clip-path:inset(80% 0 5% 0);transform:translate(3px,0) skewX(-0.5deg)}
-          40% {clip-path:inset(10% 0 85% 0);transform:translate(-3px,0)}
-          50% {clip-path:inset(50% 0 45% 0);transform:translate(2px,0) skewX(1deg)}
-          60% {clip-path:inset(20% 0 70% 0);transform:translate(-4px,0)}
-          70% {clip-path:inset(70% 0 10% 0);transform:translate(4px,0) skewX(-1deg)}
-          80% {clip-path:inset(40% 0 50% 0);transform:translate(-2px,0)}
-          90% {clip-path:inset(5% 0 90% 0);transform:translate(3px,0)}
-          100%{clip-path:inset(0 0 95% 0);transform:translate(0,0)}
-        }
-        @keyframes fadeSlideUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes rabbit-fall { 0%{top:-80px;opacity:0;transform:translateX(-50%) rotate(0deg)} 30%{opacity:1} 100%{top:110%;opacity:0;transform:translateX(-50%) rotate(720deg)} }
-        @keyframes scanline { 0%{transform:translateY(-100%)} 100%{transform:translateY(100vh)} }
-        .glitch-text{position:relative}
-        .glitch-text::before,.glitch-text::after{content:attr(data-text);position:absolute;inset:0;font:inherit;text-align:inherit}
-        .glitch-text::before{color:#3b82f6;animation:glitch 2.5s infinite steps(1);animation-delay:0.1s}
-        .glitch-text::after{color:#8b5cf6;animation:glitch 2.5s infinite steps(1);animation-delay:0.35s}
-        .fade-up{animation:fadeSlideUp 0.6s cubic-bezier(.22,1,.36,1) both}
-        .fade-up-1{animation:fadeSlideUp 0.6s cubic-bezier(.22,1,.36,1) 0.15s both}
-        .fade-up-2{animation:fadeSlideUp 0.6s cubic-bezier(.22,1,.36,1) 0.3s both}
-        .rabbit{position:fixed;left:50%;font-size:3rem;animation:rabbit-fall 3s ease-in 0.5s both;z-index:50}
-        .scanline{position:fixed;inset:0;pointer-events:none;z-index:40;background:linear-gradient(transparent 50%,rgba(0,0,0,0.03) 50%);background-size:100% 4px}
+        @keyframes glitch1{0%,100%{clip-path:inset(0 0 95% 0);transform:translate(-2px,0)}25%{clip-path:inset(40% 0 40% 0);transform:translate(2px,0)}50%{clip-path:inset(80% 0 5% 0);transform:translate(-1px,0)}75%{clip-path:inset(10% 0 70% 0);transform:translate(1px,0)}}
+        @keyframes glitch2{0%,100%{clip-path:inset(80% 0 2% 0);transform:translate(2px,0)}25%{clip-path:inset(5% 0 80% 0);transform:translate(-2px,0)}50%{clip-path:inset(50% 0 30% 0);transform:translate(1px,0)}75%{clip-path:inset(20% 0 60% 0);transform:translate(-1px,0)}}
+        @keyframes fadeUpItem{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:none}}
+        @keyframes scanline{0%{top:-60px}100%{top:100%}}
+        @keyframes rabbitHop{0%,100%{transform:translateY(0) rotate(-5deg)}50%{transform:translateY(-20px) rotate(5deg)}}
+        .glitch-text{position:relative}.glitch-text::before,.glitch-text::after{content:attr(data-text);position:absolute;inset:0;color:inherit}
+        .glitch-text::before{animation:glitch1 3s infinite;color:#3b82f6;opacity:0.7}
+        .glitch-text::after{animation:glitch2 3s infinite 0.1s;color:#8b5cf6;opacity:0.7}
+        .fade-up{animation:fadeUpItem 0.6s cubic-bezier(.22,1,.36,1) both}
+        .fade-up-1{animation:fadeUpItem 0.6s 0.15s cubic-bezier(.22,1,.36,1) both}
+        .fade-up-2{animation:fadeUpItem 0.6s 0.3s cubic-bezier(.22,1,.36,1) both}
+        .rabbit{position:fixed;bottom:40px;right:40px;font-size:3rem;animation:rabbitHop 1.5s ease-in-out infinite;filter:drop-shadow(0 0 20px rgba(59,130,246,0.4));pointer-events:none;z-index:50}
+        .scanline{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:1}
         .scanline::after{content:'';position:absolute;left:0;right:0;height:60px;background:linear-gradient(transparent,rgba(59,130,246,0.04),transparent);animation:scanline 3s linear infinite}
         `}</style>
         <div className="scanline" />
@@ -540,6 +623,34 @@ export default function RegisterTourney() {
         </div>
         </section>
 
+        {/* TIMELINE */}
+        <section className="cdIn" style={{ animationDelay: '110ms' }}>
+        <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden p-5">
+        <TournamentTimeline
+          regFromDate={regStartDate} setRegFromDate={setRegStartDate}
+          regFromTime={regStartTime} setRegFromTime={setRegStartTime}
+          regToDate={regEndDate}     setRegToDate={setRegEndDate}
+          regToTime={regEndTime}     setRegToTime={setRegEndTime}
+          startDate={startDate}      setStartDate={setStartDate}
+          startTime={startTime}      setStartTime={setStartTime}
+          endDate={endDate}          setEndDate={setEndDate}
+          endTime={endTime}          setEndTime={setEndTime}
+          rounds={Array.from({ length: roundCount }, (_, i) => {
+            const n  = i + 1;
+            const rd = roundsData[n];
+            return {
+              number:       n,
+              startDate:    rd?.startDate    ?? "",
+              startTime:    rd?.startTime    ?? "",
+              deadlineDate: rd?.deadlineDate ?? "",
+              deadlineTime: rd?.deadlineTime ?? "",
+            } satisfies RoundSlice;
+          })}
+          onRoundChange={handleRoundTimelineChange}
+        />
+        </div>
+        </section>
+
         {/* BLOCK 3: Формат + Команди */}
         <section className="cdIn grid grid-cols-1 sm:grid-cols-2 gap-5 items-stretch" style={{ animationDelay: '140ms' }}>
 
@@ -649,6 +760,7 @@ export default function RegisterTourney() {
         selectedRound={selectedRoundTab}
         onSelectRound={setSelectedRoundTab}
         onRoundsChange={setRoundsData}
+        externalData={externalRoundDates}
         labels={t.roundPanel}
         />
         </div>

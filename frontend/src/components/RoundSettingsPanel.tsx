@@ -66,6 +66,8 @@ interface Props {
     onSelectRound: (n: number) => void;
     onRoundsChange?: (rounds: Record<number, RoundData>) => void;
     initialData?: Record<number, Partial<RoundData>>;
+    /** Зовнішні оновлення дат від таймлайну — застосовуються поверх внутрішнього стану */
+    externalData?: Record<number, Partial<Pick<RoundData, "startDate" | "startTime" | "deadlineDate" | "deadlineTime">>>;
     labels?: RoundPanelLabels;
 }
 
@@ -342,7 +344,7 @@ function FilesField({ files, onChange, uploadFilesLabel, savedInCloudLabel, file
 }
 
 // ── RoundSettingsPanel ─────────────────────────────────────────────────────
-export default function RoundSettingsPanel({ roundCount, selectedRound, onSelectRound, onRoundsChange, initialData, labels }: Props) {
+export default function RoundSettingsPanel({ roundCount, selectedRound, onSelectRound, onRoundsChange, initialData, externalData, labels }: Props) {
     const [rounds, setRounds] = useState<Record<number, RoundData>>({});
     const [seeded, setSeeded] = useState(false);
 
@@ -355,6 +357,21 @@ export default function RoundSettingsPanel({ roundCount, selectedRound, onSelect
         setRounds(seeded_);
         setSeeded(true);
     }, [initialData, seeded]);
+
+    // Застосовуємо зовнішні дати від таймлайну без скидання інших полів
+    const prevExternalRef = useRef<typeof externalData>(undefined);
+    useEffect(() => {
+        if (!externalData || externalData === prevExternalRef.current) return;
+        prevExternalRef.current = externalData;
+        setRounds(prev => {
+            const next = { ...prev };
+            for (const [key, patch] of Object.entries(externalData)) {
+                const n = Number(key);
+                next[n] = { ...(prev[n] ?? defaultRound()), ...patch };
+            }
+            return next;
+        });
+    }, [externalData]);
 
     useEffect(() => { onRoundsChange?.(rounds); }, [rounds]);
 
