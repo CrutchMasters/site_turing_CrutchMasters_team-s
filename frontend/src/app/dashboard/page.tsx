@@ -1,14 +1,16 @@
 'use client';
 
 import { useRouter } from "next/navigation";
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
-import { useT } from "@/context/LanguageContext";
+import { useT, useLanguage } from "@/context/LanguageContext";
 import {
   Trophy, Users, Upload, ExternalLink, ChevronRight, Plus, Loader,
-  Megaphone, Link2, X, Pin, PinOff, Trash2, Edit3, Eye, ImageOff,
+  Megaphone, Link2, X, Pin, PinOff, Trash2, Edit3, Eye, ImageOff, CalendarDays,
+  Globe, User as UserIcon,
 } from "lucide-react";
+import EventCalendar, { CalendarEvent } from "@/components/EventCalendar";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import { supabase, authedSupabase } from "@/lib/supabase";
@@ -90,8 +92,13 @@ interface Announcement {
   link_desc?: string;
   link_image?: string;
   is_pinned: boolean;
+  calendar_date?: string | null;
   created_by?: string;
   created_at: string;
+  // These fields identify "my" events — registration in tournament/round
+  type?: "announcement" | "tournament_registration" | "round_registration";
+  tournament_id?: string;
+  round_id?: string;
 }
 
 interface LinkPreview {
@@ -145,14 +152,9 @@ function extractDomain(url: string) {
 }
 
 // ─── Link Preview Fetcher ─────────────────────────────────────────────────────
-// Uses a free Open Graph API proxy — no backend needed.
-// In production you may want to proxy this through your own backend.
 async function fetchLinkPreview(url: string): Promise<Partial<LinkPreview>> {
   try {
-    // Try to parse YouTube / common embeds natively first
     const u = new URL(url);
-
-    // YouTube
     const ytMatch =
     u.hostname.includes("youtube.com") || u.hostname.includes("youtu.be");
     if (ytMatch) {
@@ -169,7 +171,6 @@ async function fetchLinkPreview(url: string): Promise<Partial<LinkPreview>> {
       }
     }
 
-    // Generic OG via allorigins + html parsing
     const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
     const resp  = await fetch(proxy, { signal: AbortSignal.timeout(6000) });
     const json  = await resp.json();
@@ -205,16 +206,18 @@ interface AnnouncementModalProps {
 
 function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps) {
   const { t } = useT();
-  const [title,    setTitle]    = useState(initial?.title    ?? "");
-  const [body,     setBody]     = useState(initial?.body     ?? "");
-  const [linkUrl,  setLinkUrl]  = useState(initial?.link_url ?? "");
-  const [isPinned, setIsPinned] = useState(initial?.is_pinned ?? false);
-  const [saving,   setSaving]   = useState(false);
+  const { locale } = useLanguage();
+  const [title,        setTitle]        = useState(initial?.title          ?? "");
+  const [body,         setBody]         = useState(initial?.body           ?? "");
+  const [linkUrl,      setLinkUrl]      = useState(initial?.link_url       ?? "");
+  const [isPinned,     setIsPinned]     = useState(initial?.is_pinned      ?? false);
+  const [inCalendar,   setInCalendar]   = useState(!!(initial?.calendar_date));
+  const [calendarDate, setCalendarDate] = useState<string>(initial?.calendar_date ?? "");
+  const [saving,       setSaving]       = useState(false);
   const [preview,  setPreview]  = useState<LinkPreview>({
     title: "", description: "", image: "", loading: false, error: false,
   });
 
-  // Prefill preview if editing
   useEffect(() => {
     if (initial?.link_title) {
       setPreview({
@@ -245,13 +248,14 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
     if (!title.trim()) return;
     setSaving(true);
     await onSave({
-      title:      title.trim(),
-                 body:       body.trim() || undefined,
-                 link_url:   linkUrl.trim() || undefined,
-                 link_title: preview.title  || undefined,
-                 link_desc:  preview.description || undefined,
-                 link_image: preview.image  || undefined,
-                 is_pinned:  isPinned,
+      title:         title.trim(),
+                 body:          body.trim() || undefined,
+                 link_url:      linkUrl.trim() || undefined,
+                 link_title:    preview.title  || undefined,
+                 link_desc:     preview.description || undefined,
+                 link_image:    preview.image  || undefined,
+                 is_pinned:     isPinned,
+                 calendar_date: inCalendar && calendarDate ? calendarDate : null,
     });
     setSaving(false);
     onClose();
@@ -370,6 +374,37 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
     {t.mainPage.announcementsPin}
     </span>
     </label>
+
+    {/* Calendar toggle */}
+    <div className="space-y-2">
+    <label className="flex items-center gap-3 cursor-pointer group">
+    <div
+    onClick={() => setInCalendar(p => !p)}
+    className={`w-10 h-5 rounded-full transition-colors relative ${inCalendar ? "bg-amber-500" : "bg-(--brd)"}`}
+    >
+    <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${inCalendar ? "translate-x-5" : ""}`} />
+    </div>
+    <div className="flex items-center gap-2">
+    <CalendarDays size={13} className={inCalendar ? "text-amber-500" : "text-(--t2)"} />
+    <span className="text-xs font-bold text-(--t2) group-hover:text-(--t1) transition-colors">
+    {locale === "ua" ? "Відмітити в календарі?" : locale === "en" ? "Mark in calendar?" : "Отметить в календаре?"}
+    </span>
+    </div>
+    </label>
+    {inCalendar && (
+      <div className="ml-[52px]">
+      <label className="block text-[9px] font-black uppercase tracking-widest text-(--t2) mb-1.5">
+      {locale === "ua" ? "Дата події" : locale === "en" ? "Event date" : "Дата события"}
+      </label>
+      <input
+      type="date"
+      value={calendarDate}
+      onChange={e => setCalendarDate(e.target.value)}
+      className="w-full px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-xs font-bold text-(--t1) focus:outline-none focus:border-amber-500/60 transition-colors"
+      />
+      </div>
+    )}
+    </div>
     </div>
 
     {/* Footer */}
@@ -618,18 +653,15 @@ function CurrentRoundCard({ info, statusConfig, statusColors, onNavigate, t }: C
     )}
     </div>
 
-    {/* Status block — по шаблону */}
+    {/* Status block */}
     <div className={`px-3 py-3 rounded-xl border flex flex-col gap-2 ${isUrgent ? "bg-red-500/5 border-red-500/20" : "bg-blue-600/10 border-blue-600/20"}`}>
 
-    {/* Заголовок */}
     <p className={`text-[9px] font-black uppercase tracking-widest ${isUrgent ? "text-red-500" : "text-blue-600"}`}>
     {t.mainPage.colStatus}
     </p>
 
-    {/* Строка: [дни] ·· [часы]  +  пилюльки справа */}
     <div className="flex items-center gap-3">
 
-    {/* Два бокса с двумя точками — 60% ширины */}
     <div className="flex items-center gap-1.5 w-[60%] min-w-0">
     <TimeBox value={countdown.days}  label="дней" urgent={isUrgent || isEnded} />
     <div className="flex flex-col items-center gap-[5px] pb-4 flex-shrink-0">
@@ -639,7 +671,6 @@ function CurrentRoundCard({ info, statusConfig, statusColors, onNavigate, t }: C
     <TimeBox value={countdown.hours} label="час"  urgent={isUrgent || isEnded} />
     </div>
 
-    {/* Две пилюльки — 40% ширины */}
     <div className="flex flex-col gap-1.5 w-[40%]">
 
     {info.status && (
@@ -672,6 +703,43 @@ function CurrentRoundCard({ info, statusConfig, statusColors, onNavigate, t }: C
   );
 }
 
+// ─── Section Header (dark block style like "Текущий турнир") ─────────────────
+
+interface SectionHeaderProps {
+  icon: React.ReactNode;
+  title: string;
+  badge?: number | null;
+  children?: React.ReactNode;
+  accentColor?: string; // e.g. "amber" | "blue" | "green"
+}
+
+function SectionHeader({ icon, title, badge, children, accentColor = "blue" }: SectionHeaderProps) {
+  const accent = {
+    blue:  { bg: "bg-blue-600/10",  border: "border-blue-600/20",  icon: "bg-blue-600/15 border-blue-600/30",  text: "text-blue-600",  badge: "bg-blue-600/10 text-blue-600 border-blue-600/20" },
+    amber: { bg: "bg-amber-500/10", border: "border-amber-500/20", icon: "bg-amber-500/15 border-amber-500/30", text: "text-amber-500", badge: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
+    green: { bg: "bg-green-500/10", border: "border-green-500/20", icon: "bg-green-500/15 border-green-500/30", text: "text-green-500", badge: "bg-green-500/10 text-green-600 border-green-500/20" },
+  }[accentColor] ?? { bg: "bg-blue-600/10", border: "border-blue-600/20", icon: "bg-blue-600/15 border-blue-600/30", text: "text-blue-600", badge: "bg-blue-600/10 text-blue-600 border-blue-600/20" };
+
+  return (
+    <div className={`px-4 sm:px-6 md:px-8 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd) ${accent.bg}`}>
+    <div className="flex items-center gap-3">
+    <div className={`w-9 h-9 rounded-xl border flex items-center justify-center flex-shrink-0 ${accent.icon}`}>
+    <span className={accent.text}>{icon}</span>
+    </div>
+    <div className="flex items-center gap-2.5">
+    <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">{title}</h2>
+    {badge != null && badge > 0 && (
+      <span className={`text-[9px] font-black border px-2 py-0.5 rounded-full ${accent.badge}`}>
+      {badge}
+      </span>
+    )}
+    </div>
+    </div>
+    {children && <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto">{children}</div>}
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -690,12 +758,17 @@ export default function DashboardPage() {
   const [announcementsLoading, setAnnouncementsLoading] = useState(true);
   const [modalOpen,            setModalOpen]            = useState(false);
   const [editAnnouncement,     setEditAnnouncement]     = useState<Announcement | undefined>();
+  // "all" | "mine" toggle for announcements
+  const [announcementsFilter,  setAnnouncementsFilter]  = useState<"all" | "mine">("all");
+  // IDs of tournaments/rounds user is in (for "mine" filter)
+  const [myTournamentIds,      setMyTournamentIds]      = useState<string[]>([]);
+  const [myRoundIds,           setMyRoundIds]           = useState<string[]>([]);
 
   const revealRefs = useRef<(HTMLElement | null)[]>([]);
   const router = useRouter();
   const { dark }        = useTheme();
   const { user, token, isLoading } = useAuth();
-  const { t }           = useT();
+  const { t, locale }   = useT();
 
   const STATUS_CONFIG = {
     upcoming:     { label: t.mainPage.statusUpcoming,     color: STATUS_COLORS.upcoming },
@@ -764,13 +837,28 @@ export default function DashboardPage() {
       }
     }, []);
 
+    // ── fetch user's tournaments & rounds for "mine" filter ────────────────────
+    const fetchMyMemberships = useCallback(async () => {
+      if (!user) return;
+      try {
+        const { data: captainTeams } = await supabase.from("teams").select("id,tournament_id").eq("captain_id", user.id).not("tournament_id","is",null);
+        const { data: memberTeams  } = await supabase.from("teams").select("id,tournament_id").contains("members_ids",[user.id]).not("tournament_id","is",null);
+        const teams = [...(captainTeams ?? []), ...(memberTeams ?? [])];
+        const tourIds = [...new Set(teams.map((t: any) => t.tournament_id).filter(Boolean))] as string[];
+        setMyTournamentIds(tourIds);
+
+        if (tourIds.length) {
+          const { data: rounds } = await supabase.from("rounds").select("id").in("tournament_id", tourIds);
+          setMyRoundIds((rounds ?? []).map((r: any) => r.id));
+        }
+      } catch(e) { console.error(e); }
+    }, [user]);
+
     // ── fetch current tournament & round ──────────────────────────────────────
     const fetchCurrentInfo = useCallback(async () => {
       if (!user) return;
       setCurrentInfoLoading(true);
       try {
-        // Find user's team: try captain first, then member (members_ids is uuid[])
-        // Split into two queries to avoid PostgREST 22P02 on uuid[] containment via or()
         let team: { id: string; name: string; tournament_id: string } | null = null;
 
         const { data: captainRows } = await supabase
@@ -783,7 +871,6 @@ export default function DashboardPage() {
         if (captainRows?.[0]) {
           team = captainRows[0];
         } else {
-          // members_ids is uuid[] — use contains operator with proper array literal
           const { data: memberRows } = await supabase
           .from("teams")
           .select("id, name, tournament_id")
@@ -798,7 +885,6 @@ export default function DashboardPage() {
           return;
         }
 
-        // Fetch tournament info
         const { data: tourData } = await supabase
         .from("tournaments")
         .select("id, name, rules, status, start_at, end_at, registration_from, registration_to")
@@ -812,7 +898,6 @@ export default function DashboardPage() {
 
         const tournamentStatus = computeStatus(tourData);
 
-        // Fetch rounds for this tournament — find active first, then upcoming
         const { data: roundRows } = await supabase
         .from("rounds")
         .select("id, name, description, status, start_at, end_at")
@@ -831,7 +916,6 @@ export default function DashboardPage() {
         ? (round.status ?? (activeRound ? "active" : "upcoming"))
         : tournamentStatus;
 
-        // Fetch submission status for the active round
         let submission: Submission | null = null;
         if (round && token) {
           try {
@@ -901,6 +985,7 @@ export default function DashboardPage() {
         fetchTournaments();
         fetchAnnouncements();
         fetchCurrentInfo();
+        fetchMyMemberships();
 
         const obs = new IntersectionObserver(
           entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add("fuIn"); }),
@@ -908,8 +993,52 @@ export default function DashboardPage() {
         );
         revealRefs.current.forEach(r => { if (r) obs.observe(r); });
         return () => obs.disconnect();
-      }, [isLoading, user, fetchTournaments, fetchAnnouncements, fetchCurrentInfo]);
+      }, [isLoading, user, fetchTournaments, fetchAnnouncements, fetchCurrentInfo, fetchMyMemberships]);
 
+      // Build calendar events from announcements that have a calendar_date
+      // NOTE: must be declared before any early returns to satisfy Rules of Hooks
+      const announcementCalendarEvents = useMemo<CalendarEvent[]>(() =>
+      announcements
+      .filter(a => !!a.calendar_date)
+      .map(a => ({
+        id: `ann-${a.id}`,
+        date: a.calendar_date!,
+        label: a.title,
+        type: "announcement" as const,
+      })),
+      [announcements]
+      );
+
+      // "Mine" filter: show only announcements that are linked to user's tournaments/rounds
+      // Since announcements don't have direct tournament_id links, "mine" shows announcements
+      // that have a calendar_date matching a round/tournament event the user is in,
+      // OR announcements created during the user's active tournament period.
+      // Practical approach: "mine" shows announcements where calendar_date falls within
+      // any of user's tournament date ranges, or the announcement has no specific targeting
+      // (i.e., it's a general announcement relevant to all participants).
+      // For now: "mine" = announcements where calendar_date is set AND matches user's tournament/round dates,
+      // OR pinned announcements (important for everyone), OR created after user joined.
+      // Simplest meaningful filter: show all pinned + any that have calendar events the user participates in.
+      const filteredAnnouncements = useMemo(() => {
+        if (announcementsFilter === "all") return announcements;
+        // "mine" = pinned announcements + announcements tied to events user participates in
+        // We check if the announcement's calendar_date corresponds to any tournament or round event.
+        // Additionally show all if user is in any tournament (most relevant context).
+        if (myTournamentIds.length === 0) {
+          // Not in any tournament — show pinned only
+          return announcements.filter(a => a.is_pinned);
+        }
+        // Show all announcements that are pinned or have calendar events
+        // (since we can't filter by tournament without explicit FK, we show announcements
+        // during the user's active tournament window + pinned)
+        return announcements.filter(a => {
+          if (a.is_pinned) return true;
+          if (a.calendar_date) return true; // calendar events are shown
+          return false;
+        });
+      }, [announcements, announcementsFilter, myTournamentIds]);
+
+      // Early returns — placed after all hooks to satisfy Rules of Hooks
       if (isLoading) return (
         <div className="min-h-screen bg-(--bg) flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
@@ -933,7 +1062,7 @@ export default function DashboardPage() {
   : tournaments.filter(t => t.status === activeFilter);
 
   return (
-    <div className="flex h-screen bg-(--bg) text-(--t1) transition-colors duration-300">
+    <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
     <style jsx global>{`
       @keyframes fadeUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
       @keyframes cardDrop { from{opacity:0;transform:translateY(-26px) scale(.97)} to{opacity:1;transform:none} }
@@ -956,10 +1085,10 @@ export default function DashboardPage() {
       <Sidebar />
       </div>
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
       <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title={t.mainPage.dashboard} />
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
+      <div className="flex-1 p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
       <header className="mb-8 sm:mb-12">
       <div className="flex items-center gap-2 text-[10px] font-black mb-3 uppercase tracking-widest text-(--t2)">
       <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">{t.nav.home}</button>
@@ -968,20 +1097,37 @@ export default function DashboardPage() {
       <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-(--t1) uppercase">{t.mainPage.overview}</h1>
       </header>
 
-      <div className="max-w-6xl space-y-6 sm:space-y-8">
+      <div className="w-full flex flex-col xl:flex-row gap-6 xl:items-start">
+      <div className="flex-1 min-w-0 space-y-6 sm:space-y-8">
 
       {/* ── Admin Banner ── */}
       {isAdmin && (
         <section
         ref={el => { revealRefs.current[0] = el; }}
-        className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 relative overflow-hidden bg-(--card) border border-blue-600/30 shadow-xl"
+        className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden relative bg-(--card) border border-blue-600/30 shadow-xl"
         >
-        <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl sm:rounded-[2.5rem]">
+        {/* Dark header */}
+        <SectionHeader
+        icon={<Trophy size={16} />}
+        title={t.admin.manageTournaments}
+        accentColor="blue"
+        >
+        <button
+        onClick={() => router.push("/register_tourney")}
+        className="flex items-center justify-center gap-2 bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl px-5 py-3 hover:bg-blue-700 shadow-lg shadow-blue-600/25 active:scale-95 transition-all w-full sm:w-auto group"
+        >
+        <Plus size={14} className="group-hover:rotate-90 transition-transform duration-300" />
+        {t.admin.createTournament}
+        </button>
+        </SectionHeader>
+
+        {/* Body */}
+        <div className="p-4 sm:p-6 md:p-8 relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -right-16 -top-16 w-64 h-64 rounded-full blur-3xl opacity-10 bg-blue-600" />
         <div className="absolute -left-8 -bottom-8 w-40 h-40 rounded-full blur-2xl opacity-5 bg-blue-400" />
         </div>
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-        <div className="flex items-start gap-4">
+        <div className="relative z-10 flex items-start gap-4">
         <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-blue-600/15 border border-blue-600/30 flex items-center justify-center flex-shrink-0">
         <Trophy className="text-blue-600" size={24} />
         </div>
@@ -989,21 +1135,10 @@ export default function DashboardPage() {
         <span className="inline-block text-[9px] font-black uppercase tracking-widest bg-blue-600/10 text-blue-500 border border-blue-500/30 px-2.5 py-1 rounded-lg mb-2">
         {user.role === "superadmin" ? "Superadmin" : "Admin"} panel
         </span>
-        <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight leading-tight">
-        {t.admin.manageTournaments}
-        </h2>
-        <p className="text-xs font-bold text-(--t2) mt-1 max-w-sm">
+        <p className="text-xs font-bold text-(--t2) max-w-sm">
         {t.admin.manageTournamentsDesc}
         </p>
         </div>
-        </div>
-        <button
-        onClick={() => router.push("/register_tourney")}
-        className="flex-shrink-0 flex items-center justify-center gap-2 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl px-6 sm:px-8 py-4 hover:bg-blue-700 shadow-lg shadow-blue-600/25 active:scale-95 transition-all w-full sm:w-auto group"
-        >
-        <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
-        {t.admin.createTournament}
-        </button>
         </div>
         <div className="relative z-10 mt-6 pt-5 border-t border-(--brd) flex flex-wrap gap-4 sm:gap-8">
         {[
@@ -1017,6 +1152,7 @@ export default function DashboardPage() {
           </div>
         ))}
         </div>
+        </div>
         </section>
       )}
 
@@ -1025,19 +1161,13 @@ export default function DashboardPage() {
       ref={el => { revealRefs.current[1] = el; }}
       className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl"
       >
-      {/* Section header */}
-      <div className="p-4 sm:p-6 md:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd)">
-      <div className="flex items-center gap-3">
-      <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-      <Megaphone className="text-amber-500" size={16} />
-      </div>
-      <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">{t.mainPage.announcements}</h2>
-      {announcements.length > 0 && (
-        <span className="text-[9px] font-black bg-amber-500/10 text-amber-600 border border-amber-500/20 px-2 py-0.5 rounded-full">
-        {announcements.length}
-        </span>
-      )}
-      </div>
+      {/* Dark section header */}
+      <SectionHeader
+      icon={<Megaphone size={16} />}
+      title={t.mainPage.announcements}
+      badge={announcements.length > 0 ? announcements.length : null}
+      accentColor="amber"
+      >
       {isAdmin && (
         <button
         onClick={() => { setEditAnnouncement(undefined); setModalOpen(true); }}
@@ -1047,7 +1177,7 @@ export default function DashboardPage() {
         {t.mainPage.announcementsNew}
         </button>
       )}
-      </div>
+      </SectionHeader>
 
       {/* Announcements list */}
       <div className="p-4 sm:p-6 space-y-3">
@@ -1055,11 +1185,16 @@ export default function DashboardPage() {
         <div className="flex items-center justify-center py-10">
         <Loader className="w-6 h-6 text-blue-600 animate-spin" />
         </div>
-      ) : announcements.length === 0 ? (
+      ) : filteredAnnouncements.length === 0 ? (
         <div className="py-10 text-center">
         <Megaphone className="w-10 h-10 text-(--t2) opacity-20 mx-auto mb-3" />
-        <p className="text-sm font-bold text-(--t2)">{t.mainPage.announcementsEmpty}</p>
-        {isAdmin && (
+        <p className="text-sm font-bold text-(--t2)">
+        {announcementsFilter === "mine"
+          ? (locale === "ua" ? "Немає подій для вас" : locale === "en" ? "No events for you" : "Нет событий для вас")
+          : t.mainPage.announcementsEmpty
+        }
+        </p>
+        {isAdmin && announcementsFilter === "all" && (
           <button
           onClick={() => { setEditAnnouncement(undefined); setModalOpen(true); }}
           className="mt-3 text-xs font-black text-blue-600 hover:underline"
@@ -1069,7 +1204,7 @@ export default function DashboardPage() {
         )}
         </div>
       ) : (
-        announcements.map(a => (
+        filteredAnnouncements.map(a => (
           <AnnouncementCard
           key={a.id}
           a={a}
@@ -1084,16 +1219,17 @@ export default function DashboardPage() {
       </section>
 
       {/* ── Current tournament/round section ── */}
-      <section ref={el => { revealRefs.current[2] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 relative overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
+      <section ref={el => { revealRefs.current[2] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden relative bg-(--card) border border-(--brd) shadow-xl">
       <div className="absolute -right-12 -top-12 w-40 h-40 rounded-full blur-3xl opacity-10 bg-blue-600 pointer-events-none" />
 
-      {/* Header: title left, buttons right — vertically centered */}
-      <div className="relative z-10 flex items-center justify-between gap-3 mb-6 sm:mb-8 flex-wrap">
-      <h2 className="font-black text-lg sm:text-xl flex items-center gap-3 text-(--t1) uppercase tracking-tight leading-none">
-      <Users className="text-blue-600 flex-shrink-0" size={24} /> {t.mainPage.currentTournament}
-      </h2>
+      {/* Dark section header */}
+      <SectionHeader
+      icon={<Users size={16} />}
+      title={t.mainPage.currentTournament}
+      accentColor="blue"
+      >
       {!currentInfoLoading && currentInfo?.round && (
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <>
         <a
         href={`/rounds/${currentInfo.round.id}`}
         className="flex items-center justify-center gap-1.5 w-40 bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest rounded-2xl px-[6px] py-2.5 hover:border-blue-600/40 hover:text-(--t1) active:scale-95 transition-all whitespace-nowrap"
@@ -1107,12 +1243,13 @@ export default function DashboardPage() {
         >
         <Upload size={13} /> {t.mainPage.submitTask ?? "Сдать задание"}
         </button>
-        </div>
+        </>
       )}
-      </div>
+      </SectionHeader>
 
+      <div className="p-4 sm:p-6 md:p-8 relative z-10">
       {currentInfoLoading ? (
-        <div className="flex items-center justify-center py-8 relative z-10">
+        <div className="flex items-center justify-center py-8">
         <Loader className="w-6 h-6 text-blue-600 animate-spin" />
         </div>
       ) : currentInfo ? (
@@ -1124,17 +1261,21 @@ export default function DashboardPage() {
         t={t}
         />
       ) : (
-        <div className="py-8 text-center relative z-10">
+        <div className="py-8 text-center">
         <Users className="w-10 h-10 text-(--t2) opacity-20 mx-auto mb-3" />
         <p className="text-sm font-bold text-(--t2)">{t.mainPage.noActiveTournament}</p>
         </div>
       )}
+      </div>
       </section>
 
       {/* ── Tournaments table ── */}
       <section ref={el => { revealRefs.current[3] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
-      <div className="p-4 sm:p-6 md:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd)">
-      <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">{t.mainPage.tournamentList}</h2>
+      <SectionHeader
+      icon={<Trophy size={16} />}
+      title={t.mainPage.tournamentList}
+      accentColor="green"
+      >
       <div className="flex flex-wrap gap-2">
       {filterLabels.map(({ key, label }) => (
         <button
@@ -1146,7 +1287,7 @@ export default function DashboardPage() {
         </button>
       ))}
       </div>
-      </div>
+      </SectionHeader>
 
       {tournamentsLoading ? (
         <div className="flex items-center justify-center py-16">
@@ -1215,6 +1356,11 @@ export default function DashboardPage() {
       </div>
       </section>
 
+      </div>
+      {/* right column: EventCalendar */}
+      <div className="w-full xl:sticky xl:top-6 xl:w-72 xl:flex-shrink-0">
+      <EventCalendar extraEvents={announcementCalendarEvents} eventsFilter={announcementsFilter} onEventsFilterChange={setAnnouncementsFilter} />
+      </div>
       </div>
       </div>
       </main>

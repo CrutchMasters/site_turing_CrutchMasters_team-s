@@ -40,7 +40,7 @@ export default function Sidebar({}: SidebarProps) {
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
-  const [backendMessage, setBackendMessage] = useState("checking...");
+
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -69,12 +69,7 @@ export default function Sidebar({}: SidebarProps) {
   const avatarLetter = user?.username?.charAt(0).toUpperCase() ?? "?";
   const avatarUrl = user?.avatar_url;
 
-  useEffect(() => {
-    fetch(`${API_URL}/api/test`)
-    .then(r => r.ok ? r.json() : Promise.reject())
-    .then(d => setBackendMessage(d.message ?? "online"))
-    .catch(() => setBackendMessage("unavailable"));
-  }, []);
+
 
   // Fetch notifications when panel opens, then mark all as read
   useEffect(() => {
@@ -427,10 +422,7 @@ export default function Sidebar({}: SidebarProps) {
             ))}
             </div>
             </div>
-            <div className="pt-2 border-t border-(--brd)">
-            <span className="text-[10px] font-black text-(--t2) uppercase tracking-tighter block mb-0.5">{t.settings.status}:</span>
-            <span className="text-[10px] font-bold text-(--t1) break-all">{backendMessage}</span>
-            </div>
+
             </div>
           )}
           </nav>
