@@ -536,7 +536,7 @@ function TimeBox({ value, label, urgent }: { value: number; label: string; urgen
 interface CurrentRoundCardProps {
   info: {
     tournament: { id: string; name: string; rules?: string } | null;
-    round: { id: string; name: string; status?: string; start_at?: string; end_at?: string } | null;
+    round: { id: string; name: string; description?: string; status?: string; start_at?: string; end_at?: string } | null;
     status: string | null;
     submission: { id: string; is_draft: boolean; status: string; submitted_at?: string } | null;
   };
@@ -579,8 +579,7 @@ function CurrentRoundCard({ info, statusConfig, statusColors, onNavigate, t }: C
       <>
       <button
       onClick={() => onNavigate(`/tournaments/${info.tournament!.id}`)}
-      className="font-black text-sm text-left leading-snug hover:opacity-75 transition-opacity w-full overflow-hidden text-ellipsis whitespace-nowrap block"
-      style={{ color: "#C6CFDA" }}
+      className="font-black text-sm text-left leading-snug transition-colors w-full overflow-hidden text-ellipsis whitespace-nowrap block text-(--t1) hover:!text-blue-400"
       >
       {info.tournament.name}
       </button>
@@ -603,8 +602,7 @@ function CurrentRoundCard({ info, statusConfig, statusColors, onNavigate, t }: C
       <>
       <button
       onClick={() => onNavigate(`/rounds/${info.round!.id}`)}
-      className="font-black text-sm text-left leading-snug hover:opacity-75 transition-opacity w-full overflow-hidden text-ellipsis whitespace-nowrap block"
-      style={{ color: "#C6CFDA" }}
+      className="font-black text-sm text-left leading-snug transition-colors w-full overflow-hidden text-ellipsis whitespace-nowrap block text-(--t1) hover:!text-blue-400"
       >
       {info.round.name}
       </button>
@@ -1107,7 +1105,7 @@ export default function DashboardPage() {
         onClick={() => router.push(`/rounds/${currentInfo.round!.id}/submit`)}
         className="flex items-center justify-center gap-1.5 w-40 bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl px-4 py-2.5 hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-95 transition-all whitespace-nowrap"
         >
-        <Upload size={13} /> {t.mainPage.submitTask}
+        <Upload size={13} /> {t.mainPage.submitTask ?? "Сдать задание"}
         </button>
         </div>
       )}
