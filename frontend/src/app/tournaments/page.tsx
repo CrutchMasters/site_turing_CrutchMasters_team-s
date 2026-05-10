@@ -171,7 +171,7 @@ function TournamentCard({
             {/* Top row: dot + name + status badge */}
             <div className="flex items-center gap-2 min-w-0">
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot} animate-pulse`} />
-                <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border ${cfg.accentBg} ${cfg.accent} ${cfg.accentBorder} flex-shrink-0`}>
+                <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border whitespace-nowrap ${cfg.accentBg} ${cfg.accent} ${cfg.accentBorder} flex-shrink-0`}>
                     {cfg.label}
                 </span>
                 {spotsAlmostFull && (
