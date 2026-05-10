@@ -655,17 +655,117 @@ def get_caller(token: str) -> dict:
     return account
 
 
-def send_invitation_email(to_email, to_username, team_name, captain_username, invitation_id):
+def send_notification_email(to_email: str, title: str, message: str, notif_type: str = "notification", accept_url: str = ""):
+    """
+    Відправляє email через Gmail SMTP.
+    Потребує GMAIL_USER і GMAIL_APP_PASSWORD у .env
+    """
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from datetime import datetime, timezone as _tz
+
+    print(f"[EMAIL DEBUG] send_notification_email викликано: to={to_email}, type={notif_type}", flush=True)
+
+    gmail_user     = os.getenv("GMAIL_USER", "")
+    gmail_password = os.getenv("GMAIL_APP_PASSWORD", "")
+
+    print(f"[EMAIL DEBUG] GMAIL_USER={gmail_user!r}, PASSWORD_SET={bool(gmail_password)}", flush=True)
+
+    if not gmail_user or not gmail_password:
+        print(f"[EMAIL] GMAIL_USER або GMAIL_APP_PASSWORD не задано — лист не відправлено ({to_email})", flush=True)
+        return
+
+    date_str = datetime.now(_tz.utc).strftime("%d.%m.%Y %H:%M")
+
+    html = f"""<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #eef2f7; margin: 0; padding: 40px 20px; }}
+    .container {{ max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 24px rgba(37,99,235,0.10); border: 1px solid #dbeafe; }}
+    .header {{ background: linear-gradient(135deg, #1d4ed8, #2563eb); padding: 32px 40px; }}
+    .header h1 {{ color: #fff; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }}
+    .header p {{ color: rgba(255,255,255,0.75); margin: 5px 0 0; font-size: 13px; }}
+    .body {{ padding: 36px 40px; }}
+    .badge {{ display: inline-block; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 20px; padding: 4px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 18px; }}
+    .title {{ color: #1e293b; font-size: 20px; font-weight: 700; margin: 0 0 12px; }}
+    .message {{ color: #475569; font-size: 15px; line-height: 1.7; margin: 0; }}
+    .divider {{ height: 1px; background: #e2e8f0; margin: 28px 0 0; }}
+    .footer {{ padding: 18px 40px 24px; background: #f8fafc; }}
+    .footer p {{ color: #94a3b8; font-size: 12px; margin: 0; }}
+    .btn-wrap {{ padding: 0 36px 28px; }}
+    .btn {{ display: inline-block; background: #1d4ed8; color: #ffffff !important; text-decoration: none; font-size: 14px; font-weight: 700; padding: 12px 28px; border-radius: 8px; }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>CrutchMasters</h1>
+      <p>Сповіщення платформи</p>
+    </div>
+    <div class="body">
+      <span class="badge">{notif_type}</span>
+      <p class="title">{title}</p>
+      <p class="message">{message}</p>
+      <div class="divider"></div>
+    </div>
+    {f'<div class="btn-wrap"><a href="{accept_url}" class="btn">✓ Прийняти запрошення</a></div>' if accept_url else ''}
+    <div class="footer">
+      <p>{date_str} &bull; Це автоматичне повідомлення, не відповідайте на нього.</p>
+    </div>
+  </div>
+</body>
+</html>"""
+
     try:
-        site_url   = os.getenv("SITE_URL", "http://localhost:3000")
-        accept_url = f"{site_url}/notifications"
-        print(
-            f"[EMAIL] Invitation email to {to_email}: team='{team_name}', "
-            f"captain='{captain_username}', accept_url={accept_url}",
-            flush=True
-        )
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = title
+        msg["From"]    = f"CrutchMasters <{gmail_user}>"
+        msg["To"]      = to_email
+        msg.attach(MIMEText(html, "html", "utf-8"))
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(gmail_user, gmail_password)
+            server.sendmail(gmail_user, to_email, msg.as_string())
+
+        print(f"[EMAIL] Відправлено на {to_email} | тема: {title}", flush=True)
     except Exception as e:
-        print(f"[EMAIL] Не удалося відправити листа на {to_email}: {e}", flush=True)
+        print(f"[EMAIL] Помилка відправки на {to_email}: {e}", flush=True)
+
+
+def _get_user_email(user_id: str) -> str | None:
+    """Отримує email користувача з таблиці account."""
+    if not supabase or not user_id:
+        return None
+    try:
+        res = supabase.table("account").select("email").eq("id", user_id).limit(1).execute()
+        if res.data:
+            return res.data[0].get("email")
+    except Exception as e:
+        print(f"[EMAIL] Не вдалося отримати email для {user_id}: {e}", flush=True)
+    return None
+
+
+# Залишаємо стару функцію для сумісності
+def send_invitation_email(to_email, to_username, team_name, captain_username, invitation_id):
+    pass
+
+
+def _create_invitation_token(invitation_id: str, inv_type: str) -> str:
+    """Створює одноразовий токен для прийняття запрошення через email."""
+    if not supabase:
+        return ""
+    try:
+        res = supabase.table("invitation_tokens").insert({
+            "type":          inv_type,
+            "invitation_id": invitation_id,
+        }).execute()
+        return (res.data or [{}])[0].get("token", "")
+    except Exception as e:
+        print(f"[TOKEN] Помилка створення токена: {e}", flush=True)
+        return ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -675,6 +775,110 @@ def send_invitation_email(to_email, to_username, team_name, captain_username, in
 @app.get("/api/test")
 def connection_test():
     return {"status": "ok", "message": "Backend status active"}
+
+
+@app.get("/api/invitations/accept-by-token")
+async def accept_invitation_by_token(token: str):
+    """
+    Приймає запрошення за одноразовим токеном з email-листа.
+    Після прийняття робить редирект на сторінку команди.
+    """
+    from fastapi.responses import RedirectResponse
+
+    site_url = os.getenv("SITE_URL", "http://localhost:3000")
+
+    if not supabase:
+        return RedirectResponse(url=f"{site_url}/notifications?error=server")
+
+    # Знаходимо токен
+    tok_res = supabase.table("invitation_tokens")         .select("*")         .eq("token", token)         .limit(1)         .execute()
+
+    if not tok_res.data:
+        return RedirectResponse(url=f"{site_url}/notifications?error=invalid_token")
+
+    tok = tok_res.data[0]
+
+    if tok["used"]:
+        return RedirectResponse(url=f"{site_url}/notifications?error=already_used")
+
+    from datetime import datetime, timezone
+    expires_at = datetime.fromisoformat(tok["expires_at"].replace("Z", "+00:00"))
+    if datetime.now(timezone.utc) > expires_at:
+        return RedirectResponse(url=f"{site_url}/notifications?error=expired")
+
+    inv_type      = tok["type"]
+    invitation_id = tok["invitation_id"]
+
+    # Визначаємо таблицю залежно від типу
+    if inv_type == "team_invitation":
+        table = "team_invitations"
+    elif inv_type == "jury_invitation":
+        table = "jury_tournament_invitations"
+    else:
+        return RedirectResponse(url=f"{site_url}/notifications?error=unknown_type")
+
+    inv_res = supabase.table(table)         .select("*")         .eq("id", invitation_id)         .limit(1)         .execute()
+
+    if not inv_res.data:
+        return RedirectResponse(url=f"{site_url}/notifications?error=invitation_not_found")
+
+    inv = inv_res.data[0]
+
+    if inv["status"] != "pending":
+        # Вже оброблено — просто редіректимо
+        if inv_type == "team_invitation":
+            return RedirectResponse(url=f"{site_url}/teams/{inv['team_id']}")
+        return RedirectResponse(url=f"{site_url}/notifications")
+
+    # Приймаємо запрошення
+    supabase.table(table)         .update({"status": "accepted"})         .eq("id", invitation_id)         .execute()
+
+    # Позначаємо токен використаним
+    supabase.table("invitation_tokens")         .update({"used": True})         .eq("id", tok["id"])         .execute()
+
+    if inv_type == "team_invitation":
+        # Додаємо користувача до команди
+        team_res = supabase.table("teams")             .select("members_ids, captain_id, name")             .eq("id", inv["team_id"])             .limit(1)             .execute()
+
+        if team_res.data:
+            team = team_res.data[0]
+            members = team.get("members_ids") or []
+            if inv["invitee_id"] not in members:
+                members.append(inv["invitee_id"])
+                supabase.table("teams")                     .update({"members_ids": members})                     .eq("id", inv["team_id"])                     .execute()
+
+            # Сповіщаємо капітана
+            invitee_res = supabase.table("account")                 .select("username")                 .eq("id", inv["invitee_id"])                 .limit(1)                 .execute()
+            invitee_name = (invitee_res.data or [{}])[0].get("username", "Користувач")
+
+            supabase.table("notifications").insert({
+                "user_id": team["captain_id"],
+                "type":    "invitation_accepted",
+                "title":   f"{invitee_name} прийняв запрошення",
+                "message": f"Користувач {invitee_name} прийняв ваше запрошення до команди «{team['name']}».",
+                "meta":    {"team_id": inv["team_id"], "team_name": team["name"], "new_member": invitee_name},
+                "read":    False,
+            }).execute()
+
+        print(f"[TOKEN-ACCEPT] team_invitation {invitation_id} прийнято через email-посилання", flush=True)
+        return RedirectResponse(url=f"{site_url}/teams/{inv['team_id']}")
+
+    elif inv_type == "jury_invitation":
+        # Додаємо jury_assignments для всіх раундів турніру
+        rounds_res = supabase.table("rounds")             .select("id")             .eq("tournament_id", inv["tournament_id"])             .execute()
+        for r in (rounds_res.data or []):
+            exists = supabase.table("jury_assignments")                 .select("id")                 .eq("jury_id", inv["jury_id"])                 .eq("round_id", r["id"])                 .execute()
+            if not exists.data:
+                supabase.table("jury_assignments").insert({
+                    "jury_id":       inv["jury_id"],
+                    "round_id":      r["id"],
+                    "tournament_id": inv["tournament_id"],
+                }).execute()
+
+        print(f"[TOKEN-ACCEPT] jury_invitation {invitation_id} прийнято через email-посилання", flush=True)
+        return RedirectResponse(url=f"{site_url}/tournaments/{inv['tournament_id']}")
+
+    return RedirectResponse(url=f"{site_url}/notifications")
 
 
 @app.post("/api/register")
@@ -1353,14 +1557,16 @@ async def send_invitation(payload: SendInvitation, authorization: str = Header(.
 
     invitation_id = inv_res.data[0]["id"]
 
+    _notif_title   = f"Запрошення до команди «{team['name']}»"
+    _notif_message = (
+        f"Капітан команди «{team['name']}» ({caller['username']}) "
+        f"запрошує вас приєднатися до команди."
+    )
     supabase.table("notifications").insert({
         "user_id": payload.invitee_id,
         "type":    "team_invitation",
-        "title":   f"Запрошення до команди «{team['name']}»",
-        "message": (
-            f"Капітан команди «{team['name']}» ({caller['username']}) "
-            f"запрошує вас приєднатися до команди."
-        ),
+        "title":   _notif_title,
+        "message": _notif_message,
         "meta": {
             "invitation_id": invitation_id,
             "team_id":       payload.team_id,
@@ -1370,14 +1576,10 @@ async def send_invitation(payload: SendInvitation, authorization: str = Header(.
         },
         "read": False,
     }).execute()
-
-    send_invitation_email(
-        to_email=invitee["email"],
-        to_username=invitee["username"],
-        team_name=team["name"],
-        captain_username=caller["username"],
-        invitation_id=invitation_id,
-    )
+    _token = _create_invitation_token(invitation_id, "team_invitation")
+    _api_url = os.getenv("API_URL", "http://localhost:8000")
+    _accept_url = f"{_api_url}/api/invitations/accept-by-token?token={_token}" if _token else ""
+    send_notification_email(invitee["email"], _notif_title, _notif_message, "team_invitation", _accept_url)
 
     print(f"[INVITE] {caller['username']} → {invitee['username']} для команды {team['name']}", flush=True)
     return {"success": True, "invitation_id": invitation_id}
@@ -1457,14 +1659,16 @@ async def send_jury_invitation(payload: SendJuryInvitation, authorization: str =
 
     invitation_id = inv_res.data[0]["id"]
 
+    _notif_title   = f"Запрошення до журі турніру «{tournament['name']}»"
+    _notif_message = (
+        f"Адміністратор {caller['username']} запрошує вас взяти участь "
+        f"в оцінюванні робіт турніру «{tournament['name']}»."
+    )
     supabase.table("notifications").insert({
         "user_id": payload.jury_id,
         "type":    "jury_invitation",
-        "title":   f"Запрошення до журі турніру «{tournament['name']}»",
-        "message": (
-            f"Адміністратор {caller['username']} запрошує вас взяти участь "
-            f"в оцінюванні робіт турніру «{tournament['name']}»."
-        ),
+        "title":   _notif_title,
+        "message": _notif_message,
         "meta": {
             "invitation_id":  invitation_id,
             "tournament_id":  payload.tournament_id,
@@ -1474,6 +1678,12 @@ async def send_jury_invitation(payload: SendJuryInvitation, authorization: str =
         },
         "read": False,
     }).execute()
+    _jury_email = _get_user_email(payload.jury_id)
+    if _jury_email:
+        _token = _create_invitation_token(invitation_id, "jury_invitation")
+        _api_url = os.getenv("API_URL", "http://localhost:8000")
+        _accept_url = f"{_api_url}/api/invitations/accept-by-token?token={_token}" if _token else ""
+        send_notification_email(_jury_email, _notif_title, _notif_message, "jury_invitation", _accept_url)
 
     print(f"[JURY-INVITE] {caller['username']} → {jury_user['username']} для турніру {tournament['name']}", flush=True)
     return {"success": True, "invitation_id": invitation_id}
@@ -1542,14 +1752,16 @@ async def respond_jury_invitation(payload: RespondJuryInvitation, authorization:
                 }).execute()
 
         if tournament:
+            _notif_title   = f"{caller['username']} прийняв запрошення журі"
+            _notif_message = (
+                f"Журі {caller['username']} прийняв запрошення до оцінювання "
+                f"турніру «{tournament['name']}»."
+            )
             supabase.table("notifications").insert({
                 "user_id": inv["inviter_id"],
                 "type":    "jury_invitation_accepted",
-                "title":   f"{caller['username']} прийняв запрошення журі",
-                "message": (
-                    f"Журі {caller['username']} прийняв запрошення до оцінювання "
-                    f"турніру «{tournament['name']}»."
-                ),
+                "title":   _notif_title,
+                "message": _notif_message,
                 "meta": {
                     "tournament_id":   inv["tournament_id"],
                     "tournament_name": tournament["name"] if tournament else "",
@@ -1558,20 +1770,25 @@ async def respond_jury_invitation(payload: RespondJuryInvitation, authorization:
                 },
                 "read": False,
             }).execute()
+            _inviter_email = _get_user_email(inv["inviter_id"])
+            if _inviter_email:
+                send_notification_email(_inviter_email, _notif_title, _notif_message, "jury_invitation_accepted")
 
         print(f"[JURY-INVITE] {caller['username']} ПРИЙНЯВ журі для {inv['tournament_id']}", flush=True)
         return {"success": True, "status": "accepted"}
 
     else:
         if tournament:
+            _notif_title   = f"{caller['username']} відхилив запрошення журі"
+            _notif_message = (
+                f"Журі {caller['username']} відхилив запрошення до оцінювання "
+                f"турніру «{tournament['name']}»."
+            )
             supabase.table("notifications").insert({
                 "user_id": inv["inviter_id"],
                 "type":    "jury_invitation_declined",
-                "title":   f"{caller['username']} відхилив запрошення журі",
-                "message": (
-                    f"Журі {caller['username']} відхилив запрошення до оцінювання "
-                    f"турніру «{tournament['name']}»."
-                ),
+                "title":   _notif_title,
+                "message": _notif_message,
                 "meta": {
                     "tournament_id":   inv["tournament_id"],
                     "tournament_name": tournament["name"] if tournament else "",
@@ -1580,6 +1797,9 @@ async def respond_jury_invitation(payload: RespondJuryInvitation, authorization:
                 },
                 "read": False,
             }).execute()
+            _inviter_email = _get_user_email(inv["inviter_id"])
+            if _inviter_email:
+                send_notification_email(_inviter_email, _notif_title, _notif_message, "jury_invitation_declined")
 
         print(f"[JURY-INVITE] {caller['username']} ВІДХИЛИВ журі для {inv['tournament_id']}", flush=True)
         return {"success": True, "status": "declined"}
@@ -1784,11 +2004,13 @@ async def respond_invitation(payload: RespondInvitation, authorization: str = He
                 .eq("id", inv["team_id"]) \
                 .execute()
 
+        _notif_title   = f"{caller['username']} прийняв запрошення"
+        _notif_message = f"Користувач {caller['username']} прийняв ваше запрошення до команди «{team['name']}»."
         supabase.table("notifications").insert({
             "user_id": team["captain_id"],
             "type":    "invitation_accepted",
-            "title":   f"{caller['username']} прийняв запрошення",
-            "message": f"Користувач {caller['username']} прийняв ваше запрошення до команди «{team['name']}».",
+            "title":   _notif_title,
+            "message": _notif_message,
             "meta":    {
                 "team_id":    inv["team_id"],
                 "team_name":  team["name"],
@@ -1796,6 +2018,9 @@ async def respond_invitation(payload: RespondInvitation, authorization: str = He
             },
             "read": False,
         }).execute()
+        _captain_email = _get_user_email(team["captain_id"])
+        if _captain_email:
+            send_notification_email(_captain_email, _notif_title, _notif_message, "invitation_accepted")
 
         print(f"[INVITE] {caller['username']} принял приглашение в команду {inv['team_id']}", flush=True)
         return {"success": True, "status": "accepted"}
@@ -1805,17 +2030,22 @@ async def respond_invitation(payload: RespondInvitation, authorization: str = He
             supabase.table("teams").select("name, captain_id").eq("id", inv["team_id"])
         )
         if team:
+            _notif_title   = f"{caller['username']} відхилив запрошення"
+            _notif_message = f"Користувач {caller['username']} відхилив ваше запрошення до команди «{team['name']}»."
             supabase.table("notifications").insert({
                 "user_id": team["captain_id"],
                 "type":    "invitation_declined",
-                "title":   f"{caller['username']} відхилив запрошення",
-                "message": f"Користувач {caller['username']} відхилив ваше запрошення до команди «{team['name']}».",
+                "title":   _notif_title,
+                "message": _notif_message,
                 "meta":    {
                     "team_id":   inv["team_id"],
                     "team_name": team["name"],
                 },
                 "read": False,
             }).execute()
+            _captain_email = _get_user_email(team["captain_id"])
+            if _captain_email:
+                send_notification_email(_captain_email, _notif_title, _notif_message, "invitation_declined")
 
         print(f"[INVITE] {caller['username']} отклонил приглашение в команду {inv['team_id']}", flush=True)
         return {"success": True, "status": "declined"}
