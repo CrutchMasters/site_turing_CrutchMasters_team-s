@@ -377,15 +377,16 @@ export default function Sidebar({}: SidebarProps) {
 
           {/* Nav */}
           <nav className="flex-1 flex flex-col gap-1 p-3 overflow-y-auto overflow-x-hidden">
-          <NavItem icon={<UserCircle size={18} />}      label={t.sidebar.profile}   active={pathname === "/profile"}   collapsed={collapsed} onClick={() => go("/profile")} />
-          <NavItem icon={<LayoutDashboard size={18} />} label={t.sidebar.mainPage}  active={pathname === "/dashboard"} collapsed={collapsed} onClick={() => go("/dashboard")} />
-          <NavItem icon={<Search size={18} />}          label={t.sidebar.search}    active={pathname === "/search"}    collapsed={collapsed} onClick={() => go("/search")} />
+          <NavItem icon={<UserCircle size={18} />}      label={t.sidebar.profile}   active={pathname === "/profile"}   collapsed={collapsed} onClick={() => go("/profile")}    href="/profile" />
+          <NavItem icon={<LayoutDashboard size={18} />} label={t.sidebar.mainPage}  active={pathname === "/dashboard"} collapsed={collapsed} onClick={() => go("/dashboard")} href="/dashboard" />
+          <NavItem icon={<Search size={18} />}          label={t.sidebar.search}    active={pathname === "/search"}    collapsed={collapsed} onClick={() => go("/search")}    href="/search" />
           <NavItem
           icon={<Trophy size={18} />}
           label={t.sidebar.tournaments}
           active={pathname === "/tournaments" || pathname?.startsWith("/tournaments/")}
           collapsed={collapsed}
           onClick={() => go("/tournaments")}
+          href="/tournaments"
           />
           <NavItem
           icon={<Users size={18} />}
@@ -393,6 +394,7 @@ export default function Sidebar({}: SidebarProps) {
           active={pathname === "/teams" || pathname?.startsWith("/teams/")}
           collapsed={collapsed}
           onClick={() => go("/teams")}
+          href="/teams"
           />
           <NavItem
           icon={<Settings size={18} />}
@@ -448,12 +450,21 @@ export default function Sidebar({}: SidebarProps) {
   );
 }
 
-function NavItem({ icon, label, active, collapsed, onClick, suffix }: any) {
+function NavItem({ icon, label, active, collapsed, onClick, suffix, href }: any) {
+  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    // Middle click — браузер сам відкриє в новій вкладці завдяки <a>
+    if (e.button === 1) return;
+    // Звичайний клік — використовуємо клієнтську навігацію Next.js
+    e.preventDefault();
+    onClick?.();
+  };
+
   return (
-    <button
-    onClick={onClick}
+    <a
+    href={href ?? "#"}
+    onClick={handleClick}
     className={`
-      flex items-center gap-3 rounded-xl text-sm font-bold transition-all w-full
+      flex items-center gap-3 rounded-xl text-sm font-bold transition-all w-full cursor-pointer
       ${collapsed ? "justify-center p-3" : "px-4 py-3"}
       ${active ? "bg-blue-600 text-white shadow-lg" : "text-(--t2) hover:bg-(--bg)"}
       `}
@@ -467,6 +478,6 @@ function NavItem({ icon, label, active, collapsed, onClick, suffix }: any) {
         </span>
       )}
       {!collapsed && suffix}
-      </button>
+      </a>
   );
 }
