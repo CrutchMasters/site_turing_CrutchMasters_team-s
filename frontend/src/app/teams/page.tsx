@@ -349,9 +349,9 @@ export default function TeamsPage() {
                 icon={<Users size={18} className="text-blue-600" />}
                 />
 
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 pb-12 sm:pb-16 relative z-10">
+                <div className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-8 lg:p-12 pb-10 sm:pb-16 relative z-10">
                 {/* Breadcrumb */}
-                <nav className="max-w-6xl mx-auto flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
+                <nav className="max-w-6xl mx-auto lg:max-w-none xl:max-w-6xl flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
                 <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">
                 {t.nav.home}
                 </button>
@@ -360,15 +360,15 @@ export default function TeamsPage() {
                 </nav>
 
                 {/* Page title */}
-                <h1 className="max-w-6xl mx-auto text-2xl sm:text-3xl font-black text-(--t1) uppercase tracking-tight mb-8">
+                <h1 className="max-w-6xl mx-auto lg:max-w-none xl:max-w-6xl text-xl sm:text-3xl font-black text-(--t1) uppercase tracking-tight mb-5 sm:mb-8">
                 {t.teams.title}
                 </h1>
 
                 {/* Two-column layout */}
-                <div className="max-w-6xl mx-auto flex flex-col xl:flex-row gap-6 items-start">
+                <div className="max-w-6xl mx-auto lg:max-w-none xl:max-w-6xl flex flex-col xl:flex-row gap-4 sm:gap-6 items-start">
 
                 {/* ── LEFT: Search panel ── */}
-                <div className="flex-1 min-w-0 flex flex-col gap-4">
+                <div className="w-full xl:flex-1 min-w-0 flex flex-col gap-4 order-2 xl:order-1">
                 {/* Panel header */}
                 <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center flex-shrink-0">
@@ -383,7 +383,7 @@ export default function TeamsPage() {
                 </div>
 
                 {/* Search input */}
-                <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-xl border border-(--brd) p-4 sm:p-6">
+                <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-xl border border-(--brd) p-3 sm:p-6">
                 <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-(--t2) pointer-events-none w-5 h-5" />
                 <input
@@ -415,8 +415,7 @@ export default function TeamsPage() {
                     <p className="text-(--t2) text-sm">{searchQuery ? t.common.na : t.teams.notFoundHint}</p>
                     </div>
                 ) : (
-                    // ✅ FIXED: прибрано justify-items-center, додано w-full до карточок
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3 gap-3 sm:gap-4">
                     {filtered.map((team, idx) => (
                         <SearchTeamCard
                         key={team.id}
@@ -434,7 +433,7 @@ export default function TeamsPage() {
 
                 {/* ── RIGHT: My Teams panel (hidden for restricted roles) ── */}
                 {!isRestricted && (
-                    <div className="w-full xl:w-[420px] flex-shrink-0 flex flex-col gap-4">
+                    <div className="w-full xl:w-[420px] flex-shrink-0 flex flex-col gap-4 order-1 xl:order-2">
                     {/* Panel header */}
                     <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
@@ -455,7 +454,7 @@ export default function TeamsPage() {
                             </div>
 
                             {/* My Teams list */}
-                            <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-xl border border-(--brd) p-4 sm:p-6 flex flex-col gap-3">
+                            <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-xl border border-(--brd) p-3 sm:p-6 flex flex-col gap-3">
                             {(loadingMy || loadingMember) ? (
                                 <div className="flex flex-col items-center justify-center py-10 gap-3">
                                 <Loader className="w-7 h-7 text-blue-600 animate-spin" />
@@ -561,7 +560,7 @@ function SearchTeamCard({
         onClick={onOpen}
         >
         <div className={`h-1 w-full bg-gradient-to-r ${gradient}`} />
-        <div className="p-5">
+        <div className="p-3 sm:p-5">
         <div className="flex items-start gap-3 mb-3">
         <TeamAvatar team={team} idx={idx} />
         <div className="flex-1 min-w-0">
