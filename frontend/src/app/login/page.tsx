@@ -9,18 +9,18 @@ import { useLanguage } from "@/context/LanguageContext";
 import { useTheme } from "@/hooks/useTheme";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
 const API_URL =
   typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:8000"
     : "https://site-turing-crutchmasters-team-s.onrender.com";
 
-// Инициализация Supabase клиента
-// Замените на ваши реальные значения из https://supabase.com/dashboard/project/YOUR_PROJECT/settings/api
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Используем единый shared Supabase клиент через @supabase/ssr
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function LoginPage() {
   const { t, locale, setLocale } = useLanguage();
@@ -73,10 +73,13 @@ export default function LoginPage() {
     if (!resetEmail) return;
     setPwError(null); setPwStep("sending");
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, { redirectTo: undefined });
+      const redirectTo = typeof window !== "undefined"
+        ? `${window.location.origin}/login?reset=true`
+        : `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/login?reset=true`;
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, { redirectTo });
       if (error) throw error;
       setPwStep("code"); setResendCooldown(60);
-    } catch (e: any) { setPwError(e?.message ?? "Send error"); setPwStep("idle"); }
+    } catch (e: any) { setPwError(e?.message ?? "Error sending recovery email"); setPwStep("idle"); }
   }
 
   async function verifyResetCode() {
