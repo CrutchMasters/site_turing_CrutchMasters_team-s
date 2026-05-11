@@ -152,7 +152,7 @@ export default function HomePage() {
       <div className="flex flex-col gap-2">
       <span className="text-sm font-bold text-(--t2)">{t.settings.lang}</span>
       <div className="flex bg-(--bg) p-1 rounded-xl gap-1 border border-(--brd)">
-      {(["en", "ru", "ua"] as const).map((lang) => (
+      {(["en", "ua"] as const).map((lang) => (
         <button
         key={lang}
         onClick={() => setLocale(lang)}
@@ -239,14 +239,14 @@ export default function HomePage() {
           className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-(--t2) hover:bg-(--bg) hover:text-blue-600 transition-colors"
           >
           <UserCircle size={16} />{" "}
-          {locale === "en" ? "Profile" : locale === "ru" ? "Профиль" : "Профіль"}
+          {locale === "en" ? "Profile" : "Профіль"}
           </Link>
           <button
           onClick={logout}
           className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-500/10 transition-colors border-t border-(--brd)"
           >
           <LogOut size={16} />{" "}
-          {locale === "en" ? "Sign Out" : locale === "ru" ? "Выйти" : "Вийти"}
+          {locale === "en" ? "Sign Out" : "Вийти"}
           </button>
           </div>
         )}

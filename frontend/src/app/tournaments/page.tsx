@@ -44,7 +44,7 @@ function computeStatus(tt: Pick<Tournament, "start_at" | "registration_from" | "
 
 function fmtDate(iso?: string, locale?: string) {
     if (!iso) return "—";
-    const lm: Record<string, string> = { ua: "uk-UA", ru: "ru-RU", en: "en-US" };
+    const lm: Record<string, string> = { ua: "uk-UA", en: "en-US" };
     return new Date(iso).toLocaleString(lm[locale ?? "ua"] ?? "uk-UA", {
         day: "2-digit", month: "2-digit", year: "numeric",
         hour: "2-digit", minute: "2-digit",

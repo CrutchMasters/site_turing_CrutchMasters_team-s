@@ -372,7 +372,7 @@ export default function RegisterPage() {
             <div className="flex flex-col gap-2">
               <span className="text-sm font-bold text-(--t2)">{t.settings.lang}</span>
               <div className="flex bg-(--bg) p-1 rounded-xl gap-1 border border-(--brd)">
-                {(["en", "ru", "ua"] as const).map((lang) => (
+                {(["en", "ua"] as const).map((lang) => (
                   <button
                     key={lang}
                     onClick={() => setLocale(lang)}
