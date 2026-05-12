@@ -5,6 +5,7 @@ import {
   Zap, Trophy, Clock, Users, Layers, ChevronRight, ArrowLeft, X, CalendarDays, ImageIcon, Upload, AlertCircle, CheckCircle,
 } from 'lucide-react';
 import { RichTextEditor } from '@/components/RichTextEditor';
+import BannerEditorModal from '@/components/BannerEditorModal';
 
 import Sidebar from "@/components/Sidebar";
 import { DatePicker, TimePicker } from "@/components/DateTimePicker";
@@ -117,8 +118,8 @@ export default function RegisterTourney() {
     setFieldErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
   };
   const [bannerUrl, setBannerUrl]         = useState('');
-  const [bannerUploading, setBannerUploading] = useState(false);
   const [bannerError, setBannerError]     = useState('');
+  const [bannerEditorOpen, setBannerEditorOpen] = useState(false);
 
   // Зовнішні дати для RoundSettingsPanel (від таймлайну)
   const [externalRoundDates, setExternalRoundDates] = useState<
@@ -261,33 +262,6 @@ export default function RegisterTourney() {
     const data = await res.json();
     // Бекенд повертає signed_url (довготривалий, service_role)
     return data.signed_url as string;
-  };
-
-  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setBannerError('');
-    setBannerUploading(true);
-    try {
-      const token = await getToken();
-      const form = new FormData();
-      form.append('file', file);
-      const res = await fetch(`${API_URL}/api/upload/tournament-banner-temp`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: form,
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail ?? res.statusText);
-      }
-      const data = await res.json();
-      setBannerUrl(data.public_url as string);
-    } catch (err: any) {
-      setBannerError(err?.message ?? 'Помилка завантаження банера');
-    } finally {
-      setBannerUploading(false);
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -597,6 +571,7 @@ export default function RegisterTourney() {
    *    MAIN FORM (admin only)
    * ════════════════════════════════════════════════════════════════════════ */
   return (
+    <>
     <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
     <style>{`
       @keyframes fadeUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
@@ -753,11 +728,14 @@ export default function RegisterTourney() {
           <div className="relative rounded-2xl overflow-hidden border border-(--brd) group">
           <img src={bannerUrl} alt="Banner preview" className="w-full h-40 object-cover" />
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-          <label className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-white/90 text-gray-900 rounded-xl text-xs font-black uppercase tracking-wide shadow-lg hover:bg-white transition-all">
+          <button
+          type="button"
+          onClick={() => setBannerEditorOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-white/90 text-gray-900 rounded-xl text-xs font-black uppercase tracking-wide shadow-lg hover:bg-white transition-all"
+          >
           <Upload size={14} />
           {t.tourney?.bannerChange ?? 'Змінити'}
-          <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={bannerUploading} />
-          </label>
+          </button>
           </div>
           <button
           type="button"
@@ -768,19 +746,19 @@ export default function RegisterTourney() {
           </button>
           </div>
         ) : (
-          <label className={`flex flex-col items-center justify-center gap-3 p-8 rounded-2xl border-2 border-dashed cursor-pointer transition-all ${bannerUploading ? 'border-(--brd) opacity-60 cursor-wait' : 'border-(--brd) hover:border-purple-500/50 hover:bg-purple-500/5'}`}>
+          <button
+          type="button"
+          onClick={() => setBannerEditorOpen(true)}
+          className="w-full flex flex-col items-center justify-center gap-3 p-8 rounded-2xl border-2 border-dashed border-(--brd) hover:border-purple-500/50 hover:bg-purple-500/5 transition-all cursor-pointer"
+          >
           <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center">
-          {bannerUploading
-            ? <span className="w-5 h-5 border-2 border-purple-500/40 border-t-purple-500 rounded-full animate-spin" />
-            : <ImageIcon size={22} className="text-purple-500" />
-          }
+          <ImageIcon size={22} className="text-purple-500" />
           </div>
           <div className="text-center">
-          <p className="text-sm font-black text-(--t1)">{bannerUploading ? (t.tourney?.bannerUploading ?? 'Завантаження...') : (t.tourney?.bannerUploadTitle ?? 'Завантажити банер')}</p>
-          <p className="text-[11px] text-(--t2) mt-0.5">{t.tourney?.bannerUploadHint ?? 'PNG, JPG, WEBP — рекомендований розмір 1200×400'}</p>
+          <p className="text-sm font-black text-(--t1)">{t.tourney?.bannerUpload ?? 'Завантажити банер'}</p>
+          <p className="text-[11px] text-(--t2) mt-0.5">{t.tourney?.bannerHint ?? 'PNG, JPG, WEBP — рекомендований розмір 1200×400'}</p>
           </div>
-          <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={bannerUploading} />
-          </label>
+          </button>
         )}
         {bannerError && (
           <div className="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-500 text-xs font-bold">
@@ -997,5 +975,34 @@ export default function RegisterTourney() {
         </div>
         </main>
         </div>
+
+        {/* Banner Editor Modal */}
+        {bannerEditorOpen && (
+          <BannerEditorModal
+          entityId="temp-banner"
+          currentBannerUrl={bannerUrl || undefined}
+          onSave={(url) => { setBannerUrl(url); setBannerError(''); }}
+          onClose={() => setBannerEditorOpen(false)}
+          supabase={supabase}
+          apiUpload={async (blob) => {
+            const token = await getToken();
+            if (!token) throw new Error('Не вдалося отримати токен авторизації. Спробуйте увійти знову.');
+            const form = new FormData();
+            form.append('file', blob, 'banner.webp');
+            const res = await fetch(`${API_URL}/api/upload/tournament-banner-temp`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` },
+              body: form,
+            });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.detail ?? res.statusText);
+            }
+            const data = await res.json();
+            return data.public_url as string;
+          }}
+          />
+        )}
+        </>
   );
 }

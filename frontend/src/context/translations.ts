@@ -110,6 +110,10 @@ const def = {
         deniedDesc: "This page is for administrators only",
         deniedBackDashboard: "← Back to dashboard",
         deniedBackHome: "Home",
+        bannerBlock: "Tournament Banner",
+        bannerChange: "Change",
+        bannerUpload: "Upload Banner",
+        bannerHint: "PNG, JPG, WEBP — recommended size 1200×400",
     },
     roundPanel: {
       header: "Round settings",
@@ -385,6 +389,10 @@ const def = {
       deleteCancelBtn: "Cancel",
       deleteSuccess: "Tournament deleted",
       deleteError: "Failed to delete tournament",
+      bannerBlock: "Tournament banner",
+      bannerChange: "Change",
+      bannerUploadTitle: "Upload banner",
+      bannerUploadHint: "PNG, JPG, WEBP — recommended size 1200×400",
     },
     registerTeam: {
       pageTitle: "🏅 Team Registration",
@@ -543,6 +551,10 @@ const def = {
         deniedDesc: "Ця сторінка тільки для адміністраторів",
         deniedBackDashboard: "← Повернутись на дашборд",
         deniedBackHome: "На головну",
+        bannerBlock: "Банер турніру",
+        bannerChange: "Змінити",
+        bannerUpload: "Завантажити банер",
+        bannerHint: "PNG, JPG, WEBP — рекомендований розмір 1200×400",
     },
     roundPanel: {
       header: "Параметри раунду",
@@ -815,6 +827,10 @@ const def = {
       deleteCancelBtn: "Скасувати",
       deleteSuccess: "Турнір видалено",
       deleteError: "Не вдалося видалити турнір",
+      bannerBlock: "Банер турніру",
+      bannerChange: "Змінити",
+      bannerUploadTitle: "Завантажити банер",
+      bannerUploadHint: "PNG, JPG, WEBP — рекомендований розмір 1200×400",
     },
     registerTeam: {
       pageTitle: "🏅 Реєстрація команди",
