@@ -114,7 +114,10 @@ export default function EventCalendar({ extraEvents = [], eventsFilter = "all", 
   const myEventsLbl  = locale === "ua" ? "Мої події"       : locale === "en" ? "My events"        : "Мои события";
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     (async () => {
       const evs: CalendarEvent[] = [];
