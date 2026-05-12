@@ -8,7 +8,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/hooks/useTheme";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
-import { Trophy, Users, ArrowLeft, Loader, Edit, ChevronRight, Clock, Flag, Lock } from "lucide-react";
+import { LeaderboardSection } from "@/components/LeaderboardSection";
+import { Trophy, Users, ArrowLeft, Loader, Edit, ChevronRight, Clock, Flag, Lock, LayoutList } from "lucide-react";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 const API_URL =
@@ -32,7 +33,7 @@ interface Team {
     name: string;
     city_school_org?: string;
     captain_id?: string;
-    members_ids?: string[];  // Bug 7 fix
+    members_ids?: string[];
     avatar_url?: string;
 }
 
@@ -50,6 +51,8 @@ interface Tournament {
     banner_url?: string;
     teams: Team[];
 }
+
+type Tab = "info" | "leaderboard";
 
 function fmtDate(iso?: string) {
     if (!iso) return "—";
@@ -72,206 +75,234 @@ export default function TournamentPage() {
     const [unregistering, setUnregistering] = useState(false);
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState<Tab>("info");
+    const [leaderboardTouched, setLeaderboardTouched] = useState(false);
 
-        useEffect(() => { if (id && !authLoading) fetchTournament(); }, [id, authLoading]);
+    useEffect(() => { if (id && !authLoading) fetchTournament(); }, [id, authLoading]);
 
-        const fetchTournament = async () => {
-            setLoading(true);
-            try {
-                const { data: tourData, error: tourErr } = await supabase
-                .from("tournaments")
-                .select("id, name, rules, max_teams, rounds, status, start_at, end_at, registration_from, registration_to, banner_url")
-                .eq("id", id)
-                .single();
-                if (tourErr) throw tourErr;
+    const fetchTournament = async () => {
+        setLoading(true);
+        try {
+            const { data: tourData, error: tourErr } = await supabase
+            .from("tournaments")
+            .select("id, name, rules, max_teams, rounds, status, start_at, end_at, registration_from, registration_to, banner_url")
+            .eq("id", id)
+            .single();
+            if (tourErr) throw tourErr;
 
-                // Fetch registered teams via teams.tournament_id
-                const { data: teamsData, error: teamsErr } = await supabase
-                .from("teams")
-                .select("id, name, city_school_org, captain_id, members_ids, avatar_url")
-                .eq("tournament_id", id);
-                if (teamsErr) throw teamsErr;
-
-                setTournament({ ...tourData, teams: teamsData ?? [] });
-
-                // Fetch rounds for this tournament
-                const { data: roundsData } = await supabase
-                .from("rounds")
-                .select("id, tournament_id, number, name, description, start_at, end_at, status")
-                .eq("tournament_id", id)
-                .order("number", { ascending: true });
-                setRounds(roundsData ?? []);
-            } catch (e) {
-                console.error(e);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        // FIX (високий): замість автоматичного вибору першої eligible команди —
-        // показуємо модалку з вибором команди
-        const [teamPickerOpen, setTeamPickerOpen] = useState(false);
-        const [eligibleTeams, setEligibleTeams] = useState<{ id: string; name: string }[]>([]);
-
-        const handleRegister = async () => {
-            if (!user || !tournament) return;
-            setRegisterError(null);
-
-            const { data: captainTeams, error: teamErr } = await supabase
+            const { data: teamsData, error: teamsErr } = await supabase
             .from("teams")
-            .select("id, name, tournament_id")
-            .eq("captain_id", user.id);
+            .select("id, name, city_school_org, captain_id, members_ids, avatar_url")
+            .eq("tournament_id", id);
+            if (teamsErr) throw teamsErr;
 
-            if (teamErr || !captainTeams || captainTeams.length === 0) {
-                setRegisterError("У вас немає команди або ви не є капітаном жодної команди");
-                return;
-            }
+            setTournament({ ...tourData, teams: teamsData ?? [] });
 
-            const eligible = captainTeams.filter(t => !t.tournament_id);
-            if (eligible.length === 0) {
-                setRegisterError("Всі ваші команди вже зареєстровані в турнірах");
-                return;
-            }
+            const { data: roundsData } = await supabase
+            .from("rounds")
+            .select("id, tournament_id, number, name, description, start_at, end_at, status")
+            .eq("tournament_id", id)
+            .order("number", { ascending: true });
+            setRounds(roundsData ?? []);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-            // FIX: якщо команда одна — реєструємо одразу; якщо кілька — даємо вибір
-            if (eligible.length === 1) {
-                await doRegister(eligible[0].id);
-            } else {
-                setEligibleTeams(eligible);
-                setTeamPickerOpen(true);
-            }
-        };
+    const [teamPickerOpen, setTeamPickerOpen] = useState(false);
+    const [eligibleTeams, setEligibleTeams] = useState<{ id: string; name: string }[]>([]);
 
-        const doRegister = async (teamId: string) => {
-            setTeamPickerOpen(false);
-            setRegistering(true);
-            try {
-                const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
-                const res = await fetch(`${API_URL}/api/tournaments/register`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                        team_id: teamId,
-                        tournament_id: id,
-                    }),
-                });
+    const handleRegister = async () => {
+        if (!user || !tournament) return;
+        setRegisterError(null);
 
-                const data = await res.json();
+        const { data: captainTeams, error: teamErr } = await supabase
+        .from("teams")
+        .select("id, name, tournament_id")
+        .eq("captain_id", user.id);
 
-                if (!res.ok) {
-                    setRegisterError(data.detail ?? "Помилка реєстрації");
-                    return;
-                }
-
-                await fetchTournament();
-            } catch (e: any) {
-                setRegisterError("Помилка з'єднання з сервером: " + e.message);
-            } finally {
-                setRegistering(false);
-            }
-        };
-
-        const handleUnregister = async () => {
-            if (!user || !tournament || !myTeamInTournament) return;
-            setRegisterError(null);
-            setUnregistering(true);
-            try {
-                const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
-                const res = await fetch(`${API_URL}/api/tournaments/unregister`, {
-                    method: "DELETE",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                        team_id: myTeamInTournament.id,
-                        tournament_id: id,
-                    }),
-                });
-                const data = await res.json();
-                if (!res.ok) {
-                    setRegisterError(data.detail ?? "Помилка скасування реєстрації");
-                    return;
-                }
-                await fetchTournament();
-            } catch (e: any) {
-                setRegisterError("Помилка з'єднання з сервером: " + e.message);
-            } finally {
-                setUnregistering(false);
-            }
-        };
-
-        if (authLoading || loading || !tournament) {
-            return (
-                <div className="min-h-screen bg-(--bg) flex items-center justify-center">
-                <Loader className="animate-spin text-blue-600" />
-                </div>
-            );
+        if (teamErr || !captainTeams || captainTeams.length === 0) {
+            setRegisterError("У вас немає команди або ви не є капітаном жодної команди");
+            return;
         }
 
-        const teamCount = tournament.teams?.length ?? 0;
-        const isFull = !!tournament.max_teams && teamCount >= tournament.max_teams;
-        const isAdmin = user?.role === "admin" || user?.role === "superadmin";
-        // FIX: статус з БД — не вираховуємо локально
-        const isRegistrationOpen = tournament.status === "registration";
-        const isFinished = tournament.status === "finished";
-        // БАГ 7 fix: перевіряємо і captain_id, і members_ids — учасники теж бачать статус
-        const myTeamInTournament = tournament.teams?.find(
-            t => t.captain_id === user?.id || (t.members_ids as string[] | undefined)?.includes(user?.id ?? "")
-        );
+        const eligible = captainTeams.filter(t => !t.tournament_id);
+        if (eligible.length === 0) {
+            setRegisterError("Всі ваші команди вже зареєстровані в турнірах");
+            return;
+        }
 
+        if (eligible.length === 1) {
+            await doRegister(eligible[0].id);
+        } else {
+            setEligibleTeams(eligible);
+            setTeamPickerOpen(true);
+        }
+    };
+
+    const doRegister = async (teamId: string) => {
+        setTeamPickerOpen(false);
+        setRegistering(true);
+        try {
+            const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+            const res = await fetch(`${API_URL}/api/tournaments/register`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    team_id: teamId,
+                    tournament_id: id,
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                setRegisterError(data.detail ?? "Помилка реєстрації");
+                return;
+            }
+
+            await fetchTournament();
+        } catch (e: any) {
+            setRegisterError("Помилка з'єднання з сервером: " + e.message);
+        } finally {
+            setRegistering(false);
+        }
+    };
+
+    const handleUnregister = async () => {
+        if (!user || !tournament || !myTeamInTournament) return;
+        setRegisterError(null);
+        setUnregistering(true);
+        try {
+            const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+            const res = await fetch(`${API_URL}/api/tournaments/unregister`, {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    team_id: myTeamInTournament.id,
+                    tournament_id: id,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setRegisterError(data.detail ?? "Помилка скасування реєстрації");
+                return;
+            }
+            await fetchTournament();
+        } catch (e: any) {
+            setRegisterError("Помилка з'єднання з сервером: " + e.message);
+        } finally {
+            setUnregistering(false);
+        }
+    };
+
+    if (authLoading || loading || !tournament) {
         return (
-            <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1)">
-            <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
-            <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] blur-sm ${dark ? "invert" : ""}`} />
+            <div className="min-h-screen bg-(--bg) flex items-center justify-center">
+            <Loader className="animate-spin text-blue-600" />
             </div>
+        );
+    }
 
-            {isMobileSidebarOpen && (
-                <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
-            )}
-            <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
-            <Sidebar />
-            </div>
+    const teamCount = tournament.teams?.length ?? 0;
+    const isFull = !!tournament.max_teams && teamCount >= tournament.max_teams;
+    const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+    const isRegistrationOpen = tournament.status === "registration";
+    const isFinished = tournament.status === "finished";
+    const myTeamInTournament = tournament.teams?.find(
+        t => t.captain_id === user?.id || (t.members_ids as string[] | undefined)?.includes(user?.id ?? "")
+    );
 
-            <main className="flex-1 flex flex-col overflow-y-auto">
-            <MobileHeader
-            onOpenSidebar={() => setIsMobileSidebarOpen(true)}
-            title={tournament.name}
-            icon={<Trophy size={18} className="text-blue-600" />}
+    const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
+        { key: "info", label: "Огляд", icon: <LayoutList size={14} /> },
+        { key: "leaderboard", label: "Лідербоард", icon: <Trophy size={14} /> },
+    ];
+
+    const handleTabClick = (tab: Tab) => {
+        setActiveTab(tab);
+        if (tab === "leaderboard") setLeaderboardTouched(true);
+    };
+
+    return (
+        <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1)">
+        <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
+        <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] blur-sm ${dark ? "invert" : ""}`} />
+        </div>
+
+        {isMobileSidebarOpen && (
+            <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+        )}
+        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+        <Sidebar />
+        </div>
+
+        <main className="flex-1 flex flex-col overflow-y-auto">
+        <MobileHeader
+        onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+        title={tournament.name}
+        icon={<Trophy size={18} className="text-blue-600" />}
+        />
+
+        <div className="p-6 max-w-3xl w-full mx-auto">
+        <button
+        onClick={() => router.push("/tournaments")}
+        className="mb-5 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors"
+        >
+        <ArrowLeft size={16} /> Назад до турнірів
+        </button>
+
+        {/* Banner */}
+        {tournament.banner_url && (
+            <div className="mb-5 rounded-2xl overflow-hidden border border-(--brd)">
+            <img
+            src={tournament.banner_url}
+            alt={tournament.name}
+            className="w-full max-h-72 object-cover"
             />
-
-            <div className="p-6 max-w-3xl w-full mx-auto">
-            <button
-            onClick={() => router.push("/tournaments")}
-            className="mb-5 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors"
-            >
-            <ArrowLeft size={16} /> Назад до турнірів
-            </button>
-            {/* Banner */}
-            {tournament.banner_url && (
-                <div className="mb-5 rounded-2xl overflow-hidden border border-(--brd)">
-                <img
-                src={tournament.banner_url}
-                alt={tournament.name}
-                className="w-full max-h-72 object-cover"
-                />
-                </div>
-            )}
-            <div className="flex items-start justify-between gap-3 mb-4">
-            <h1 className="text-2xl font-black text-(--t1)">{tournament.name}</h1>
-            {isAdmin && (
-                <button
-                onClick={() => router.push(`/tournaments/${id}/edit`)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-(--brd) text-(--t2) hover:text-blue-600 hover:border-blue-600/40 text-xs font-bold transition-all"
-                >
-                <Edit size={14} /> Редагувати
-                </button>
-            )}
             </div>
+        )}
 
+        <div className="flex items-start justify-between gap-3 mb-4">
+        <h1 className="text-2xl font-black text-(--t1)">{tournament.name}</h1>
+        {isAdmin && (
+            <button
+            onClick={() => router.push(`/tournaments/${id}/edit`)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-(--brd) text-(--t2) hover:text-blue-600 hover:border-blue-600/40 text-xs font-bold transition-all"
+            >
+            <Edit size={14} /> Редагувати
+            </button>
+        )}
+        </div>
+
+        {/* ── Таби ── */}
+        <div className="flex gap-1 mb-6 p-1 bg-(--card) border border-(--brd) rounded-2xl">
+            {tabs.map((tab) => (
+                <button
+                    key={tab.key}
+                    onClick={() => handleTabClick(tab.key)}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black transition-all ${
+                        activeTab === tab.key
+                            ? "bg-blue-600 text-white shadow"
+                            : "text-(--t2) hover:text-(--t1) hover:bg-(--bg)"
+                    }`}
+                >
+                    {tab.icon}
+                    {tab.label}
+                </button>
+            ))}
+        </div>
+
+        {/* ── Вкладка: Огляд ── */}
+        {activeTab === "info" && (
+            <>
             {tournament.rules && (
                 <div className="mb-5 bg-(--card) border border-(--brd) rounded-2xl p-4">
                 <MarkdownRenderer content={tournament.rules} />
@@ -319,7 +350,7 @@ export default function TournamentPage() {
                 </div>
             )}
 
-            {/* Team picker modal — FIX (високий): вибір команди при реєстрації */}
+            {/* Team picker modal */}
             {teamPickerOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                 <div className="bg-(--card) border border-(--brd) rounded-3xl shadow-2xl p-6 w-full max-w-sm">
@@ -393,7 +424,7 @@ export default function TournamentPage() {
                 </div>
             )}
 
-            {/* ── Rounds section ── */}
+            {/* Rounds section */}
             {rounds.length > 0 && (
                 <div className="mt-6">
                 <h2 className="font-black text-lg mb-3 text-(--t1) flex items-center gap-2">
@@ -444,7 +475,6 @@ export default function TournamentPage() {
                             : 'border-(--brd) hover:border-blue-600/40'
                         }`}
                         >
-                        {/* Round number badge */}
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0 transition-all ${
                             isLocked
                             ? "bg-(--bg) border border-(--brd) text-(--t2)"
@@ -452,8 +482,6 @@ export default function TournamentPage() {
                         }`}>
                         {isLocked ? <Lock size={14} /> : round.number}
                         </div>
-
-                        {/* Name + dates */}
                         <div className="flex-1 min-w-0">
                         <p className="font-black text-sm text-(--t1) group-hover:text-blue-600 transition-colors truncate">
                         {round.name || `Раунд ${round.number}`}
@@ -467,13 +495,10 @@ export default function TournamentPage() {
                             </p>
                         )}
                         </div>
-
-                        {/* Status badge */}
                         <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-wider flex-shrink-0 ${statusBadgeBg} ${statusBadgeBorder} ${statusColor}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${dotColor} ${isActive ? 'animate-pulse' : ''}`} />
                         {statusLabel}
                         </div>
-
                         <ChevronRight size={16} className="text-(--t2) group-hover:text-blue-600 transition-colors flex-shrink-0" />
                         </div>
                     );
@@ -483,7 +508,7 @@ export default function TournamentPage() {
             )}
 
             {/* Teams list */}
-            <div>
+            <div className="mt-6">
             <h2 className="font-black text-lg mb-3 text-(--t1)">Команди-учасники</h2>
             {teamCount === 0 ? (
                 <div className="text-center py-10 text-(--t2)">
@@ -515,9 +540,16 @@ export default function TournamentPage() {
                 </div>
             )}
             </div>
+            </>
+        )}
 
-            </div>
-            </main>
-            </div>
-        );
+        {/* ── Вкладка: Лідербоард ── */}
+        {activeTab === "leaderboard" && leaderboardTouched && (
+            <LeaderboardSection tournamentId={id} />
+        )}
+
+        </div>
+        </main>
+        </div>
+    );
 }
