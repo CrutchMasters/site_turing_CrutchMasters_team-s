@@ -244,16 +244,6 @@ export default function TeamsPage() {
 
         return (
             <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
-            <style jsx global>{`
-                @keyframes fadeUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
-                @keyframes cardDrop { from{opacity:0;transform:translateY(-20px) scale(.97)} to{opacity:1;transform:none} }
-                @keyframes scaleIn  { from{opacity:0;transform:scale(.92)} to{opacity:1;transform:scale(1)} }
-                .fuIn { animation: fadeUp   340ms cubic-bezier(.22,1,.36,1) both }
-                .cdIn { animation: cardDrop 400ms cubic-bezier(.22,1,.36,1) both }
-                .spr  { transition: transform 170ms cubic-bezier(.22,1,.36,1), box-shadow 170ms ease, background 150ms ease }
-                .spr:hover { transform: translateY(-2px) scale(1.015); box-shadow: 0 8px 24px rgba(37,99,235,0.12); }
-                .modal-in { animation: scaleIn 280ms cubic-bezier(.22,1,.36,1) both }
-                `}</style>
 
                 {/* Delete modal */}
                 {deleteTarget && (

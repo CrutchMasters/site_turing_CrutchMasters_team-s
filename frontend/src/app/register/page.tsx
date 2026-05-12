@@ -199,14 +199,6 @@ export default function RegisterPage() {
   const isDark = dark;
   return (
     <div className="min-h-screen bg-(--bg) flex flex-col items-center justify-center font-sans text-(--t1) relative overflow-hidden transition-colors duration-300 px-4">
-    <style jsx global>{`
-      .reveal-drop { transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
-      .otp-animate { animation: slideUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-      @keyframes slideUp {
-        from { opacity: 0; transform: translateY(20px) scale(0.95); }
-        to   { opacity: 1; transform: translateY(0) scale(1); }
-      }
-      `}</style>
 
       {/* Watermark */}
       <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${dark ? "opacity-10" : "opacity-5"}`}>

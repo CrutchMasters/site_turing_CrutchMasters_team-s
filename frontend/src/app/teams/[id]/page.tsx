@@ -429,21 +429,6 @@ export default function TeamProfilePage() {
 
         return (
             <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
-            <style jsx global>{`
-                @keyframes fadeUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
-                @keyframes cardDrop { from{opacity:0;transform:translateY(-16px) scale(.97)} to{opacity:1;transform:none} }
-                @keyframes shimmer  { from{background-position:-200% 0} to{background-position:200% 0} }
-                .fuIn { animation: fadeUp   340ms cubic-bezier(.22,1,.36,1) both }
-                .cdIn { animation: cardDrop 420ms cubic-bezier(.22,1,.36,1) both }
-                .spr  { transition: transform 170ms cubic-bezier(.22,1,.36,1), box-shadow 170ms ease }
-                .spr:hover { transform: translateY(-2px) scale(1.015); box-shadow: 0 8px 24px rgba(37,99,235,0.12); }
-                .skeleton {
-                    background: linear-gradient(90deg, var(--brd) 25%, var(--bg) 50%, var(--brd) 75%);
-                    background-size: 200% 100%;
-                    animation: shimmer 1.5s infinite;
-                    border-radius: 0.75rem;
-                }
-                `}</style>
 
                 {/* Team avatar modal */}
                 {avatarModalOpen && team && (

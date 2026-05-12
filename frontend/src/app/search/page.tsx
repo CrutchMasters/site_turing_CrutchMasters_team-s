@@ -81,10 +81,6 @@ export default function SearchPage() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
-    <style jsx global>{`
-      @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
-      .fuIn { animation: fadeUp 340ms cubic-bezier(.22,1,.36,1) both }
-      `}</style>
 
       <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
       <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />

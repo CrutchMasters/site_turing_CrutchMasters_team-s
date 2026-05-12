@@ -1073,14 +1073,6 @@ export default function DashboardPage() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
-    <style jsx global>{`
-      @keyframes fadeUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
-      @keyframes cardDrop { from{opacity:0;transform:translateY(-26px) scale(.97)} to{opacity:1;transform:none} }
-      .fuIn { animation: fadeUp 340ms cubic-bezier(.22,1,.36,1) both }
-      .cdIn { animation: cardDrop 500ms cubic-bezier(.22,1,.36,1) both }
-      .spr  { transition: transform 170ms cubic-bezier(.22,1,.36,1),box-shadow 170ms ease,background 150ms ease,color 150ms ease }
-      .spr:hover { transform: translateY(-2px) scale(1.025) }
-      `}</style>
 
       {/* Background logo */}
       <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>

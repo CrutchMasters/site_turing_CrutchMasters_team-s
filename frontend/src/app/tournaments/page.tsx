@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useT } from "@/context/LanguageContext";
 import { useTheme } from "@/hooks/useTheme";
@@ -10,7 +10,7 @@ import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import {
     Trophy, Users, Calendar, Zap, Loader, Search, Plus,
-    ChevronRight, ChevronDown, ChevronUp, ExternalLink,
+    ChevronRight, ChevronDown, ChevronUp, ExternalLink, CheckCircle, X,
 } from "lucide-react";
 
 type TournamentStatus = "upcoming" | "registration" | "ongoing" | "finished";
@@ -254,6 +254,7 @@ function ActiveTournamentsList({
 export default function TournamentsPage() {
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { user, isLoading: authLoading } = useAuth();
     const { dark } = useTheme();
     const { t, locale } = useT();
@@ -262,6 +263,19 @@ export default function TournamentsPage() {
     const [loading, setLoading]         = useState(true);
     const [error, setError]             = useState<string | null>(null);
     const [searchQ, setSearchQ]         = useState("");
+
+    // ── Success toast після створення турніру ─────────────────────────────────
+    const [createdToast, setCreatedToast] = useState(false);
+    const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => {
+        if (searchParams.get("created") === "1") {
+            setCreatedToast(true);
+            // прибираємо ?created=1 з URL без перезавантаження
+            router.replace("/tournaments", { scroll: false });
+            toastTimer.current = setTimeout(() => setCreatedToast(false), 5000);
+        }
+        return () => { if (toastTimer.current) clearTimeout(toastTimer.current); };
+    }, []);
 
     useEffect(() => {
         if (!authLoading) fetchTournaments();
@@ -326,12 +340,21 @@ export default function TournamentsPage() {
 
     return (
         <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
-            <style jsx global>{`
-                @keyframes fadeUp  { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
-                @keyframes scaleIn { from{opacity:0;transform:scale(.96)}       to{opacity:1;transform:scale(1)} }
-                .fuIn { animation: fadeUp  340ms cubic-bezier(.22,1,.36,1) both }
-                .scIn { animation: scaleIn 300ms cubic-bezier(.22,1,.36,1) both }
-            `}</style>
+
+            {/* ── Toast: турнір успішно створено ── */}
+            {createdToast && (
+                <div className="fixed top-5 right-5 z-[9999] flex items-center gap-3 px-5 py-3.5
+                    rounded-2xl bg-green-500 text-white shadow-2xl shadow-green-500/30
+                    border border-green-400/40 font-bold text-sm"
+                    style={{ animation: 'slideDown 380ms cubic-bezier(.22,1,.36,1) both' }}>
+                    <CheckCircle size={18} className="flex-shrink-0" />
+                    <span>Турнір успішно створено!</span>
+                    <button onClick={() => setCreatedToast(false)}
+                        className="ml-2 opacity-70 hover:opacity-100 transition-opacity">
+                        <X size={15} />
+                    </button>
+                </div>
+            )}
 
             {/* Watermark */}
             <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
