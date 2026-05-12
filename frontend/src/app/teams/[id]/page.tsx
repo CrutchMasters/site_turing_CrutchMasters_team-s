@@ -351,68 +351,39 @@ export default function TeamProfilePage() {
                     if (tourData) setTournament(tourData);
                 }
 
-            const fetchTeam = async () => {
-                setIsLoading(true);
-                try {
-                    const { data: teamData, error: teamErr } = await supabase
-                    .from("teams")
-                    .select("id, name, city_school_org, captain_id, members_ids, telegram_url, discord_url, created_at, tournament_id, avatar_url")
-                    .eq("id", teamId)
-                    .single();
 
-                    if (teamErr || !teamData) throw new Error("Team not found");
-                    setTeam(teamData);
+                const allIds: string[] = [];
+                if (teamData.captain_id) allIds.push(teamData.captain_id);
+                if (teamData.members_ids?.length) allIds.push(...teamData.members_ids);
+                const uniqueIds = [...new Set(allIds)];
 
-                    if (teamData.tournament_id) {
-                        const { data: tourData } = await supabase
-                        .from("tournaments")
-                        .select("id, name, status, start_at, registration_from, registration_to")
-                        .eq("id", teamData.tournament_id)
-                        .single();
-                        if (tourData) setTournament(tourData);
+                if (uniqueIds.length > 0) {
+                    const { data: accounts } = await supabase
+                    .from("account")
+                    .select("id, username, login, email, role, avatar_url, status")
+                    .in("id", uniqueIds);
+
+                    const accountMap: Record<string, TeamMember> = {};
+                    (accounts ?? []).forEach(a => { accountMap[a.id] = a; });
+
+                    if (teamData.captain_id && accountMap[teamData.captain_id]) {
+                        setCaptain(accountMap[teamData.captain_id]);
                     }
 
-                    const allIds: string[] = [];
-                    if (teamData.captain_id) allIds.push(teamData.captain_id);
-                    if (teamData.members_ids?.length) allIds.push(...teamData.members_ids);
-                    const uniqueIds = [...new Set(allIds)];
+                    const memberList = (teamData.members_ids ?? [])
+                    .map((id: string) => accountMap[id])
+                    .filter(Boolean);
+                    setMembers(memberList);
+                }
+            } catch (e: any) {
+                setError(e.message ?? "Failed to load team");
+            } finally {
+                setIsLoading(false);
+            }
+        };
 
-                    if (uniqueIds.length > 0) {
-                        const { data: accounts } = await supabase
-                        .from("account")
-                        .select("id, username, login, email, role, avatar_url, status")
-                        .in("id", uniqueIds);
         fetchTeam();
     }, [teamId]);
-
-                        const accountMap: Record<string, TeamMember> = {};
-                        (accounts ?? []).forEach(a => { accountMap[a.id] = a; });
-
-                        if (teamData.captain_id && accountMap[teamData.captain_id]) {
-                            setCaptain(accountMap[teamData.captain_id]);
-                        }
-    if (authLoading || isLoading) {
-        return (
-            <div className="min-h-screen bg-(--bg) flex items-center justify-center">
-            <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            </div>
-        );
-    }
-
-                        const memberList = (teamData.members_ids ?? [])
-                        .map((id: string) => accountMap[id])
-                        .filter(Boolean);
-                        setMembers(memberList);
-                    }
-                } catch (e: any) {
-                    setError(e.message ?? "Failed to load team");
-                } finally {
-                    setIsLoading(false);
-                }
-            };
-
-            fetchTeam();
-        }, [user, teamId]);
 
         const isMyTeam  = team?.captain_id === user?.id;
         const gradient  = gradients[teamId ? teamId.charCodeAt(0) % gradients.length : 0];
