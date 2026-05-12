@@ -114,51 +114,63 @@ export default function EventCalendar({ extraEvents = [], eventsFilter = "all", 
   const myEventsLbl  = locale === "ua" ? "Мої події"       : locale === "en" ? "My events"        : "Мои события";
 
   useEffect(() => {
-    if (!user) return;
     setLoading(true);
     (async () => {
       const evs: CalendarEvent[] = [];
       try {
-        const { data: captainTeams } = await supabase.from("teams").select("id,tournament_id").eq("captain_id", user.id).not("tournament_id","is",null);
-        const { data: memberTeams  } = await supabase.from("teams").select("id,tournament_id").contains("members_ids",[user.id]).not("tournament_id","is",null);
-        const teams = [...(captainTeams ?? []), ...(memberTeams ?? [])];
-        const tourIds = [...new Set(teams.map((t: any) => t.tournament_id).filter(Boolean))];
-        const myPersonalTourIds = new Set<string>(tourIds);
-
-        let adminTourIds: string[] = [];
-        if (user.role === "admin" || user.role === "superadmin") {
-          const { data: all } = await supabase.from("tournaments").select("id").limit(50);
-          adminTourIds = (all ?? []).map((t: any) => t.id);
-        }
-
-        const { data: juryRows } = await supabase.from("jury_assignments").select("round_id").eq("user_id", user.id);
-        const juryRoundIds = (juryRows ?? []).map((r: any) => r.round_id);
-        const allTourIds = [...new Set([...tourIds, ...adminTourIds])];
-
-        if (allTourIds.length) {
-          const { data: tours } = await supabase.from("tournaments").select("id,name,start_at,end_at,registration_from,registration_to").in("id", allTourIds);
+        if (!user) {
+          // Guest: load all public tournament & round events
+          const { data: tours } = await supabase
+            .from("tournaments")
+            .select("id,name,start_at,end_at,registration_from,registration_to")
+            .limit(50);
           for (const t of tours ?? []) {
-            const isMine = myPersonalTourIds.has(t.id);
+            if (t.start_at)          evs.push({ id: `ts-${t.id}`,  date: isoToDateStr(t.start_at),          label: t.name, type: "tournament_start",   link: `/tournaments/${t.id}`, isMine: false });
+            if (t.end_at)            evs.push({ id: `te-${t.id}`,  date: isoToDateStr(t.end_at),            label: t.name, type: "tournament_end",     link: `/tournaments/${t.id}`, isMine: false });
+            if (t.registration_from) evs.push({ id: `rs-${t.id}`,  date: isoToDateStr(t.registration_from), label: t.name, type: "registration_start", link: `/tournaments/${t.id}`, isMine: false });
+            if (t.registration_to)   evs.push({ id: `re-${t.id}`,  date: isoToDateStr(t.registration_to),   label: t.name, type: "registration_end",   link: `/tournaments/${t.id}`, isMine: false });
+          }
+          const tourIds = (tours ?? []).map((t: any) => t.id);
+          if (tourIds.length) {
+            const { data: rounds } = await supabase.from("rounds").select("id,name,start_at,end_at,tournament_id").in("tournament_id", tourIds);
+            for (const r of rounds ?? []) {
+              if (r.start_at) evs.push({ id: `rds-${r.id}`, date: isoToDateStr(r.start_at), label: r.name, type: "round_start", link: `/rounds/${r.id}`, isMine: false });
+              if (r.end_at)   evs.push({ id: `rde-${r.id}`, date: isoToDateStr(r.end_at),   label: r.name, type: "round_end",   link: `/rounds/${r.id}`, isMine: false });
+            }
+          }
+        } else {
+          // Authenticated user
+          const isAdminRole = user.role === "admin" || user.role === "superadmin";
+
+          const { data: captainTeams } = await supabase.from("teams").select("id,tournament_id").eq("captain_id", user.id).not("tournament_id","is",null);
+          const { data: memberTeams  } = await supabase.from("teams").select("id,tournament_id").contains("members_ids",[user.id]).not("tournament_id","is",null);
+          const teams = [...(captainTeams ?? []), ...(memberTeams ?? [])];
+          const personalTourIds = new Set<string>(teams.map((t: any) => t.tournament_id).filter(Boolean));
+
+          const { data: juryRows } = await supabase.from("jury_assignments").select("round_id").eq("jury_id", user.id);
+          const juryRoundIds = new Set<string>((juryRows ?? []).map((r: any) => r.round_id));
+
+          // Always load all tournaments (needed for "all" tab; admins also own all)
+          const { data: tours } = await supabase
+            .from("tournaments")
+            .select("id,name,start_at,end_at,registration_from,registration_to")
+            .limit(50);
+
+          for (const t of tours ?? []) {
+            const isMine = isAdminRole || personalTourIds.has(t.id);
             if (t.start_at)          evs.push({ id: `ts-${t.id}`,  date: isoToDateStr(t.start_at),          label: t.name, type: "tournament_start",   link: `/tournaments/${t.id}`, isMine });
             if (t.end_at)            evs.push({ id: `te-${t.id}`,  date: isoToDateStr(t.end_at),            label: t.name, type: "tournament_end",     link: `/tournaments/${t.id}`, isMine });
-            // registration events always shown as "mine" — user can always register
-            if (t.registration_from) evs.push({ id: `rs-${t.id}`,  date: isoToDateStr(t.registration_from), label: t.name, type: "registration_start", link: `/tournaments/${t.id}`, isMine: true });
-            if (t.registration_to)   evs.push({ id: `re-${t.id}`,  date: isoToDateStr(t.registration_to),   label: t.name, type: "registration_end",   link: `/tournaments/${t.id}`, isMine: true });
+            if (t.registration_from) evs.push({ id: `rs-${t.id}`,  date: isoToDateStr(t.registration_from), label: t.name, type: "registration_start", link: `/tournaments/${t.id}`, isMine });
+            if (t.registration_to)   evs.push({ id: `re-${t.id}`,  date: isoToDateStr(t.registration_to),   label: t.name, type: "registration_end",   link: `/tournaments/${t.id}`, isMine });
           }
-          const { data: rounds } = await supabase.from("rounds").select("id,name,start_at,end_at,tournament_id").in("tournament_id", allTourIds);
-          for (const r of rounds ?? []) {
-            const isMine = myPersonalTourIds.has(r.tournament_id);
-            if (r.start_at) evs.push({ id: `rds-${r.id}`, date: isoToDateStr(r.start_at), label: r.name, type: "round_start", link: `/rounds/${r.id}`, isMine });
-            if (r.end_at)   evs.push({ id: `rde-${r.id}`, date: isoToDateStr(r.end_at),   label: r.name, type: "round_end",   link: `/rounds/${r.id}`, isMine });
-          }
-        }
 
-        if (juryRoundIds.length) {
-          const { data: jr } = await supabase.from("rounds").select("id,name,start_at,end_at").in("id", juryRoundIds);
-          for (const r of jr ?? []) {
-            if (!evs.find(e => e.id === `rds-${r.id}`)) {
-              if (r.start_at) evs.push({ id: `jrs-${r.id}`, date: isoToDateStr(r.start_at), label: r.name, type: "round_start", link: `/rounds/${r.id}`, isMine: true });
-              if (r.end_at)   evs.push({ id: `jre-${r.id}`, date: isoToDateStr(r.end_at),   label: r.name, type: "round_end",   link: `/rounds/${r.id}`, isMine: true });
+          const allTourIds = (tours ?? []).map((t: any) => t.id);
+          if (allTourIds.length) {
+            const { data: rounds } = await supabase.from("rounds").select("id,name,start_at,end_at,tournament_id").in("tournament_id", allTourIds);
+            for (const r of rounds ?? []) {
+              const isMine = isAdminRole || personalTourIds.has(r.tournament_id) || juryRoundIds.has(r.id);
+              if (r.start_at) evs.push({ id: `rds-${r.id}`, date: isoToDateStr(r.start_at), label: r.name, type: "round_start", link: `/rounds/${r.id}`, isMine });
+              if (r.end_at)   evs.push({ id: `rde-${r.id}`, date: isoToDateStr(r.end_at),   label: r.name, type: "round_end",   link: `/rounds/${r.id}`, isMine });
             }
           }
         }
@@ -285,6 +297,20 @@ export default function EventCalendar({ extraEvents = [], eventsFilter = "all", 
     {loading ? (
       <div className="flex items-center justify-center py-3">
       <div className="w-4 h-4 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+      </div>
+    ) : eventsFilter === "mine" && !user ? (
+      <div className="py-4 text-center flex flex-col items-center gap-3">
+      <p className="text-[10px] font-bold text-(--t2)">
+        {locale === "ua" ? "Увійдіть, щоб бачити свої події" : locale === "en" ? "Sign in to see your events" : "Войдите, чтобы видеть свои события"}
+      </p>
+      <div className="flex items-center gap-2">
+        <a href="/login" className="text-[9px] font-black px-3 py-1.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+          {locale === "ua" ? "Увійти" : locale === "en" ? "Sign in" : "Войти"}
+        </a>
+        <a href="/register" className="text-[9px] font-black px-3 py-1.5 rounded-xl border border-(--brd) text-(--t2) hover:border-blue-600/40 hover:text-(--t1) transition-colors">
+          {locale === "ua" ? "Реєстрація" : locale === "en" ? "Register" : "Регистрация"}
+        </a>
+      </div>
       </div>
     ) : upcoming.length > 0 ? (
       <div>

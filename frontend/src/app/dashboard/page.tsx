@@ -777,9 +777,7 @@ export default function DashboardPage() {
     finished:     { label: t.mainPage.statusFinished,     color: STATUS_COLORS.finished },
   };
 
-  useEffect(() => {
-    if (!isLoading && !user) router.push("/login");
-  }, [isLoading, user, router]);
+  // Guests can view dashboard — no redirect needed
 
     // ── fetch tournaments ──────────────────────────────────────────────────────
     const fetchTournaments = useCallback(async () => {
@@ -974,9 +972,8 @@ export default function DashboardPage() {
     };
 
       // ── effects ────────────────────────────────────────────────────────────────
+      // Fetch public data immediately — no need to wait for auth
       useEffect(() => {
-        if (isLoading || !user) return;
-
         fetch(`${API_URL}/api/test`)
         .then(r => r.json())
         .then(d => setBackendMessage(d.message))
@@ -984,8 +981,19 @@ export default function DashboardPage() {
 
         fetchTournaments();
         fetchAnnouncements();
-        fetchCurrentInfo();
-        fetchMyMemberships();
+      }, [fetchTournaments, fetchAnnouncements]);
+
+      useEffect(() => {
+        if (isLoading) return;
+
+        // Only fetch user-specific data when logged in
+        if (user) {
+          fetchCurrentInfo();
+          fetchMyMemberships();
+        } else {
+          // Guests: mark loading as done so UI doesn't spin forever
+          setCurrentInfoLoading(false);
+        }
 
         const obs = new IntersectionObserver(
           entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add("fuIn"); }),
@@ -993,7 +1001,7 @@ export default function DashboardPage() {
         );
         revealRefs.current.forEach(r => { if (r) obs.observe(r); });
         return () => obs.disconnect();
-      }, [isLoading, user, fetchTournaments, fetchAnnouncements, fetchCurrentInfo, fetchMyMemberships]);
+      }, [isLoading, user, fetchCurrentInfo, fetchMyMemberships]);
 
       // Build calendar events from announcements that have a calendar_date
       // NOTE: must be declared before any early returns to satisfy Rules of Hooks
@@ -1045,9 +1053,11 @@ export default function DashboardPage() {
         </div>
       );
 
-      if (!user) return null;
+      if (!user) {
+        // Guest mode — show dashboard without user-specific sections
+      }
 
-      const isAdmin = user.role === "admin" || user.role === "superadmin";
+      const isAdmin = user ? (user.role === "admin" || user.role === "superadmin") : false;
 
   const filterLabels: { key: typeof activeFilter; label: string }[] = [
     { key: "all",          label: t.mainPage.filterAll },
@@ -1133,7 +1143,7 @@ export default function DashboardPage() {
         </div>
         <div>
         <span className="inline-block text-[9px] font-black uppercase tracking-widest bg-blue-600/10 text-blue-500 border border-blue-500/30 px-2.5 py-1 rounded-lg mb-2">
-        {user.role === "superadmin" ? "Superadmin" : "Admin"} panel
+        {user?.role === "superadmin" ? "Superadmin" : "Admin"} panel
         </span>
         <p className="text-xs font-bold text-(--t2) max-w-sm">
         {t.admin.manageTournamentsDesc}
@@ -1189,11 +1199,29 @@ export default function DashboardPage() {
         <div className="py-10 text-center">
         <Megaphone className="w-10 h-10 text-(--t2) opacity-20 mx-auto mb-3" />
         <p className="text-sm font-bold text-(--t2)">
-        {announcementsFilter === "mine"
+        {announcementsFilter === "mine" && !user
+          ? (locale === "ua" ? "Щоб бачити свої події, увійдіть або зареєструйтеся" : locale === "en" ? "Sign in or register to see your events" : "Войдите или зарегистрируйтесь, чтобы видеть свои события")
+          : announcementsFilter === "mine"
           ? (locale === "ua" ? "Немає подій для вас" : locale === "en" ? "No events for you" : "Нет событий для вас")
           : t.mainPage.announcementsEmpty
         }
         </p>
+        {announcementsFilter === "mine" && !user && (
+          <div className="flex items-center justify-center gap-3 mt-4">
+          <button
+          onClick={() => router.push("/login")}
+          className="text-xs font-black px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+          >
+          {locale === "ua" ? "Увійти" : locale === "en" ? "Sign in" : "Войти"}
+          </button>
+          <button
+          onClick={() => router.push("/register")}
+          className="text-xs font-black px-4 py-2 rounded-xl border border-(--brd) text-(--t2) hover:border-blue-600/40 hover:text-(--t1) transition-colors"
+          >
+          {locale === "ua" ? "Зареєструватися" : locale === "en" ? "Register" : "Зарегистрироваться"}
+          </button>
+          </div>
+        )}
         {isAdmin && announcementsFilter === "all" && (
           <button
           onClick={() => { setEditAnnouncement(undefined); setModalOpen(true); }}

@@ -12,7 +12,7 @@ import MobileHeader from "@/components/MobileHeader";
 import {
     Users, Search, Plus, ChevronRight, Loader,
     Crown, Star, Send, MessageSquare, Calendar, Pencil, Trash2,
-    AlertCircle, LogOut,
+    AlertCircle, LogOut, Lock,
 } from "lucide-react";
 
 interface Team {
@@ -72,9 +72,9 @@ export default function TeamsPage() {
     // --- User role state ---
     const [userRole, setUserRole] = useState<string | null>(null);
 
-    // Auth guard
+    // Auth guard - no redirect, guests can view
     useEffect(() => {
-        if (!isLoading && !user) router.push("/login");
+        // Only fetch all teams once auth loading is done
     }, [isLoading, user, router]);
 
         // Fetch user role
@@ -90,7 +90,7 @@ export default function TeamsPage() {
 
         // Fetch all teams
         useEffect(() => {
-            if (!user) return;
+            if (isLoading) return;
             const fetchTeams = async () => {
                 setLoadingAll(true);
                 try {
@@ -126,7 +126,7 @@ export default function TeamsPage() {
                 }
             };
             fetchTeams();
-        }, [user]);
+        }, [isLoading]);
 
         // Fetch my teams (captain)
         const fetchMyTeams = async () => {
@@ -234,7 +234,7 @@ export default function TeamsPage() {
         const isRestricted = userRole ? RESTRICTED_ROLES.includes(userRole) : false;
         const isSuperAdmin = userRole === "superadmin";
 
-        if (isLoading || !user) {
+        if (isLoading) {
             return (
                 <div className="min-h-screen bg-(--bg) flex items-center justify-center">
                 <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
@@ -421,7 +421,7 @@ export default function TeamsPage() {
                         key={team.id}
                         team={team}
                         idx={idx}
-                        currentUserId={user.id}
+                        currentUserId={user?.id ?? ""}
                         locale={locale}
                         captainLabel={t.teams.captain}
                         onOpen={() => router.push(`/teams/${team.id}`)}
@@ -498,7 +498,8 @@ export default function TeamsPage() {
                                 </>
                             )}
 
-                            {/* Create button — always at the bottom */}
+                            {/* Create button — only for authenticated users */}
+                            {user ? (
                             <button
                             onClick={() => router.push("/register_team")}
                             className="mt-1 flex items-center justify-center gap-2 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl px-5 py-4 hover:bg-blue-700 shadow-lg shadow-blue-600/25 active:scale-95 transition-all w-full group"
@@ -506,6 +507,17 @@ export default function TeamsPage() {
                             <Plus size={15} className="group-hover:rotate-90 transition-transform duration-300" />
                             {t.teams.create}
                             </button>
+                            ) : (
+                            <div className="mt-1 flex flex-col items-center gap-2 px-5 py-4 rounded-2xl border border-(--brd) bg-(--card) text-center">
+                                <Lock size={16} className="text-(--t2)" />
+                                <p className="text-xs text-(--t2)">
+                                    Щоб створити команду —{" "}
+                                    <button onClick={() => router.push("/login")} className="text-blue-600 font-black hover:underline">увійдіть</button>
+                                    {" "}або{" "}
+                                    <button onClick={() => router.push("/register")} className="text-blue-600 font-black hover:underline">зареєструйтесь</button>
+                                </p>
+                            </div>
+                            )}
                             </div>
                             </div>
                 )}
@@ -543,7 +555,7 @@ function TeamAvatar({ team, idx, size = "md" }: { team: Team; idx: number; size?
 function SearchTeamCard({
     team, idx, currentUserId, locale, captainLabel, onOpen,
 }: {
-    team: Team; idx: number; currentUserId: string;
+    team: Team; idx: number; currentUserId: string | undefined;
     locale: string; captainLabel: string; onOpen: () => void;
 }) {
     const isMyTeam = team.captain_id === currentUserId;

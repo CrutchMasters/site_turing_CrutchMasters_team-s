@@ -73,11 +73,7 @@ export default function TournamentPage() {
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-    useEffect(() => {
-        if (!authLoading && !user) router.push("/login");
-    }, [authLoading, user, router]);
-
-        useEffect(() => { if (id && !authLoading && user) fetchTournament(); }, [id, authLoading, user]);
+        useEffect(() => { if (id && !authLoading) fetchTournament(); }, [id, authLoading]);
 
         const fetchTournament = async () => {
             setLoading(true);
@@ -357,8 +353,9 @@ export default function TournamentPage() {
                 </div>
             )}
 
-            {/* Register button */}
+            {/* Register button / login prompt */}
             {isRegistrationOpen && !myTeamInTournament && (
+                user ? (
                 <button
                 onClick={handleRegister}
                 disabled={registering || isFull}
@@ -366,6 +363,17 @@ export default function TournamentPage() {
                 >
                 {isFull ? "Турнір заповнений" : registering ? "Реєстрація..." : "Зареєструвати мою команду"}
                 </button>
+                ) : (
+                <div className="w-full mb-6 px-5 py-4 bg-(--card) border border-(--brd) rounded-2xl flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                    <Lock size={18} className="text-(--t2) flex-shrink-0 mt-0.5 sm:mt-0" />
+                    <p className="text-sm text-(--t2) flex-1">
+                        Щоб взяти участь у турнірі, необхідно{" "}
+                        <button onClick={() => router.push("/login")} className="text-blue-600 font-black hover:underline">увійти до акаунту</button>
+                        {" "}або{" "}
+                        <button onClick={() => router.push("/register")} className="text-blue-600 font-black hover:underline">зареєструватися</button>
+                    </p>
+                </div>
+                )
             )}
 
             {myTeamInTournament && (

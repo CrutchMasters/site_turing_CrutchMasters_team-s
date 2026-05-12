@@ -321,14 +321,35 @@ export default function TeamProfilePage() {
 
     const teamId = params.id as string;
 
-    // Auth guard
+    // Auth guard - guests can view but not join
     useEffect(() => {
-        if (!authLoading && !user) router.push("/login");
+        // no redirect for guests
     }, [authLoading, user, router]);
 
-        // Fetch team data
-        useEffect(() => {
-            if (!user || !teamId) return;
+    // Fetch team data
+    useEffect(() => {
+        if (!teamId) return;
+
+        const fetchTeam = async () => {
+            setIsLoading(true);
+            try {
+                const { data: teamData, error: teamErr } = await supabase
+                .from("teams")
+                .select("id, name, city_school_org, captain_id, members_ids, telegram_url, discord_url, created_at, tournament_id, avatar_url")
+                .eq("id", teamId)
+                .single();
+
+                if (teamErr || !teamData) throw new Error("Team not found");
+                setTeam(teamData);
+
+                if (teamData.tournament_id) {
+                    const { data: tourData } = await supabase
+                    .from("tournaments")
+                    .select("id, name, status, start_at, registration_from, registration_to")
+                    .eq("id", teamData.tournament_id)
+                    .single();
+                    if (tourData) setTournament(tourData);
+                }
 
             const fetchTeam = async () => {
                 setIsLoading(true);
@@ -361,6 +382,8 @@ export default function TeamProfilePage() {
                         .from("account")
                         .select("id, username, login, email, role, avatar_url, status")
                         .in("id", uniqueIds);
+        fetchTeam();
+    }, [teamId]);
 
                         const accountMap: Record<string, TeamMember> = {};
                         (accounts ?? []).forEach(a => { accountMap[a.id] = a; });
@@ -368,6 +391,13 @@ export default function TeamProfilePage() {
                         if (teamData.captain_id && accountMap[teamData.captain_id]) {
                             setCaptain(accountMap[teamData.captain_id]);
                         }
+    if (authLoading || isLoading) {
+        return (
+            <div className="min-h-screen bg-(--bg) flex items-center justify-center">
+            <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
 
                         const memberList = (teamData.members_ids ?? [])
                         .map((id: string) => accountMap[id])

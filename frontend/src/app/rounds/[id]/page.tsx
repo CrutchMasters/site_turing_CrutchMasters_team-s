@@ -276,19 +276,15 @@ export default function RoundPage() {
     }, [user, token, id]);
 
     useEffect(() => {
-        if (!authLoading && !user) router.push("/login");
-    }, [authLoading, user, router]);
+        if (!authLoading && id) fetchData();
+    }, [id, authLoading, fetchData]);
 
+        // Запускаем fetchUserData только когда tournament уже загружен
         useEffect(() => {
-            if (!authLoading && user && id) fetchData();
-        }, [id, authLoading, user, fetchData]);
-
-            // Запускаем fetchUserData только когда tournament уже загружен
-            useEffect(() => {
-                if (!authLoading && user && tournament?.id) {
-                    fetchUserData(tournament.id);
-                }
-            }, [authLoading, user, tournament?.id, fetchUserData]);
+            if (!authLoading && user && tournament?.id) {
+                fetchUserData(tournament.id);
+            }
+        }, [authLoading, user, tournament?.id, fetchUserData]);
 
             /* ── derived ── */
             const role         = user?.role ?? null;
@@ -558,10 +554,14 @@ export default function RoundPage() {
         return (
             <Card>
             <SectionLabel icon={<Flag size={13} />}>Здача роботи</SectionLabel>
-            <InfoBanner icon={<AlertCircle size={16} />}>
-            Для участі необхідно{" "}
+            <InfoBanner icon={<Lock size={16} />}>
+            Щоб здавати роботи, необхідно{" "}
             <button onClick={() => router.push("/login")} className="underline font-black">
-            увійти в акаунт
+            увійти до акаунту
+            </button>
+            {" "}або{" "}
+            <button onClick={() => router.push("/register")} className="underline font-black">
+            зареєструватися
             </button>.
             </InfoBanner>
             </Card>
