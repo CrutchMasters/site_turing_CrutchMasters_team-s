@@ -264,13 +264,8 @@ export default function TournamentsPage() {
     const [searchQ, setSearchQ]         = useState("");
 
     useEffect(() => {
-        if (!authLoading && !user) router.push("/login");
-    }, [authLoading, user, router]);
-
-    useEffect(() => {
-        if (!user) return;
-        fetchTournaments();
-    }, [user]);
+        if (!authLoading) fetchTournaments();
+    }, [authLoading]);
 
     const fetchTournaments = async () => {
         setLoading(true); setError(null);
@@ -323,7 +318,7 @@ export default function TournamentsPage() {
     const active   = tournaments.filter(tt => tt.status === "ongoing" || tt.status === "registration").length;
     const openReg  = tournaments.filter(tt => tt.status === "registration").length;
 
-    if (authLoading || !user) return (
+    if (authLoading) return (
         <div className="min-h-screen bg-(--bg) flex items-center justify-center">
             <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
         </div>

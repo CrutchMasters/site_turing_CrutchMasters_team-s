@@ -321,14 +321,14 @@ export default function TeamProfilePage() {
 
     const teamId = params.id as string;
 
-    // Auth guard
+    // Auth guard - guests can view but not join
     useEffect(() => {
-        if (!authLoading && !user) router.push("/login");
+        // no redirect for guests
     }, [authLoading, user, router]);
 
     // Fetch team data
     useEffect(() => {
-        if (!user || !teamId) return;
+        if (!teamId) return;
 
         const fetchTeam = async () => {
             setIsLoading(true);
@@ -382,14 +382,14 @@ export default function TeamProfilePage() {
         };
 
         fetchTeam();
-    }, [user, teamId]);
+    }, [teamId]);
 
     const isMyTeam  = team?.captain_id === user?.id;
     const gradient  = gradients[teamId ? teamId.charCodeAt(0) % gradients.length : 0];
     const initial   = team?.name?.charAt(0).toUpperCase() ?? "?";
     const allMembers = captain ? [captain, ...members.filter(m => m.id !== captain.id)] : members;
 
-    if (authLoading || (!user && !authLoading)) {
+    if (authLoading || isLoading) {
         return (
             <div className="min-h-screen bg-(--bg) flex items-center justify-center">
             <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />

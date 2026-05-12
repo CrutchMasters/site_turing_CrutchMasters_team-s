@@ -777,9 +777,7 @@ export default function DashboardPage() {
     finished:     { label: t.mainPage.statusFinished,     color: STATUS_COLORS.finished },
   };
 
-  useEffect(() => {
-    if (!isLoading && !user) router.push("/login");
-  }, [isLoading, user, router]);
+  // Guests can view dashboard — no redirect needed
 
     // ── fetch tournaments ──────────────────────────────────────────────────────
     const fetchTournaments = useCallback(async () => {
@@ -975,7 +973,7 @@ export default function DashboardPage() {
 
       // ── effects ────────────────────────────────────────────────────────────────
       useEffect(() => {
-        if (isLoading || !user) return;
+        if (isLoading) return;
 
         fetch(`${API_URL}/api/test`)
         .then(r => r.json())
@@ -984,8 +982,15 @@ export default function DashboardPage() {
 
         fetchTournaments();
         fetchAnnouncements();
-        fetchCurrentInfo();
-        fetchMyMemberships();
+
+        // Only fetch user-specific data when logged in
+        if (user) {
+          fetchCurrentInfo();
+          fetchMyMemberships();
+        } else {
+          // Guests: mark loading as done so UI doesn't spin forever
+          setCurrentInfoLoading(false);
+        }
 
         const obs = new IntersectionObserver(
           entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add("fuIn"); }),
@@ -1045,9 +1050,11 @@ export default function DashboardPage() {
         </div>
       );
 
-      if (!user) return null;
+      if (!user) {
+        // Guest mode — show dashboard without user-specific sections
+      }
 
-      const isAdmin = user.role === "admin" || user.role === "superadmin";
+      const isAdmin = user ? (user.role === "admin" || user.role === "superadmin") : false;
 
   const filterLabels: { key: typeof activeFilter; label: string }[] = [
     { key: "all",          label: t.mainPage.filterAll },
@@ -1133,7 +1140,7 @@ export default function DashboardPage() {
         </div>
         <div>
         <span className="inline-block text-[9px] font-black uppercase tracking-widest bg-blue-600/10 text-blue-500 border border-blue-500/30 px-2.5 py-1 rounded-lg mb-2">
-        {user.role === "superadmin" ? "Superadmin" : "Admin"} panel
+        {user?.role === "superadmin" ? "Superadmin" : "Admin"} panel
         </span>
         <p className="text-xs font-bold text-(--t2) max-w-sm">
         {t.admin.manageTournamentsDesc}

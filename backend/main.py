@@ -1070,13 +1070,11 @@ async def create_team(payload: CreateTeam, authorization: str = Header(...)):
 
 
 @app.get("/api/teams")
-async def get_teams(authorization: str = Header(...), limit: int = 50, offset: int = 0):
+async def get_teams(authorization: str | None = Header(None), limit: int = 50, offset: int = 0):
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not initialized")
 
-    token  = authorization.replace("Bearer ", "").strip()
-    get_caller(token)
-
+    # Public endpoint — guests can browse teams
     limit = min(limit, 200)
 
     result = supabase.table("teams").select("*").order("name").range(offset, offset + limit - 1).execute()
@@ -1105,12 +1103,11 @@ async def get_my_team(authorization: str = Header(...)):
 
 
 @app.get("/api/teams/{team_id}")
-async def get_team(team_id: str, authorization: str = Header(...)):
+async def get_team(team_id: str, authorization: str | None = Header(None)):
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not initialized")
 
-    token  = authorization.replace("Bearer ", "").strip()
-    get_caller(token)
+    # Public endpoint — guests can view team details
 
     team = fetch_one(supabase.table("teams").select("*").eq("id", team_id))
     if not team:
@@ -3258,12 +3255,11 @@ async def search_users(q: str, authorization: str = Header(...)):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/api/tournaments/{tournament_id}/leaderboard")
-async def get_tournament_leaderboard(tournament_id: str, authorization: str = Header(...)):
+async def get_tournament_leaderboard(tournament_id: str, authorization: str | None = Header(None)):
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not initialized")
 
-    token = authorization.replace("Bearer ", "").strip()
-    get_caller(token)
+    # Leaderboard is publicly viewable — no auth required
 
     tournament = fetch_one(
         supabase.table("tournaments")
