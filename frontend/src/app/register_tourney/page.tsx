@@ -642,7 +642,7 @@ export default function RegisterTourney() {
           <ImageIcon size={22} className="text-purple-500" />
           </div>
           <div className="text-center">
-          <p className="text-sm font-black text-(--t1)">{t.tourney?.bannerUploadTitle ?? 'Завантажити банер'}</p>
+          <p className="text-sm font-black text-(--t1)">{t.tourney?.bannerUpload ?? 'Завантажити банер'}</p>
           <p className="text-[11px] text-(--t2) mt-0.5">{t.tourney?.bannerHint ?? 'PNG, JPG, WEBP — рекомендований розмір 1200×400'}</p>
           </div>
           </button>
