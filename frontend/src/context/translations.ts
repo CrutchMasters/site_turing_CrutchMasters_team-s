@@ -110,6 +110,11 @@ const def = {
         deniedDesc: "This page is for administrators only",
         deniedBackDashboard: "← Back to dashboard",
         deniedBackHome: "Home",
+        bannerBlock: "Tournament banner",
+        bannerUpload: "Upload banner",
+        bannerChange: "Change banner",
+        bannerDelete: "Delete",
+        bannerHint: "Recommended: 1200×400px, JPEG / PNG / WEBP, max 10 MB",
     },
     roundPanel: {
       header: "Round settings",
@@ -543,6 +548,11 @@ const def = {
         deniedDesc: "Ця сторінка тільки для адміністраторів",
         deniedBackDashboard: "← Повернутись на дашборд",
         deniedBackHome: "На головну",
+        bannerBlock: "Банер турніру",
+        bannerUpload: "Завантажити банер",
+        bannerChange: "Змінити банер",
+        bannerDelete: "Видалити",
+        bannerHint: "Рекомендовано: 1200×400px, JPEG / PNG / WEBP, макс. 10 MB",
     },
     roundPanel: {
       header: "Параметри раунду",
