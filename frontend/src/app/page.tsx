@@ -312,7 +312,7 @@ export default function HomePage() {
       ref={(el) => { revealRefs.current[1] = el; }}
       className="reveal-fade opacity-0 flex flex-col items-center justify-center gap-6 sm:gap-10"
       >
-      <Link href={mounted && user ? "/dashboard" : "/register"} className="w-full max-w-[260px]">
+      <Link href="/dashboard" className="w-full max-w-[260px]">
       <button className="bg-blue-600 text-white px-6 py-4 sm:px-8 sm:py-6 rounded-2xl sm:rounded-[2rem] text-lg sm:text-2xl font-black shadow-[0_20px_40px_rgba(37,99,235,0.3)] hover:bg-blue-700 hover:scale-105 transition-all w-full uppercase">
       {mounted && user
         ? locale === "en" ? "Dashboard" : "Кабінет"

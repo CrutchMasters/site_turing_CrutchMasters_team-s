@@ -75,20 +75,18 @@ export default function LeaderboardPage() {
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
     useEffect(() => {
-        if (!authLoading && !user) router.push("/login");
-    }, [authLoading, user, router]);
-
-    useEffect(() => {
-        if (id && !authLoading && user) fetchLeaderboard();
-    }, [id, authLoading, user]);
+        if (id && !authLoading) fetchLeaderboard();
+    }, [id, authLoading]);
 
     async function fetchLeaderboard() {
         setLoading(true);
         setError(null);
         try {
-            const token = localStorage.getItem("access_token") || "";
+            const token = (typeof window !== "undefined" ? localStorage.getItem("access_token") : null) || "";
+            const headers: Record<string, string> = {};
+            if (token) headers["Authorization"] = `Bearer ${token}`;
             const res = await fetch(`${API_URL}/api/tournaments/${id}/leaderboard`, {
-                headers: { Authorization: `Bearer ${token}` },
+                headers,
             });
             if (!res.ok) throw new Error("Не вдалося завантажити таблицю лідерів");
             const data = await res.json();
