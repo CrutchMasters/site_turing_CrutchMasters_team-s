@@ -670,7 +670,7 @@ export default function TournamentEditPage() {
                     className="flex items-center gap-2 px-4 py-2 bg-white/90 text-gray-900 rounded-xl text-xs font-black uppercase tracking-wide shadow-lg hover:bg-white transition-all"
                     >
                     <Upload size={14} />
-                    {t.editTourney?.bannerChange ?? "Змінити"}
+                    {t.tourney?.bannerChange ?? "Змінити"}
                     </button>
                     </div>
                     <button
