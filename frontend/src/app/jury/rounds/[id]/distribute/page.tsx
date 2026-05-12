@@ -389,76 +389,76 @@ export default function DistributePage() {
                                                     {/* Top-left corner */}
                                                     <th className="sticky left-0 z-20 bg-(--card) border-b border-r border-(--brd) px-4 py-3 text-left min-w-[180px]">
                                                         <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-(--t2)">
-                                                            <Users size={11} />Журі \ Роботи
+                                                            <Users size={11} />Роботи \ Журі
                                                         </div>
                                                     </th>
-                                                    {submissions.map(sub => (
-                                                        <th key={sub.id} className="border-b border-r border-(--brd) px-3 py-3 text-center min-w-[90px]">
-                                                            <div className="flex flex-col items-center gap-0.5">
-                                                                <span className="text-[10px] font-black text-(--t1) leading-tight truncate max-w-[80px]" title={sub.team_name}>
-                                                                    {sub.team_name}
-                                                                </span>
-                                                                {sub.team_org && (
-                                                                    <span className="text-[8px] font-bold text-(--t2) truncate max-w-[80px]" title={sub.team_org}>
-                                                                        {sub.team_org}
-                                                                    </span>
-                                                                )}
-                                                                {/* Per-submission count badge */}
-                                                                <span className={`mt-1 px-1.5 py-0.5 rounded-full text-[8px] font-black ${
-                                                                    subAssignCounts[sub.id] === 0
-                                                                        ? "bg-red-500/15 text-red-500"
-                                                                        : "bg-blue-500/15 text-blue-600"
-                                                                }`}>
-                                                                    {subAssignCounts[sub.id]} журі
-                                                                </span>
-                                                            </div>
-                                                        </th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {jury.map((juryMember, jIdx) => {
-                                                    const assignedForJury = submissions.filter(s => assignments.has(`${juryMember.id}|${s.id}`)).length;
-                                                    return (
-                                                        <tr key={juryMember.id} className={jIdx % 2 === 0 ? "" : "bg-(--bg)/40"}>
-                                                            {/* Jury name cell - sticky */}
-                                                            <td className="sticky left-0 z-10 bg-(--card) border-r border-b border-(--brd) px-4 py-3">
-                                                                <div className="flex items-center gap-2.5">
+                                                    {jury.map(juryMember => {
+                                                        const assignedForJury = submissions.filter(s => assignments.has(`${juryMember.id}|${s.id}`)).length;
+                                                        return (
+                                                            <th key={juryMember.id} className="border-b border-r border-(--brd) px-3 py-3 text-center min-w-[90px]">
+                                                                <div className="flex flex-col items-center gap-0.5">
                                                                     {juryMember.avatar_url ? (
-                                                                        <img src={juryMember.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                                                                        <img src={juryMember.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0 mx-auto mb-1" />
                                                                     ) : (
-                                                                        <div className="w-7 h-7 rounded-full bg-blue-600/15 border border-blue-600/25 flex items-center justify-center flex-shrink-0">
+                                                                        <div className="w-7 h-7 rounded-full bg-blue-600/15 border border-blue-600/25 flex items-center justify-center flex-shrink-0 mx-auto mb-1">
                                                                             <span className="text-[10px] font-black text-blue-600">
                                                                                 {(juryMember.username ?? juryMember.login ?? "?")[0].toUpperCase()}
                                                                             </span>
                                                                         </div>
                                                                     )}
-                                                                    <div className="min-w-0">
-                                                                        <div className="text-[11px] font-black text-(--t1) truncate max-w-[120px]">
-                                                                            {juryMember.username ?? juryMember.login}
-                                                                        </div>
-                                                                        <div className="text-[9px] font-bold text-(--t2)">
-                                                                            {assignedForJury} / {submissions.length} призначено
-                                                                        </div>
-                                                                    </div>
+                                                                    <span className="text-[10px] font-black text-(--t1) leading-tight truncate max-w-[80px]" title={juryMember.username ?? juryMember.login}>
+                                                                        {juryMember.username ?? juryMember.login}
+                                                                    </span>
+                                                                    {/* Per-jury count badge */}
+                                                                    <span className={`mt-1 px-1.5 py-0.5 rounded-full text-[8px] font-black ${
+                                                                        assignedForJury === 0
+                                                                            ? "bg-red-500/15 text-red-500"
+                                                                            : "bg-blue-500/15 text-blue-600"
+                                                                    }`}>
+                                                                        {assignedForJury} / {submissions.length}
+                                                                    </span>
                                                                 </div>
-                                                            </td>
-                                                            {/* Cells */}
-                                                            {submissions.map(sub => {
-                                                                const key = `${juryMember.id}|${sub.id}`;
-                                                                return (
-                                                                    <td key={sub.id} className="border-r border-b border-(--brd) px-3 py-3 text-center">
-                                                                        <AssignCell
-                                                                            assigned={assignments.has(key)}
-                                                                            pending={pending.has(key)}
-                                                                            onToggle={() => toggleAssignment(juryMember.id, sub.id)}
-                                                                        />
-                                                                    </td>
-                                                                );
-                                                            })}
-                                                        </tr>
-                                                    );
-                                                })}
+                                                            </th>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {submissions.map((sub, sIdx) => (
+                                                    <tr key={sub.id} className={sIdx % 2 === 0 ? "" : "bg-(--bg)/40"}>
+                                                        {/* Submission name cell - sticky */}
+                                                        <td className="sticky left-0 z-10 bg-(--card) border-r border-b border-(--brd) px-4 py-3">
+                                                            <div className="min-w-0">
+                                                                <div className="text-[11px] font-black text-(--t1) truncate max-w-[160px]" title={sub.team_name}>
+                                                                    {sub.team_name}
+                                                                </div>
+                                                                {sub.team_org && (
+                                                                    <div className="text-[9px] font-bold text-(--t2) truncate max-w-[160px]" title={sub.team_org}>
+                                                                        {sub.team_org}
+                                                                    </div>
+                                                                )}
+                                                                <div className={`text-[9px] font-bold mt-0.5 ${
+                                                                    subAssignCounts[sub.id] === 0 ? "text-red-500" : "text-(--t2)"
+                                                                }`}>
+                                                                    {subAssignCounts[sub.id]} / {jury.length} журі
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        {/* Cells */}
+                                                        {jury.map(juryMember => {
+                                                            const key = `${juryMember.id}|${sub.id}`;
+                                                            return (
+                                                                <td key={juryMember.id} className="border-r border-b border-(--brd) px-3 py-3 text-center">
+                                                                    <AssignCell
+                                                                        assigned={assignments.has(key)}
+                                                                        pending={pending.has(key)}
+                                                                        onToggle={() => toggleAssignment(juryMember.id, sub.id)}
+                                                                    />
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                ))}
                                             </tbody>
                                         </table>
                                     </div>
