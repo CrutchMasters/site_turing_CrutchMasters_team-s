@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/hooks/useTheme";
+import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { useT } from "@/context/LanguageContext";
 import { Search, ChevronRight, Loader, Shield } from "lucide-react";
@@ -12,7 +13,7 @@ import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 
 export default function SearchPage() {
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
   const router = useRouter();
   const { dark } = useTheme();
   const { user, isLoading } = useAuth();
@@ -87,7 +88,7 @@ export default function SearchPage() {
       </div>
 
       {isMobileSidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => closeMobileSidebar()} />
       )}
 
       <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
@@ -96,7 +97,7 @@ export default function SearchPage() {
 
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
       <MobileHeader
-      onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+      onOpenSidebar={openMobile}
       title={t.search.title}
       icon={<Search size={18} className="text-blue-600" />}
       />

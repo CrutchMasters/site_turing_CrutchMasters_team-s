@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/hooks/useTheme";
+import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
@@ -334,8 +335,8 @@ function clearDraft() {
 export default function RegisterTeamPage() {
   const { dark } = useTheme();
   const { user, isLoading } = useAuth();
+  const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
   const router = useRouter();
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const draft = typeof window !== "undefined" ? loadDraft() : null;
 
@@ -525,14 +526,14 @@ export default function RegisterTeamPage() {
           </div>
 
           {isMobileSidebarOpen && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => closeMobileSidebar()} />
           )}
           <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
           <Sidebar />
           </div>
 
           <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Нова команда" icon={<Users size={18} className="text-blue-600" />} />
+          <MobileHeader onOpenSidebar={openMobile} title="Нова команда" icon={<Users size={18} className="text-blue-600" />} />
 
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10">
 
