@@ -547,7 +547,7 @@ export default function TeamProfilePage() {
                     <div className="flex items-center gap-1.5 text-(--t2)">
                     <Calendar size={14} />
                     <span className="text-[11px] font-black uppercase tracking-wider">
-                    {new Date(team.created_at).toLocaleDateString(locale === "ua" ? "uk-UA" : locale === "ru" ? "ru-RU" : "en-GB", { day: "2-digit", month: "long", year: "numeric" })}
+                    {new Date(team.created_at).toLocaleDateString((locale as string) === "ua" ? "uk-UA" : (locale as string) === "ru" ? "ru-RU" : "en-GB", { day: "2-digit", month: "long", year: "numeric" })}
                     </span>
                     </div>
                 )}
