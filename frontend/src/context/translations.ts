@@ -110,6 +110,7 @@ const def = {
         deniedDesc: "This page is for administrators only",
         deniedBackDashboard: "← Back to dashboard",
         deniedBackHome: "Home",
+        bannerBlock: "Tournament Banner",
     },
     roundPanel: {
       header: "Round settings",
@@ -547,6 +548,7 @@ const def = {
         deniedDesc: "Ця сторінка тільки для адміністраторів",
         deniedBackDashboard: "← Повернутись на дашборд",
         deniedBackHome: "На головну",
+        bannerBlock: "Банер турніру",
     },
     roundPanel: {
       header: "Параметри раунду",
