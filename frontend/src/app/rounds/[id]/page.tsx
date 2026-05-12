@@ -4,6 +4,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase, authedSupabase } from "@/lib/supabase";
+import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/hooks/useTheme";
 import Sidebar from "@/components/Sidebar";
@@ -134,7 +135,8 @@ function ViewOnlyBanner({ children }: { children: React.ReactNode }) {
 
 export default function RoundPage() {
     const params        = useParams();
-    const router        = useRouter();
+    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
+  const router        = useRouter();
     const searchParams  = useSearchParams();
     const { user, token, isLoading: authLoading } = useAuth();
     const { dark }      = useTheme();
@@ -151,7 +153,6 @@ export default function RoundPage() {
     const [juryChecking,    setJuryChecking]     = useState(false);
     // флаг поки перевіряємо submission — щоб не флікав стан "дедлайн минув"
     const [submissionChecking, setSubmissionChecking] = useState(false);
-    const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
     const justSubmitted = searchParams?.get("submitted") === "1";
     const countdown = useCountdown(round?.end_at);
@@ -577,7 +578,7 @@ export default function RoundPage() {
 
         {isMobileSidebarOpen && (
             <div className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-            onClick={() => setIsMobileSidebarOpen(false)} />
+            onClick={() => closeMobileSidebar()} />
         )}
         <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <Sidebar />
@@ -585,7 +586,7 @@ export default function RoundPage() {
 
         <main className="flex-1 flex flex-col overflow-y-auto relative z-10">
         <MobileHeader
-        onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+        onOpenSidebar={openMobile}
         title={round.name}
         icon={<Flag size={18} className="text-blue-600" />}
         />

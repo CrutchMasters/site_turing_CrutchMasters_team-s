@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/hooks/useTheme";
 import Sidebar from "@/components/Sidebar";
@@ -59,7 +60,8 @@ function fmtDate(iso?: string) {
 }
 
 export default function TournamentPage() {
-    const router = useRouter();
+    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
+  const router = useRouter();
     const params = useParams();
     const { user, isLoading: authLoading } = useAuth();
     const { dark } = useTheme();
@@ -71,7 +73,6 @@ export default function TournamentPage() {
     const [registering, setRegistering] = useState(false);
     const [unregistering, setUnregistering] = useState(false);
     const [registerError, setRegisterError] = useState<string | null>(null);
-    const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
         useEffect(() => { if (id && !authLoading) fetchTournament(); }, [id, authLoading]);
 
@@ -230,7 +231,7 @@ export default function TournamentPage() {
             </div>
 
             {isMobileSidebarOpen && (
-                <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+                <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => closeMobileSidebar()} />
             )}
             <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
             <Sidebar />
@@ -238,7 +239,7 @@ export default function TournamentPage() {
 
             <main className="flex-1 flex flex-col overflow-y-auto">
             <MobileHeader
-            onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+            onOpenSidebar={openMobile}
             title={tournament.name}
             icon={<Trophy size={18} className="text-blue-600" />}
             />
@@ -483,7 +484,7 @@ export default function TournamentPage() {
             )}
 
             {/* Teams list */}
-            <div>
+            <div className="mt-6">
             <h2 className="font-black text-lg mb-3 text-(--t1)">Команди-учасники</h2>
             {teamCount === 0 ? (
                 <div className="text-center py-10 text-(--t2)">

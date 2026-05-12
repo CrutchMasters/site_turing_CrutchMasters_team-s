@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useTheme } from "@/hooks/useTheme";
+import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
@@ -74,8 +75,8 @@ function RoleErrorBadge({ role }: { role: string }) {
 }
 
 export default function EditTeamPage() {
-    const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-    const router = useRouter();
+    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
+  const router = useRouter();
     const params = useParams();
     const { dark } = useTheme();
     const { user, isLoading: authLoading } = useAuth();
@@ -388,7 +389,7 @@ export default function EditTeamPage() {
         </div>
 
         {isMobileSidebarOpen && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => closeMobileSidebar()} />
         )}
         <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <Sidebar />
@@ -396,7 +397,7 @@ export default function EditTeamPage() {
 
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <MobileHeader
-        onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+        onOpenSidebar={openMobile}
         title={t.editTeam.mobileTitle}
         icon={<Pencil size={18} className="text-blue-600" />}
         />

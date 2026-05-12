@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/hooks/useTheme";
+import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
@@ -65,10 +66,10 @@ const typeConfig: Record<string, { icon: React.ReactNode; border: string; bg: st
 };
 
 export default function NotificationsPage() {
-    const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const { dark } = useTheme();
     const { user, token, isLoading: authLoading } = useAuth();
-    const router = useRouter();
+    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
+  const router = useRouter();
 
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [loading, setLoading]             = useState(true);
@@ -165,7 +166,7 @@ export default function NotificationsPage() {
         </div>
 
         {isMobileSidebarOpen && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => closeMobileSidebar()} />
         )}
         <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <Sidebar />
@@ -173,7 +174,7 @@ export default function NotificationsPage() {
 
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <MobileHeader
-        onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+        onOpenSidebar={openMobile}
         title="Сповіщення"
         icon={<Bell size={18} className="text-blue-600" />}
         />

@@ -3,6 +3,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/hooks/useTheme";
 import Sidebar from "@/components/Sidebar";
@@ -61,7 +62,8 @@ const PlaceIcon = ({ place }: { place: number }) => {
 };
 
 export default function LeaderboardPage() {
-    const router = useRouter();
+    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
+  const router = useRouter();
     const params = useParams();
     const { user, isLoading: authLoading } = useAuth();
     const { dark } = useTheme();
@@ -72,7 +74,6 @@ export default function LeaderboardPage() {
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
     useEffect(() => {
         if (id && !authLoading) fetchLeaderboard();
@@ -143,7 +144,7 @@ export default function LeaderboardPage() {
 
             <main className="flex-1 flex flex-col overflow-y-auto relative z-10">
                 <MobileHeader
-                    onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+                    onOpenSidebar={openMobile}
                     title="Таблиця лідерів"
                     icon={<Trophy size={18} className="text-yellow-500" />}
                 />
