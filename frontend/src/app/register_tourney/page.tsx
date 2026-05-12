@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Zap, Trophy, Clock, Users, Layers, ChevronRight, ArrowLeft, X, CalendarDays, ImageIcon, Upload, AlertCircle,
+  Zap, Trophy, Clock, Users, Layers, ChevronRight, ArrowLeft, X, CalendarDays, ImageIcon, Upload, AlertCircle, CheckCircle,
 } from 'lucide-react';
 import { RichTextEditor } from '@/components/RichTextEditor';
 import BannerEditorModal from '@/components/BannerEditorModal';
@@ -62,6 +62,25 @@ function DateTimePair({
   );
 }
 
+// ── FieldError bubble ─────────────────────────────────────────────────────────
+function FieldError({ msg }: { msg?: string }) {
+  if (!msg) return null;
+  return (
+    <div className="relative flex items-start gap-2 mt-1.5">
+      <span className="absolute -top-1.5 left-4 w-0 h-0
+        border-l-[6px] border-l-transparent
+        border-r-[6px] border-r-transparent
+        border-b-[6px] border-b-red-500/80" />
+      <div className="flex items-center gap-1.5 w-full px-3 py-2 rounded-xl
+        bg-red-500/10 border border-red-500/40 text-red-500 text-[11px] font-bold
+        shadow-sm shadow-red-500/10">
+        <AlertCircle size={12} className="flex-shrink-0" />
+        <span>{msg}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function RegisterTourney() {
   const { dark } = useTheme();
   const { t } = useT();
@@ -87,7 +106,17 @@ export default function RegisterTourney() {
   const [selectedRoundTab, setSelectedRoundTab] = useState<number>(1);
   const [roundsData, setRoundsData]       = useState<Record<number, RoundData>>({});
   const [isSubmitting, setIsSubmitting]   = useState(false);
-  const [submitError, setSubmitError]     = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors]     = useState<Record<string, string>>({});
+  const [success, setSuccess]             = useState('');
+  const successTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showSuccess = (msg: string) => {
+    setSuccess(msg);
+    if (successTimer.current) clearTimeout(successTimer.current);
+    successTimer.current = setTimeout(() => setSuccess(''), 4500);
+  };
+  const clearFieldError = (key: string) => {
+    setFieldErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
+  };
   const [bannerUrl, setBannerUrl]         = useState('');
   const [bannerError, setBannerError]     = useState('');
   const [bannerEditorOpen, setBannerEditorOpen] = useState(false);
@@ -127,6 +156,58 @@ export default function RegisterTourney() {
       },
     }));
   }, []);
+
+  // Live-валідація для таймлайну (без сабміту)
+  const timelineErrors = React.useMemo(() => {
+    const errs: string[] = [];
+    const parseLocalDt = (date: string, time: string) => {
+      if (!date) return null;
+      const [y, mo, d] = date.split('-').map(Number);
+      const [h = 0, m = 0] = (time ?? '').split(':').map(Number);
+      return new Date(y, mo - 1, d, h, m).getTime();
+    };
+    const rf = parseLocalDt(regStartDate, regStartTime);
+    const rt = parseLocalDt(regEndDate,   regEndTime);
+    const ts = parseLocalDt(startDate,    startTime);
+    const te = parseLocalDt(endDate,      endTime);
+
+    if (rf && ts && rf >= ts)
+      errs.push('Реєстрація повинна починатися раніше за старт турніру.');
+    if (rt && ts && rt > ts)
+      errs.push('Реєстрація повинна закінчуватися не пізніше старту турніру.');
+    if (rf && rt && rf >= rt)
+      errs.push('Початок реєстрації повинен бути раніше за кінець реєстрації.');
+    if (ts && te && ts >= te)
+      errs.push('Початок турніру повинен бути раніше за кінець турніру.');
+
+    const roundSlices = Array.from({ length: roundCount }, (_, i) => {
+      const n = i + 1;
+      const rd = roundsData[n];
+      return {
+        n,
+        start: parseLocalDt(rd?.startDate ?? '', rd?.startTime ?? ''),
+        end:   parseLocalDt(rd?.deadlineDate ?? '', rd?.deadlineTime ?? ''),
+      };
+    }).filter(r => r.start || r.end);
+
+    for (const r of roundSlices) {
+      if (r.start && r.end && r.start >= r.end)
+        errs.push(`Раунд ${r.n}: початок повинен бути раніше за дедлайн.`);
+      if (ts && r.start && r.start < ts)
+        errs.push(`Раунд ${r.n}: не може починатися раніше за старт турніру.`);
+      if (te && r.end && r.end > te)
+        errs.push(`Раунд ${r.n}: дедлайн виходить за межі турніру.`);
+    }
+    for (let i = 0; i < roundSlices.length - 1; i++) {
+      const cur = roundSlices[i];
+      const nxt = roundSlices[i + 1];
+      if (cur.end && nxt.start && cur.end > nxt.start)
+        errs.push(`Раунд ${nxt.n} починається до завершення раунду ${cur.n}.`);
+    }
+    return errs;
+  }, [regStartDate, regStartTime, regEndDate, regEndTime,
+      startDate, startTime, endDate, endTime,
+      roundCount, roundsData]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -185,11 +266,16 @@ export default function RegisterTourney() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitError(null);
-    if (!tourneyName.trim()) { setSubmitError(t.tourney?.errNameRequired ?? "Назва турніру є обов'язковою"); return; }
-    if (!startDate)          { setSubmitError(t.tourney?.errStartRequired ?? "Дата старту турніру є обов'язковою"); return; }
+    setFieldErrors({});
 
-    // ── Валідація часової послідовності (до будь-яких запитів до БД) ──────────
+    const fe: Record<string, string> = {};
+    let hasErr = false;
+    const addErr = (key: string, msg: string) => { if (!fe[key]) fe[key] = msg; hasErr = true; };
+
+    if (!tourneyName.trim()) addErr('name', t.tourney?.errNameRequired ?? "Назва турніру є обов'язковою");
+    if (!startDate)          addErr('startDate', t.tourney?.errStartRequired ?? 'Дата старту турніру є обов\'язковою');
+
+    // ── Валідація часової послідовності ──────────────────────────────────────
     const parseLocalDt = (date: string, time: string) => {
       if (!date) return null;
       const [y, mo, d] = date.split('-').map(Number);
@@ -203,13 +289,13 @@ export default function RegisterTourney() {
     const te = parseLocalDt(endDate,      endTime);
 
     if (rf && ts && rf >= ts)
-    { setSubmitError('Реєстрація повинна починатися раніше за старт турніру.'); return; }
+      addErr('regStartDate', 'Реєстрація повинна починатися раніше за старт турніру.');
     if (rt && ts && rt > ts)
-    { setSubmitError('Реєстрація повинна закінчуватися не пізніше старту турніру (вони не можуть перетинатися).'); return; }
+      addErr('regEndDate', 'Реєстрація повинна закінчуватися не пізніше старту турніру (вони не можуть перетинатися).');
     if (rf && rt && rf >= rt)
-    { setSubmitError('Початок реєстрації повинен бути раніше за кінець реєстрації.'); return; }
+      addErr('regStartDate', fe['regStartDate'] ?? 'Початок реєстрації повинен бути раніше за кінець реєстрації.');
     if (ts && te && ts >= te)
-    { setSubmitError('Початок турніру повинен бути раніше за кінець турніру.'); return; }
+      addErr('startDate', fe['startDate'] ?? 'Початок турніру повинен бути раніше за кінець турніру.');
 
     // Валідація раундів
     const roundSlices = Array.from({ length: roundCount }, (_, i) => {
@@ -218,25 +304,27 @@ export default function RegisterTourney() {
       return {
         n,
         start: parseLocalDt(rd?.startDate ?? '', rd?.startTime ?? ''),
-                                   end:   parseLocalDt(rd?.deadlineDate ?? '', rd?.deadlineTime ?? ''),
+        end:   parseLocalDt(rd?.deadlineDate ?? '', rd?.deadlineTime ?? ''),
       };
     }).filter(r => r.start || r.end);
 
     for (const r of roundSlices) {
       if (r.start && r.end && r.start >= r.end)
-      { setSubmitError(`Раунд ${r.n}: початок повинен бути раніше за дедлайн.`); return; }
+        addErr(`round_${r.n}_start`, `Раунд ${r.n}: початок повинен бути раніше за дедлайн.`);
       if (ts && r.start && r.start < ts)
-      { setSubmitError(`Раунд ${r.n}: початок раунду не може бути раніше за старт турніру.`); return; }
+        addErr(`round_${r.n}_start`, fe[`round_${r.n}_start`] ?? `Раунд ${r.n}: початок раунду не може бути раніше за старт турніру.`);
       if (te && r.end && r.end > te)
-      { setSubmitError(`Раунд ${r.n}: дедлайн раунду не може виходити за межі турніру.`); return; }
+        addErr(`round_${r.n}_end`, `Раунд ${r.n}: дедлайн раунду не може виходити за межі турніру.`);
     }
     for (let i = 0; i < roundSlices.length - 1; i++) {
       const cur = roundSlices[i];
       const nxt = roundSlices[i + 1];
       if (cur.end && nxt.start && cur.end > nxt.start)
-      { setSubmitError(`Раунд ${nxt.n} починається до завершення раунду ${cur.n}. Раунди не можуть перекриватися.`); return; }
+        addErr(`round_${nxt.n}_start`, `Раунд ${nxt.n} починається до завершення раунду ${cur.n}. Раунди не можуть перекриватися.`);
     }
     // ─────────────────────────────────────────────────────────────────────────
+
+    if (hasErr) { setFieldErrors(fe); return; }
 
     setIsSubmitting(true);
     try {
@@ -247,7 +335,7 @@ export default function RegisterTourney() {
       .ilike("name", tourneyName.trim())
       .limit(1);
       if (!checkError && existing && existing.length > 0) {
-        setSubmitError((t.tourney?.errDuplicate ?? 'Турнір з назвою "{name}" вже існує. Оберіть іншу назву.').replace('{name}', tourneyName.trim()));
+        setFieldErrors({ name: (t.tourney?.errDuplicate ?? 'Турнір з назвою "{name}" вже існує. Оберіть іншу назву.').replace('{name}', tourneyName.trim()) });
         setIsSubmitting(false);
         return;
       }
@@ -373,17 +461,14 @@ export default function RegisterTourney() {
         throw new Error((t.tourney?.errRoundsSave ?? 'Помилка збереження раундів: {detail}').replace('{detail}', errMsg));
       }
 
-      router.push('/dashboard');
+      router.push('/tournaments?created=1');
     } catch (err: any) {
       console.error('Помилка створення турніру:', err?.message ?? err);
-      // БАГ 8 fix: зрозуміле повідомлення про constraint раундів
       const msg: string = err?.message ?? '';
       if (msg.includes('rounds_number_check') || msg.includes('number_check')) {
-        setSubmitError(t.tourney?.errRoundNumber ?? 'Номер раунду має бути від 1 до 8. Перевірте кількість раундів.');
-      } else if (msg.includes('Максимальна кількість раундів') || msg.includes('Maximum number of rounds') || msg.includes('Максимальное количество')) {
-        setSubmitError(msg);
+        setFieldErrors({ general: t.tourney?.errRoundNumber ?? 'Номер раунду має бути від 1 до 8. Перевірте кількість раундів.' });
       } else {
-        setSubmitError(msg || (t.tourney?.errGeneric ?? 'Виникла помилка. Спробуйте ще раз.'));
+        setFieldErrors({ general: msg || (t.tourney?.errGeneric ?? 'Виникла помилка. Спробуйте ще раз.') });
       }
     } finally {
       setIsSubmitting(false);
@@ -491,6 +576,7 @@ export default function RegisterTourney() {
     <style>{`
       @keyframes fadeUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
       @keyframes cardDrop { from{opacity:0;transform:translateY(-26px) scale(.97)} to{opacity:1;transform:none} }
+      @keyframes slideDown { from{opacity:0;transform:translateY(-24px) scale(.97)} to{opacity:1;transform:none} }
       @keyframes slideInRight { from{opacity:0;transform:translateX(40px)} to{opacity:1;transform:translateX(0)} }
       .fuIn  { animation: fadeUp      340ms cubic-bezier(.22,1,.36,1) both }
       .cdIn  { animation: cardDrop    500ms cubic-bezier(.22,1,.36,1) both }
@@ -510,6 +596,32 @@ export default function RegisterTourney() {
       </div>
 
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
+
+      {/* ── Fixed top success toast ── */}
+      {success && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-3 px-5 py-3.5
+          bg-green-600 text-white rounded-2xl shadow-2xl shadow-green-600/30 text-sm font-black
+          uppercase tracking-wide pointer-events-none select-none"
+          style={{ animation: 'slideDown 350ms cubic-bezier(.22,1,.36,1) both' }}>
+          <CheckCircle size={16} className="flex-shrink-0" />
+          {success}
+        </div>
+      )}
+
+      {/* ── Fixed top general server-error toast ── */}
+      {fieldErrors.general && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-3 px-5 py-3.5
+          bg-red-600 text-white rounded-2xl shadow-2xl shadow-red-600/30 text-sm font-black
+          uppercase tracking-wide max-w-[90vw]"
+          style={{ animation: 'slideDown 350ms cubic-bezier(.22,1,.36,1) both' }}>
+          <AlertCircle size={16} className="flex-shrink-0" />
+          <span className="flex-1">{fieldErrors.general}</span>
+          <button onClick={() => clearFieldError('general')} className="ml-2 opacity-70 hover:opacity-100 transition-opacity">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       <MobileHeader
       onOpenSidebar={() => setIsMobileSidebarOpen(true)}
       title={t.tourney?.create ?? 'Створення турніру'}
@@ -586,6 +698,7 @@ export default function RegisterTourney() {
         placeholder={t.tourney?.namePlaceholder ?? 'Назва турніру...'}
         className={inp}
         />
+        <FieldError msg={fieldErrors.name} />
         </div>
         {/* Опис */}
         <div>
@@ -667,8 +780,10 @@ export default function RegisterTourney() {
         </div>
         <div className="p-6 space-y-4 flex-1">
         <DateTimePair label={t.tourney?.regStart ?? 'Початок реєстрації'} dateVal={regStartDate} onDate={setRegStartDate} timeVal={regStartTime} onTime={setRegStartTime} />
+        <FieldError msg={fieldErrors.regStartDate} />
         <div className="border-t border-(--brd)" />
         <DateTimePair label={t.tourney?.regEnd ?? 'Кінець реєстрації'} dateVal={regEndDate} onDate={setRegEndDate} timeVal={regEndTime} onTime={setRegEndTime} />
+        <FieldError msg={fieldErrors.regEndDate} />
         </div>
         </div>
 
@@ -681,6 +796,7 @@ export default function RegisterTourney() {
         </div>
         <div className="p-6 space-y-4 flex-1">
         <DateTimePair label={t.tourney?.tourStart ?? 'Початок турніру'} dateVal={startDate} onDate={setStartDate} timeVal={startTime} onTime={setStartTime} required requiredLabel={t.tourney?.required} />
+        <FieldError msg={fieldErrors.startDate} />
         <div className="border-t border-(--brd)" />
         <DateTimePair label={t.tourney?.tourEnd ?? 'Кінець турніру'} dateVal={endDate} onDate={setEndDate} timeVal={endTime} onTime={setEndTime} />
         </div>
@@ -801,6 +917,27 @@ export default function RegisterTourney() {
 
         </section>
 
+        {/* Зведена плашка помилок — над кнопкою створення */}
+        {Object.entries(fieldErrors).filter(([k]) => k !== 'general').length > 0 && (
+          <div className="flex flex-col gap-2 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={15} className="text-red-500 flex-shrink-0" />
+              <p className="text-xs font-black uppercase tracking-widest text-red-500">Виправте помилки перед створенням</p>
+            </div>
+            <ul className="flex flex-col gap-1 pl-1">
+              {Object.entries(fieldErrors)
+                .filter(([k]) => k !== 'general')
+                .map(([key, msg]) => (
+                  <li key={key} className="flex items-start gap-1.5 text-xs font-bold text-red-400">
+                    <span className="mt-0.5 w-1 h-1 rounded-full bg-red-400 flex-shrink-0" />
+                    {msg}
+                  </li>
+                ))
+              }
+            </ul>
+          </div>
+        )}
+
         {/* Action buttons */}
         <div className="cdIn flex flex-col sm:flex-row gap-3" style={{ animationDelay: '200ms' }}>
         <button type="submit" disabled={isSubmitting}
@@ -832,12 +969,7 @@ export default function RegisterTourney() {
         </div>
         {/* end MAIN TWO-COLUMN LAYOUT */}
 
-        {/* Error */}
-        {submitError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm font-bold text-red-500">
-          ⚠️ {submitError}
-          </div>
-        )}
+        {/* Error handled by fixed toast above */}
 
         </form>
         </div>

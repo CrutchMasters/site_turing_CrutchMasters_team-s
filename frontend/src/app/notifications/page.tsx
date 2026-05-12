@@ -159,12 +159,6 @@ export default function NotificationsPage() {
 
     return (
         <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
-        <style jsx global>{`
-            @keyframes fadeUp   { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
-            @keyframes cardDrop { from{opacity:0;transform:translateY(-12px) scale(.98)} to{opacity:1;transform:none} }
-            .fuIn { animation: fadeUp   300ms cubic-bezier(.22,1,.36,1) both }
-            .cdIn { animation: cardDrop 380ms cubic-bezier(.22,1,.36,1) both }
-        `}</style>
 
         <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
         <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />

@@ -86,6 +86,25 @@ function DateTimePair({
     );
 }
 
+// ── FieldError bubble ─────────────────────────────────────────────────────────
+function FieldError({ msg }: { msg?: string }) {
+    if (!msg) return null;
+    return (
+        <div className="relative flex items-start gap-2 mt-1.5">
+            <span className="absolute -top-1.5 left-4 w-0 h-0
+                border-l-[6px] border-l-transparent
+                border-r-[6px] border-r-transparent
+                border-b-[6px] border-b-red-500/80" />
+            <div className="flex items-center gap-1.5 w-full px-3 py-2 rounded-xl
+                bg-red-500/10 border border-red-500/40 text-red-500 text-[11px] font-bold
+                shadow-sm shadow-red-500/10">
+                <AlertCircle size={12} className="flex-shrink-0" />
+                <span>{msg}</span>
+            </div>
+        </div>
+    );
+}
+
 export default function TournamentEditPage() {
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const params = useParams();
@@ -97,8 +116,17 @@ export default function TournamentEditPage() {
 
     const [loading, setLoading]   = useState(true);
     const [saving, setSaving]     = useState(false);
-    const [error, setError]       = useState("");
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [success, setSuccess]   = useState("");
+    const successTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const showSuccess = (msg: string) => {
+        setSuccess(msg);
+        if (successTimer.current) clearTimeout(successTimer.current);
+        successTimer.current = setTimeout(() => setSuccess(""), 4500);
+    };
+    const clearFieldError = (key: string) => {
+        setFieldErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
+    };
     const [tourney, setTourney]   = useState<Tournament | null>(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleting, setDeleting]               = useState(false);
@@ -153,6 +181,58 @@ export default function TournamentEditPage() {
             },
         }));
     }, []);
+
+    // Live-валідація для таймлайну (без сабміту)
+    const timelineErrors = React.useMemo(() => {
+        const errs: string[] = [];
+        const parseLocalDt = (date: string, time: string) => {
+            if (!date) return null;
+            const [y, mo, d] = date.split("-").map(Number);
+            const [h = 0, m = 0] = (time ?? "").split(":").map(Number);
+            return new Date(y, mo - 1, d, h, m).getTime();
+        };
+        const rf = parseLocalDt(regFromDate, regFromTime);
+        const rt = parseLocalDt(regToDate,   regToTime);
+        const ts = parseLocalDt(startDate,   startTime);
+        const te = parseLocalDt(endDate,     endTime);
+
+        if (rf && ts && rf >= ts)
+            errs.push("Реєстрація повинна починатися раніше за старт турніру.");
+        if (rt && ts && rt > ts)
+            errs.push("Реєстрація повинна закінчуватися не пізніше старту турніру.");
+        if (rf && rt && rf >= rt)
+            errs.push("Початок реєстрації повинен бути раніше за кінець реєстрації.");
+        if (ts && te && ts >= te)
+            errs.push("Початок турніру повинен бути раніше за кінець турніру.");
+
+        const roundSlices = Array.from({ length: roundCount }, (_, i) => {
+            const n = i + 1;
+            const rd = roundsData[n];
+            return {
+                n,
+                start: parseLocalDt(rd?.startDate ?? "", rd?.startTime ?? ""),
+                end:   parseLocalDt(rd?.deadlineDate ?? "", rd?.deadlineTime ?? ""),
+            };
+        }).filter(r => r.start || r.end);
+
+        for (const r of roundSlices) {
+            if (r.start && r.end && r.start >= r.end)
+                errs.push(`Раунд ${r.n}: початок повинен бути раніше за дедлайн.`);
+            if (ts && r.start && r.start < ts)
+                errs.push(`Раунд ${r.n}: не може починатися раніше за старт турніру.`);
+            if (te && r.end && r.end > te)
+                errs.push(`Раунд ${r.n}: дедлайн виходить за межі турніру.`);
+        }
+        for (let i = 0; i < roundSlices.length - 1; i++) {
+            const cur = roundSlices[i];
+            const nxt = roundSlices[i + 1];
+            if (cur.end && nxt.start && cur.end > nxt.start)
+                errs.push(`Раунд ${nxt.n} починається до завершення раунду ${cur.n}.`);
+        }
+        return errs;
+    }, [regFromDate, regFromTime, regToDate, regToTime,
+        startDate, startTime, endDate, endTime,
+        roundCount, roundsData]);
 
     // Зовнішні дати для RoundSettingsPanel (від таймлайну)
     const [externalRoundDates, setExternalRoundDates] = useState<
@@ -252,7 +332,7 @@ export default function TournamentEditPage() {
                     setInitialRoundsData(initial);
                 }
             } catch (e: any) {
-                setError(e?.message ?? "Помилка завантаження");
+                setFieldErrors({ general: e?.message ?? "Помилка завантаження" });
             } finally {
                 setLoading(false);
             }
@@ -320,12 +400,15 @@ export default function TournamentEditPage() {
 
         const handleSave = async (e: React.FormEvent) => {
             e.preventDefault();
-            setError(""); setSuccess("");
+            setFieldErrors({}); setSuccess("");
 
-            if (!name.trim()) { setError(t.editTourney?.errNameRequired ?? "Назва обов'язкова"); return; }
-            if (!startDate)   { setError(t.editTourney?.errStartRequired ?? "Дата старту обов'язкова"); return; }
+            const fe: Record<string, string> = {};
+            let hasErr = false;
+            const addErr = (key: string, msg: string) => { if (!fe[key]) fe[key] = msg; hasErr = true; };
 
-            // Перевірка критеріїв оцінювання у кожному раунді
+            if (!name.trim()) addErr("name", t.editTourney?.errNameRequired ?? "Назва обов'язкова");
+            if (!startDate)   addErr("startDate", t.editTourney?.errStartRequired ?? "Дата старту обов'язкова");
+
             // ── Валідація часової послідовності ──────────────────────────────
             const parseLocalDt = (date: string, time: string) => {
                 if (!date) return null;
@@ -340,13 +423,13 @@ export default function TournamentEditPage() {
             const te  = parseLocalDt(endDate,      endTime);
 
             if (rf && ts && rf >= ts)
-            { setError("Реєстрація повинна починатися раніше за старт турніру."); return; }
+                addErr("regFromDate", "Реєстрація повинна починатися раніше за старт турніру.");
             if (rt && ts && rt > ts)
-            { setError("Реєстрація повинна закінчуватися не пізніше старту турніру (вони не можуть перетинатися)."); return; }
+                addErr("regToDate", "Реєстрація повинна закінчуватися не пізніше старту турніру.");
             if (rf && rt && rf >= rt)
-            { setError("Початок реєстрації повинен бути раніше за кінець реєстрації."); return; }
+                addErr("regFromDate", fe["regFromDate"] ?? "Початок реєстрації повинен бути раніше за кінець.");
             if (ts && te && ts >= te)
-            { setError("Початок турніру повинен бути раніше за кінець турніру."); return; }
+                addErr("startDate", fe["startDate"] ?? "Початок турніру повинен бути раніше за кінець.");
 
             // Валідація раундів
             const roundSlices = Array.from({ length: roundCount }, (_, i) => {
@@ -355,28 +438,30 @@ export default function TournamentEditPage() {
                 return {
                     n,
                     start: parseLocalDt(rd?.startDate ?? "", rd?.startTime ?? ""),
-                                           end:   parseLocalDt(rd?.deadlineDate ?? "", rd?.deadlineTime ?? ""),
+                    end:   parseLocalDt(rd?.deadlineDate ?? "", rd?.deadlineTime ?? ""),
                 };
             }).filter(r => r.start || r.end);
 
             for (const r of roundSlices) {
                 if (r.start && r.end && r.start >= r.end)
-                { setError(`Раунд ${r.n}: початок повинен бути раніше за дедлайн.`); return; }
+                    addErr(`round_${r.n}_start`, `Раунд ${r.n}: початок повинен бути раніше за дедлайн.`);
                 if (ts && r.start && r.start < ts)
-                { setError(`Раунд ${r.n}: початок раунду не може бути раніше за старт турніру.`); return; }
+                    addErr(`round_${r.n}_start`, fe[`round_${r.n}_start`] ?? `Раунд ${r.n}: початок раунду не може бути раніше за старт турніру.`);
                 if (te && r.end && r.end > te)
-                { setError(`Раунд ${r.n}: дедлайн раунду не може виходити за межі турніру.`); return; }
+                    addErr(`round_${r.n}_end`, `Раунд ${r.n}: дедлайн не може виходити за межі турніру.`);
             }
             for (let i = 0; i < roundSlices.length - 1; i++) {
                 const cur = roundSlices[i];
                 const nxt = roundSlices[i + 1];
                 if (cur.end && nxt.start && cur.end > nxt.start)
-                { setError(`Раунд ${nxt.n} починається до завершення раунду ${cur.n}. Раунди не можуть перекриватися.`); return; }
+                    addErr(`round_${nxt.n}_start`, `Раунд ${nxt.n} починається до завершення раунду ${cur.n}.`);
             }
             // ─────────────────────────────────────────────────────────────────
 
             const criteriaErr = validateRoundsData(roundsData, roundCount);
-            if (criteriaErr) { setError(criteriaErr); return; }
+            if (criteriaErr) addErr("criteria", criteriaErr);
+
+            if (hasErr) { setFieldErrors(fe); return; }
 
             setSaving(true);
             try {
@@ -498,14 +583,14 @@ export default function TournamentEditPage() {
                     throw new Error(`Турнір збережено, але раунди не оновлено: ${errMsg}`);
                 }
 
-                setSuccess(t.editTourney?.successSaved ?? "Зміни збережено ✓");
+                showSuccess(t.editTourney?.successSaved ?? "Зміни збережено ✓");
                 await fetchTourney();
             } catch (e: any) {
                 const msg: string = e?.message ?? "";
                 if (msg.includes("rounds_number_check") || msg.includes("number_check")) {
-                    setError("Номер раунду має бути від 1 до 8. Перевірте кількість раундів.");
+                    setFieldErrors({ general: "Номер раунду має бути від 1 до 8. Перевірте кількість раундів." });
                 } else {
-                    setError(msg || "Виникла помилка. Спробуйте ще раз.");
+                    setFieldErrors({ general: msg || "Виникла помилка. Спробуйте ще раз." });
                 }
             } finally {
                 setSaving(false);
@@ -514,7 +599,7 @@ export default function TournamentEditPage() {
 
         const handleDelete = async () => {
             setDeleting(true);
-            setError("");
+            setFieldErrors({});
             try {
                 const token = await getToken();
                 if (!token) throw new Error("Не вдалося отримати токен авторизації.");
@@ -528,7 +613,7 @@ export default function TournamentEditPage() {
                 }
                 router.push("/tournaments");
             } catch (e: any) {
-                setError(e?.message ?? (t.editTourney?.deleteError ?? "Не вдалося видалити турнір"));
+                setFieldErrors({ general: e?.message ?? (t.editTourney?.deleteError ?? "Не вдалося видалити турнір") });
                 setShowDeleteModal(false);
             } finally {
                 setDeleting(false);
@@ -555,9 +640,10 @@ export default function TournamentEditPage() {
 
         return (
             <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
-            <style jsx global>{`
+            <style>{`
                 @keyframes fadeUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
                 @keyframes cardDrop { from{opacity:0;transform:translateY(-26px) scale(.97)} to{opacity:1;transform:none} }
+                @keyframes slideDown { from{opacity:0;transform:translateY(-24px) scale(.97)} to{opacity:1;transform:none} }
                 @keyframes slideInRight { from{opacity:0;transform:translateX(40px)} to{opacity:1;transform:translateX(0)} }
                 .fuIn  { animation: fadeUp      340ms cubic-bezier(.22,1,.36,1) both }
                 .cdIn  { animation: cardDrop    500ms cubic-bezier(.22,1,.36,1) both }
@@ -579,6 +665,32 @@ export default function TournamentEditPage() {
                 </div>
 
                 <main className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
+
+                {/* ── Fixed top success toast ── */}
+                {success && (
+                    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-3 px-5 py-3.5
+                        bg-green-600 text-white rounded-2xl shadow-2xl shadow-green-600/30 text-sm font-black
+                        uppercase tracking-wide pointer-events-none select-none"
+                        style={{ animation: "slideDown 350ms cubic-bezier(.22,1,.36,1) both" }}>
+                        <CheckCircle size={16} className="flex-shrink-0" />
+                        {success}
+                    </div>
+                )}
+
+                {/* ── Fixed top general server-error toast ── */}
+                {fieldErrors.general && (
+                    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-3 px-5 py-3.5
+                        bg-red-600 text-white rounded-2xl shadow-2xl shadow-red-600/30 text-sm font-black
+                        uppercase tracking-wide max-w-[90vw]"
+                        style={{ animation: "slideDown 350ms cubic-bezier(.22,1,.36,1) both" }}>
+                        <AlertCircle size={16} className="flex-shrink-0" />
+                        <span className="flex-1">{fieldErrors.general}</span>
+                        <button onClick={() => clearFieldError("general")} className="ml-2 opacity-70 hover:opacity-100 transition-opacity">
+                            <X size={14} />
+                        </button>
+                    </div>
+                )}
+
                 <MobileHeader
                 onOpenSidebar={() => setIsMobileSidebarOpen(true)}
                 title={t.editTourney?.mobileTitle ?? "Редагування турніру"}
@@ -634,6 +746,7 @@ export default function TournamentEditPage() {
                 placeholder={t.editTourney?.namePlaceholder ?? "Назва турніру..."}
                 className={inp}
                 />
+                <FieldError msg={fieldErrors.name} />
                 </div>
                 <div>
                 <label className={`block ${label10} mb-2`}>{t.editTourney?.rulesLabel ?? "Опис / Правила"}</label>
@@ -716,8 +829,10 @@ export default function TournamentEditPage() {
                 </div>
                 <div className="p-6 space-y-4 flex-1">
                 <DateTimePair label={t.editTourney?.regStart ?? "Початок реєстрації"} dateVal={regFromDate} onDate={setRegFromDate} timeVal={regFromTime} onTime={setRegFromTime} />
+                <FieldError msg={fieldErrors.regFromDate} />
                 <div className="border-t border-(--brd)" />
                 <DateTimePair label={t.editTourney?.regEnd ?? "Кінець реєстрації"} dateVal={regToDate} onDate={setRegToDate} timeVal={regToTime} onTime={setRegToTime} />
+                <FieldError msg={fieldErrors.regToDate} />
                 </div>
                 </div>
 
@@ -730,6 +845,7 @@ export default function TournamentEditPage() {
                 </div>
                 <div className="p-6 space-y-4 flex-1">
                 <DateTimePair label={t.editTourney?.tourStart ?? "Початок турніру"} dateVal={startDate} onDate={setStartDate} timeVal={startTime} onTime={setStartTime} required />
+                <FieldError msg={fieldErrors.startDate} />
                 <div className="border-t border-(--brd)" />
                 <DateTimePair label={t.editTourney?.tourEnd ?? "Кінець турніру"} dateVal={endDate} onDate={setEndDate} timeVal={endTime} onTime={setEndTime} />
                 </div>
@@ -760,6 +876,7 @@ export default function TournamentEditPage() {
                     } satisfies RoundSlice;
                 })}
                 onRoundChange={handleRoundTimelineChange}
+                errors={timelineErrors}
                 />
                 </div>
                 </section>
@@ -887,22 +1004,30 @@ export default function TournamentEditPage() {
                     </div>
                     </section>
 
-                    {error && (
-                        <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl">
-                        <AlertCircle size={16} className="text-red-500 flex-shrink-0" />
-                        <p className="text-sm font-bold text-red-500">{error}</p>
-                        </div>
-                    )}
-                    {success && (
-                        <div className="flex items-center gap-3 p-4 bg-green-500/10 border border-green-500/30 rounded-2xl">
-                        <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
-                        <p className="text-sm font-bold text-green-500">{success}</p>
-                        </div>
-                    )}
-
                     <div className="cdIn" style={{ animationDelay: "160ms" }}>
                     <JuryInvitePanel tournamentId={id as string} tournamentName={name} />
                     </div>
+
+                    {/* Зведена плашка помилок — над кнопкою збереження */}
+                    {Object.entries(fieldErrors).filter(([k]) => k !== "general").length > 0 && (
+                        <div className="flex flex-col gap-2 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl">
+                        <div className="flex items-center gap-2">
+                            <AlertCircle size={15} className="text-red-500 flex-shrink-0" />
+                            <p className="text-xs font-black uppercase tracking-widest text-red-500">Виправте помилки перед збереженням</p>
+                        </div>
+                        <ul className="flex flex-col gap-1 pl-1">
+                            {Object.entries(fieldErrors)
+                                .filter(([k]) => k !== "general")
+                                .map(([key, msg]) => (
+                                    <li key={key} className="flex items-start gap-1.5 text-xs font-bold text-red-400">
+                                        <span className="mt-0.5 w-1 h-1 rounded-full bg-red-400 flex-shrink-0" />
+                                        {msg}
+                                    </li>
+                                ))
+                            }
+                        </ul>
+                        </div>
+                    )}
 
                     <div className="cdIn flex flex-col sm:flex-row gap-3 pb-8" style={{ animationDelay: "180ms" }}>
                     <button type="submit" disabled={saving}

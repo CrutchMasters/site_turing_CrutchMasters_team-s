@@ -2,16 +2,22 @@
 // src/components/TournamentTimeline.tsx
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, ChevronLeft, ChevronRight, GripHorizontal } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, GripHorizontal, AlertTriangle } from "lucide-react";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-/** "YYYY-MM-DD" + "HH:MM" → Date (local). Falls back to epoch. */
+/** "YYYY-MM-DD" + "HH:MM" → Date (local). Returns epoch(0) if date is empty. */
 function parseLocal(date: string, time: string): Date {
-    if (!date) return new Date(0);
+    if (!date || date.trim() === "") return new Date(0);
     const [y, mo, d] = date.split("-").map(Number);
+    if (!y || !mo || !d) return new Date(0);
     const [h = 0, m = 0] = (time ?? "").split(":").map(Number);
     return new Date(y, mo - 1, d, h, m);
+}
+
+/** Returns true if date string represents a real date (not empty/unset) */
+function hasDate(date: string): boolean {
+    return !!date && date.trim() !== "";
 }
 
 /** Date → "YYYY-MM-DD" */
@@ -58,6 +64,8 @@ export interface TimelineProps {
     // Round slices (array indexed by round number, 1-based)
     rounds:         RoundSlice[];
     onRoundChange:  (num: number, patch: Partial<RoundSlice>) => void;
+    // Validation errors to show below the timeline
+    errors?:        string[];
 }
 
 // ─── constants ───────────────────────────────────────────────────────────────
@@ -86,6 +94,7 @@ export default function TournamentTimeline({
     startDate,   setStartDate,   startTime,   setStartTime,
     endDate,     setEndDate,     endTime,     setEndTime,
     rounds,      onRoundChange,
+    errors,
 }: TimelineProps) {
 
     const trackRef = useRef<HTMLDivElement>(null);
@@ -176,15 +185,75 @@ export default function TournamentTimeline({
             if (dragging.id === "reg") {
                 setRegFromDate(toDateStr(startD)); setRegFromTime(toTimeStr(startD));
                 setRegToDate(toDateStr(endD));     setRegToTime(toTimeStr(endD));
+
+                // Штовхаємо турнір вперед якщо реєстрація накладається на нього
+                const curTourStart = parseLocal(startDate, startTime).getTime();
+                const curTourEnd   = parseLocal(endDate, endTime).getTime();
+                if (curTourStart > 0 && newEnd > curTourStart) {
+                    const tourDur     = curTourEnd - curTourStart;
+                    const pushedStart = new Date(newEnd);
+                    const pushedEnd   = new Date(newEnd + tourDur);
+                    setStartDate(toDateStr(pushedStart)); setStartTime(toTimeStr(pushedStart));
+                    setEndDate(toDateStr(pushedEnd));     setEndTime(toTimeStr(pushedEnd));
+                }
             } else if (dragging.id === "tour") {
                 setStartDate(toDateStr(startD)); setStartTime(toTimeStr(startD));
                 setEndDate(toDateStr(endD));     setEndTime(toTimeStr(endD));
+
+                // Штовхаємо реєстрацію вліво якщо турнір накладається на неї
+                const curRegStart = parseLocal(regFromDate, regFromTime).getTime();
+                const curRegEnd   = parseLocal(regToDate,   regToTime).getTime();
+                if (curRegEnd > 0 && newStart < curRegEnd) {
+                    const regDur     = curRegEnd - curRegStart;
+                    const pushedEnd  = new Date(newStart);
+                    const pushedStart = new Date(newStart - regDur);
+                    setRegToDate(toDateStr(pushedEnd));       setRegToTime(toTimeStr(pushedEnd));
+                    setRegFromDate(toDateStr(pushedStart));   setRegFromTime(toTimeStr(pushedStart));
+                }
             } else if (dragging.id.startsWith("r")) {
                 const num = parseInt(dragging.id.slice(1), 10);
-                onRoundChange(num, {
-                    startDate:    toDateStr(startD), startTime:    toTimeStr(startD),
-                    deadlineDate: toDateStr(endD),   deadlineTime: toTimeStr(endD),
-                });
+
+                // Беремо тільки раунди з реальними датами — щоб нові порожні
+                // раунди не вклинювалися у сортування і не штовхали сусідів
+                const validRounds = rounds
+                    .filter(r => hasDate(r.startDate) && hasDate(r.deadlineDate))
+                    .map(r => ({
+                        num:   r.number,
+                        start: parseLocal(r.startDate,    r.startTime).getTime(),
+                        end:   parseLocal(r.deadlineDate, r.deadlineTime).getTime(),
+                    }))
+                    .sort((a, b) => a.start - b.start);
+
+                const idx = validRounds.findIndex(r => r.num === num);
+                if (idx !== -1) {
+                    validRounds[idx] = { ...validRounds[idx], start: newStart, end: newEnd };
+
+                    // Штовхаємо сусідів вправо ланцюжком
+                    for (let i = idx + 1; i < validRounds.length; i++) {
+                        if (validRounds[i].start < validRounds[i - 1].end) {
+                            const shift = validRounds[i - 1].end - validRounds[i].start;
+                            validRounds[i] = { ...validRounds[i], start: validRounds[i].start + shift, end: validRounds[i].end + shift };
+                        } else break;
+                    }
+
+                    // Штовхаємо сусідів вліво ланцюжком
+                    for (let i = idx - 1; i >= 0; i--) {
+                        if (validRounds[i].end > validRounds[i + 1].start) {
+                            const shift = validRounds[i].end - validRounds[i + 1].start;
+                            validRounds[i] = { ...validRounds[i], start: validRounds[i].start - shift, end: validRounds[i].end - shift };
+                        } else break;
+                    }
+
+                    // Застосовуємо зміни тільки для раундів що брали участь у push-логіці
+                    for (const r of validRounds) {
+                        const s = new Date(r.start);
+                        const e = new Date(r.end);
+                        onRoundChange(r.num, {
+                            startDate:    toDateStr(s), startTime:    toTimeStr(s),
+                            deadlineDate: toDateStr(e), deadlineTime: toTimeStr(e),
+                        });
+                    }
+                }
             }
         };
 
@@ -200,7 +269,10 @@ export default function TournamentTimeline({
             window.removeEventListener("touchend",  onUp);
         };
     }, [dragging, setRegFromDate, setRegFromTime, setRegToDate, setRegToTime,
-        setStartDate, setStartTime, setEndDate, setEndTime, onRoundChange]);
+        setStartDate, setStartTime, setEndDate, setEndTime, onRoundChange,
+        startDate, startTime, endDate, endTime,
+        regFromDate, regFromTime, regToDate, regToTime,
+        rounds]);
 
     // ── rows config ─────────────────────────────────────────────────────────
 
@@ -406,6 +478,35 @@ export default function TournamentTimeline({
                     </div>
                 );
             })()}
+
+            {/* error cloud */}
+            {errors && errors.length > 0 && (
+                <div className="relative mt-1">
+                    {/* arrow pointing up to timeline */}
+                    <div className="absolute -top-2 left-6 w-0 h-0
+                        border-l-[7px] border-l-transparent
+                        border-r-[7px] border-r-transparent
+                        border-b-[8px] border-b-red-500/30" />
+                    <div className="flex flex-col gap-2 px-4 py-3 rounded-2xl
+                        bg-red-500/8 border border-red-500/30
+                        shadow-sm shadow-red-500/10">
+                        <div className="flex items-center gap-2">
+                            <AlertTriangle size={13} className="text-red-500 flex-shrink-0" />
+                            <span className="text-[10px] font-black uppercase tracking-widest text-red-500">
+                                Конфлікти на таймлайні
+                            </span>
+                        </div>
+                        <ul className="flex flex-col gap-1 pl-1">
+                            {errors.map((msg, i) => (
+                                <li key={i} className="flex items-start gap-2 text-[11px] font-bold text-red-400">
+                                    <span className="mt-[5px] w-1.5 h-1.5 rounded-full bg-red-400/70 flex-shrink-0" />
+                                    {msg}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

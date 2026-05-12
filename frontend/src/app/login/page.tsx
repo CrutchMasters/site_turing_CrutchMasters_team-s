@@ -141,11 +141,6 @@ export default function LoginPage() {
   const isDark = dark;
   return (
     <div className="min-h-screen bg-(--bg) flex flex-col items-center justify-center font-sans text-(--t1) relative overflow-hidden transition-colors duration-300 px-4">
-    <style jsx global>{`
-      .reveal-drop {
-        transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1);
-      }
-      `}</style>
 
       <div
       className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 transition-opacity ${
