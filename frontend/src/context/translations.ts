@@ -111,6 +111,9 @@ const def = {
         deniedBackDashboard: "← Back to dashboard",
         deniedBackHome: "Home",
         bannerBlock: "Tournament Banner",
+        bannerChange: "Change",
+        bannerUpload: "Upload Banner",
+        bannerHint: "PNG, JPG, WEBP — recommended size 1200×400",
     },
     roundPanel: {
       header: "Round settings",
@@ -549,6 +552,9 @@ const def = {
         deniedBackDashboard: "← Повернутись на дашборд",
         deniedBackHome: "На головну",
         bannerBlock: "Банер турніру",
+        bannerChange: "Змінити",
+        bannerUpload: "Завантажити банер",
+        bannerHint: "PNG, JPG, WEBP — рекомендований розмір 1200×400",
     },
     roundPanel: {
       header: "Параметри раунду",
