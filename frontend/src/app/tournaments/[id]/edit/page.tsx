@@ -653,7 +653,7 @@ export default function TournamentEditPage() {
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
                 <ImageIcon size={16} />
                 </div>
-                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">{t.editTourney?.bannerBlock ?? "Банер турніру"}</span>
+                <span className="text-xs font-black uppercase tracking-widest text-(--t2)">{t.tourney?.bannerBlock ?? "Банер турніру"}</span>
                 </div>
                 <div className="p-6 sm:p-8 space-y-4">
                 {bannerUrl ? (
