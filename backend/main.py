@@ -3244,6 +3244,61 @@ async def upload_round_file(
     return {"success": True, "signed_url": signed_url, "path": path, "name": file.filename}
 
 
+@app.post("/api/upload/tournament-banner-temp")
+async def upload_tournament_banner_temp(
+    file: UploadFile = File(...),
+    authorization: str = Header(...),
+):
+    """
+    Тимчасове завантаження банера турніру ДО створення турніру.
+    Файл зберігається у bucket 'tournament-banners' за шляхом temp/<user_id>/<timestamp>/banner.<ext>.
+    Повертає public_url, який потім передається при POST /api/tournaments як поле banner_url.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    if caller.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки адміністратор може завантажувати банер")
+
+    allowed_types = {"image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"}
+    content_type  = file.content_type or ""
+    if content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Непідтримуваний тип файлу: {content_type}. Дозволені: JPEG, PNG, WEBP, GIF",
+        )
+
+    file_bytes = await file.read()
+    if len(file_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Файл занадто великий. Максимум 10 MB")
+
+    import time as _time
+    ext_map = {"image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
+    ext  = ext_map.get(content_type, "webp")
+    path = f"temp/{caller['id']}/{int(_time.time() * 1000)}/banner.{ext}"
+
+    try:
+        supabase.storage.from_("tournament-banners").upload(
+            path, file_bytes, {"content-type": content_type, "upsert": "true"},
+        )
+
+        url_data   = supabase.storage.from_("tournament-banners").get_public_url(path)
+        public_url = url_data if isinstance(url_data, str) else url_data.get("publicUrl", "")
+        public_url_cache = f"{public_url}?t={int(_time.time())}"
+
+        print(f"[BANNER-TEMP] {caller['username']} завантажив тимчасовий банер → {path}", flush=True)
+        return {"public_url": public_url_cache, "path": path}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[BANNER-TEMP] Помилка завантаження: {e}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Помилка завантаження банера: {str(e)}")
+
+
 @app.post("/api/upload/signed-urls")
 async def get_signed_urls(body: dict, authorization: str = Header(...)):
     if not supabase:

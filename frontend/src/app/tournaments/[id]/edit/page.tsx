@@ -18,6 +18,7 @@ import {
     CheckCircle, Clock, Layers, Zap, Users, ArrowLeft, Trash2, ImageIcon, Upload, X,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import BannerEditorModal from "@/components/BannerEditorModal";
 
 interface Tournament {
     id: string;
@@ -102,9 +103,9 @@ export default function TournamentEditPage() {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleting, setDeleting]               = useState(false);
 
-    const [bannerUrl, setBannerUrl]             = useState("");
-    const [bannerUploading, setBannerUploading] = useState(false);
-    const [bannerError, setBannerError]         = useState("");
+    const [bannerUrl, setBannerUrl]               = useState("");
+    const [showBannerEditor, setShowBannerEditor] = useState(false);
+    const [bannerError, setBannerError]           = useState("");
 
     const [name, setName]               = useState("");
     const [rules, setRules]             = useState("");
@@ -278,44 +279,24 @@ export default function TournamentEditPage() {
             return data.signed_url as string;
         };
 
-        const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-            const file = e.target.files?.[0];
-            if (!file || !id) return;
-            setBannerError("");
-            setBannerUploading(true);
-            try {
-                const token = await getToken();
-                if (!token) throw new Error("Не вдалося отримати токен авторизації");
+        const apiBannerUpload = async (blob: Blob): Promise<string> => {
+            const token = await getToken();
+            if (!token) throw new Error("Не вдалося отримати токен авторизації");
 
-                const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
-                if (!allowed.includes(file.type)) {
-                    throw new Error("Непідтримуваний формат. Дозволені: JPEG, PNG, WEBP, GIF");
-                }
-                if (file.size > 10 * 1024 * 1024) {
-                    throw new Error("Файл занадто великий. Максимум 10 MB");
-                }
+            const form = new FormData();
+            form.append("file", new File([blob], "banner.webp", { type: "image/webp" }));
 
-                const form = new FormData();
-                form.append("file", file);
-
-                const res = await fetch(`${API_URL}/api/tournaments/${id}/banner`, {
-                    method: "POST",
-                    headers: { Authorization: `Bearer ${token}` },
-                    body: form,
-                });
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}));
-                    throw new Error(err.detail ?? `Помилка завантаження: ${res.statusText}`);
-                }
-                const data = await res.json();
-                setBannerUrl(data.banner_url);
-            } catch (e: any) {
-                setBannerError(e?.message ?? "Помилка завантаження банера");
-            } finally {
-                setBannerUploading(false);
-                // Скидаємо значення input щоб можна було завантажити той самий файл повторно
-                e.target.value = "";
+            const res = await fetch(`${API_URL}/api/tournaments/${id}/banner`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+                body: form,
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail ?? `Помилка завантаження: ${res.statusText}`);
             }
+            const data = await res.json();
+            return data.banner_url as string;
         };
 
         const handleBannerDelete = async () => {
@@ -682,12 +663,15 @@ export default function TournamentEditPage() {
                     alt="Banner preview"
                     className="w-full h-40 object-cover"
                     />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                    <label className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-white/90 text-gray-900 rounded-xl text-xs font-black uppercase tracking-wide shadow-lg hover:bg-white transition-all">
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100 gap-2">
+                    <button
+                    type="button"
+                    onClick={() => { setBannerError(""); setShowBannerEditor(true); }}
+                    className="flex items-center gap-2 px-4 py-2 bg-white/90 text-gray-900 rounded-xl text-xs font-black uppercase tracking-wide shadow-lg hover:bg-white transition-all"
+                    >
                     <Upload size={14} />
                     {t.editTourney?.bannerChange ?? "Змінити"}
-                    <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={bannerUploading} />
-                    </label>
+                    </button>
                     </div>
                     <button
                     type="button"
@@ -698,19 +682,19 @@ export default function TournamentEditPage() {
                     </button>
                     </div>
                 ) : (
-                    <label className={`flex flex-col items-center justify-center gap-3 p-8 rounded-2xl border-2 border-dashed cursor-pointer transition-all ${bannerUploading ? "border-(--brd) opacity-60 cursor-wait" : "border-(--brd) hover:border-purple-500/50 hover:bg-purple-500/5"}`}>
+                    <button
+                    type="button"
+                    onClick={() => { setBannerError(""); setShowBannerEditor(true); }}
+                    className="w-full flex flex-col items-center justify-center gap-3 p-8 rounded-2xl border-2 border-dashed border-(--brd) hover:border-purple-500/50 hover:bg-purple-500/5 transition-all cursor-pointer"
+                    >
                     <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center">
-                    {bannerUploading
-                        ? <span className="w-5 h-5 border-2 border-purple-500/40 border-t-purple-500 rounded-full animate-spin" />
-                        : <ImageIcon size={22} className="text-purple-500" />
-                    }
+                    <ImageIcon size={22} className="text-purple-500" />
                     </div>
                     <div className="text-center">
-                    <p className="text-sm font-black text-(--t1)">{bannerUploading ? (t.editTourney?.bannerUploading ?? "Завантаження...") : (t.editTourney?.bannerUploadTitle ?? "Завантажити банер")}</p>
+                    <p className="text-sm font-black text-(--t1)">{t.editTourney?.bannerUploadTitle ?? "Завантажити банер"}</p>
                     <p className="text-[11px] text-(--t2) mt-0.5">{t.editTourney?.bannerUploadHint ?? "PNG, JPG, WEBP — рекомендований розмір 1200×400"}</p>
                     </div>
-                    <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={bannerUploading} />
-                    </label>
+                    </button>
                 )}
                 {bannerError && (
                     <div className="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-500 text-xs font-bold">
@@ -998,6 +982,16 @@ export default function TournamentEditPage() {
                         </div>
                         </div>
                         </div>
+                    )}
+                    {showBannerEditor && (
+                        <BannerEditorModal
+                        entityId={id as string}
+                        currentBannerUrl={bannerUrl || undefined}
+                        onSave={(url) => { setBannerUrl(url); }}
+                        onClose={() => setShowBannerEditor(false)}
+                        supabase={supabase}
+                        apiUpload={apiBannerUpload}
+                        />
                     )}
                     </div>
         );
