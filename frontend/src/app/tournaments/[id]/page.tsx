@@ -33,6 +33,7 @@ interface Team {
     city_school_org?: string;
     captain_id?: string;
     members_ids?: string[];  // Bug 7 fix
+    avatar_url?: string;
 }
 
 interface Tournament {
@@ -46,15 +47,15 @@ interface Tournament {
     end_at?: string;
     registration_from?: string;
     registration_to?: string;
+    banner_url?: string;
     teams: Team[];
 }
 
 function fmtDate(iso?: string) {
     if (!iso) return "—";
-    return new Date(iso).toLocaleDateString("uk-UA", {
+    return new Date(iso).toLocaleString("uk-UA", {
         day: "numeric", month: "long", year: "numeric",
-        hour: "2-digit", minute: "2-digit",
-    });
+        hour: "2-digit", minute: "2-digit" });
 }
 
 export default function TournamentPage() {
@@ -72,18 +73,14 @@ export default function TournamentPage() {
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-    useEffect(() => {
-        if (!authLoading && !user) router.push("/login");
-    }, [authLoading, user, router]);
-
-        useEffect(() => { if (id && !authLoading && user) fetchTournament(); }, [id, authLoading, user]);
+        useEffect(() => { if (id && !authLoading) fetchTournament(); }, [id, authLoading]);
 
         const fetchTournament = async () => {
             setLoading(true);
             try {
                 const { data: tourData, error: tourErr } = await supabase
                 .from("tournaments")
-                .select("id, name, rules, max_teams, rounds, status, start_at, end_at, registration_from, registration_to")
+                .select("id, name, rules, max_teams, rounds, status, start_at, end_at, registration_from, registration_to, banner_url")
                 .eq("id", id)
                 .single();
                 if (tourErr) throw tourErr;
@@ -91,7 +88,7 @@ export default function TournamentPage() {
                 // Fetch registered teams via teams.tournament_id
                 const { data: teamsData, error: teamsErr } = await supabase
                 .from("teams")
-                .select("id, name, city_school_org, captain_id, members_ids")
+                .select("id, name, city_school_org, captain_id, members_ids, avatar_url")
                 .eq("tournament_id", id);
                 if (teamsErr) throw teamsErr;
 
@@ -253,7 +250,16 @@ export default function TournamentPage() {
             >
             <ArrowLeft size={16} /> Назад до турнірів
             </button>
-
+            {/* Banner */}
+            {tournament.banner_url && (
+                <div className="mb-5 rounded-2xl overflow-hidden border border-(--brd)">
+                <img
+                src={tournament.banner_url}
+                alt={tournament.name}
+                className="w-full max-h-72 object-cover"
+                />
+                </div>
+            )}
             <div className="flex items-start justify-between gap-3 mb-4">
             <h1 className="text-2xl font-black text-(--t1)">{tournament.name}</h1>
             {isAdmin && (
@@ -347,8 +353,9 @@ export default function TournamentPage() {
                 </div>
             )}
 
-            {/* Register button */}
+            {/* Register button / login prompt */}
             {isRegistrationOpen && !myTeamInTournament && (
+                user ? (
                 <button
                 onClick={handleRegister}
                 disabled={registering || isFull}
@@ -356,6 +363,17 @@ export default function TournamentPage() {
                 >
                 {isFull ? "Турнір заповнений" : registering ? "Реєстрація..." : "Зареєструвати мою команду"}
                 </button>
+                ) : (
+                <div className="w-full mb-6 px-5 py-4 bg-(--card) border border-(--brd) rounded-2xl flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                    <Lock size={18} className="text-(--t2) flex-shrink-0 mt-0.5 sm:mt-0" />
+                    <p className="text-sm text-(--t2) flex-1">
+                        Щоб взяти участь у турнірі, необхідно{" "}
+                        <button onClick={() => router.push("/login")} className="text-blue-600 font-black hover:underline">увійти до акаунту</button>
+                        {" "}або{" "}
+                        <button onClick={() => router.push("/register")} className="text-blue-600 font-black hover:underline">зареєструватися</button>
+                    </p>
+                </div>
+                )
             )}
 
             {myTeamInTournament && (
@@ -480,8 +498,11 @@ export default function TournamentPage() {
                     onClick={() => router.push(`/teams/${team.id}`)}
                     className="flex items-center gap-3 p-4 border border-(--brd) rounded-2xl bg-(--card) hover:border-blue-600/40 cursor-pointer transition-all group"
                     >
-                    <div className="w-8 h-8 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center text-xs font-black flex-shrink-0">
-                    {idx + 1}
+                    <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0">
+                    {team.avatar_url
+                        ? <img src={team.avatar_url} alt={team.name} className="w-full h-full object-cover" />
+                        : <div className="w-full h-full bg-blue-600/10 text-blue-600 flex items-center justify-center text-xs font-black">{idx + 1}</div>
+                    }
                     </div>
                     <div className="flex-1 min-w-0">
                     <p className="font-black text-sm text-(--t1) group-hover:text-blue-600 transition-colors truncate">{team.name}</p>

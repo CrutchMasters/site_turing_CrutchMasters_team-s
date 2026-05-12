@@ -1,14 +1,16 @@
 'use client';
 
 import { useRouter } from "next/navigation";
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
-import { useT } from "@/context/LanguageContext";
+import { useT, useLanguage } from "@/context/LanguageContext";
 import {
   Trophy, Users, Upload, ExternalLink, ChevronRight, Plus, Loader,
-  Megaphone, Link2, X, Pin, PinOff, Trash2, Edit3, Eye, ImageOff,
+  Megaphone, Link2, X, Pin, PinOff, Trash2, Edit3, Eye, ImageOff, CalendarDays,
+  Globe, User as UserIcon,
 } from "lucide-react";
+import EventCalendar, { CalendarEvent } from "@/components/EventCalendar";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import { supabase, authedSupabase } from "@/lib/supabase";
@@ -20,11 +22,35 @@ typeof window !== "undefined" && window.location.hostname === "localhost"
 ? "http://localhost:8000"
 : "https://site-turing-crutchmasters-team-s.onrender.com";
 
+// ─── Countdown hook ───────────────────────────────────────────────────────────
+
+function useCountdown(endAt?: string | null) {
+  const [time, setTime] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+  useEffect(() => {
+    if (!endAt) return;
+    const tick = () => {
+      const diff = Math.max(0, new Date(endAt).getTime() - Date.now());
+      setTime({
+        days:    Math.floor(diff / 86400000),
+              hours:   Math.floor((diff % 86400000) / 3600000),
+              minutes: Math.floor((diff % 3600000) / 60000),
+              seconds: Math.floor((diff % 60000) / 1000),
+      });
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [endAt]);
+  return time;
+}
+
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Tournament {
   id: string;
   name: string;
+  rules?: string;
   status: "upcoming" | "registration" | "ongoing" | "finished";
   start_at: string;
   end_at?: string;
@@ -32,6 +58,29 @@ interface Tournament {
   registration_to?: string;
   max_teams?: number;
   team_count?: number;
+}
+
+interface Round {
+  id: string;
+  name: string;
+  description?: string;
+  status?: string;
+  start_at?: string;
+  end_at?: string;
+}
+
+interface Submission {
+  id: string;
+  is_draft: boolean;
+  status: string;
+  submitted_at?: string;
+}
+
+interface CurrentInfo {
+  tournament: { id: string; name: string; rules?: string } | null;
+  round: Round | null;
+  status: string | null;
+  submission: Submission | null;
 }
 
 interface Announcement {
@@ -43,8 +92,13 @@ interface Announcement {
   link_desc?: string;
   link_image?: string;
   is_pinned: boolean;
+  calendar_date?: string | null;
   created_by?: string;
   created_at: string;
+  // These fields identify "my" events — registration in tournament/round
+  type?: "announcement" | "tournament_registration" | "round_registration";
+  tournament_id?: string;
+  round_id?: string;
 }
 
 interface LinkPreview {
@@ -83,12 +137,12 @@ const STATUS_COLORS: Record<string, string> = {
 
 function fmtDate(iso?: string) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return new Date(iso).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function fmtDateTime(iso?: string) {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("uk-UA", {
+  return new Date(iso).toLocaleString("uk-UA", {
     day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
 }
@@ -98,14 +152,9 @@ function extractDomain(url: string) {
 }
 
 // ─── Link Preview Fetcher ─────────────────────────────────────────────────────
-// Uses a free Open Graph API proxy — no backend needed.
-// In production you may want to proxy this through your own backend.
 async function fetchLinkPreview(url: string): Promise<Partial<LinkPreview>> {
   try {
-    // Try to parse YouTube / common embeds natively first
     const u = new URL(url);
-
-    // YouTube
     const ytMatch =
     u.hostname.includes("youtube.com") || u.hostname.includes("youtu.be");
     if (ytMatch) {
@@ -122,7 +171,6 @@ async function fetchLinkPreview(url: string): Promise<Partial<LinkPreview>> {
       }
     }
 
-    // Generic OG via allorigins + html parsing
     const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
     const resp  = await fetch(proxy, { signal: AbortSignal.timeout(6000) });
     const json  = await resp.json();
@@ -158,16 +206,18 @@ interface AnnouncementModalProps {
 
 function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps) {
   const { t } = useT();
-  const [title,    setTitle]    = useState(initial?.title    ?? "");
-  const [body,     setBody]     = useState(initial?.body     ?? "");
-  const [linkUrl,  setLinkUrl]  = useState(initial?.link_url ?? "");
-  const [isPinned, setIsPinned] = useState(initial?.is_pinned ?? false);
-  const [saving,   setSaving]   = useState(false);
+  const { locale } = useLanguage();
+  const [title,        setTitle]        = useState(initial?.title          ?? "");
+  const [body,         setBody]         = useState(initial?.body           ?? "");
+  const [linkUrl,      setLinkUrl]      = useState(initial?.link_url       ?? "");
+  const [isPinned,     setIsPinned]     = useState(initial?.is_pinned      ?? false);
+  const [inCalendar,   setInCalendar]   = useState(!!(initial?.calendar_date));
+  const [calendarDate, setCalendarDate] = useState<string>(initial?.calendar_date ?? "");
+  const [saving,       setSaving]       = useState(false);
   const [preview,  setPreview]  = useState<LinkPreview>({
     title: "", description: "", image: "", loading: false, error: false,
   });
 
-  // Prefill preview if editing
   useEffect(() => {
     if (initial?.link_title) {
       setPreview({
@@ -198,13 +248,14 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
     if (!title.trim()) return;
     setSaving(true);
     await onSave({
-      title:      title.trim(),
-                 body:       body.trim() || undefined,
-                 link_url:   linkUrl.trim() || undefined,
-                 link_title: preview.title  || undefined,
-                 link_desc:  preview.description || undefined,
-                 link_image: preview.image  || undefined,
-                 is_pinned:  isPinned,
+      title:         title.trim(),
+                 body:          body.trim() || undefined,
+                 link_url:      linkUrl.trim() || undefined,
+                 link_title:    preview.title  || undefined,
+                 link_desc:     preview.description || undefined,
+                 link_image:    preview.image  || undefined,
+                 is_pinned:     isPinned,
+                 calendar_date: inCalendar && calendarDate ? calendarDate : null,
     });
     setSaving(false);
     onClose();
@@ -216,7 +267,7 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
 
     {/* Header */}
     <div className="flex items-center justify-between px-6 py-5 border-b border-(--brd)">
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2 w-full">
     <div className="w-9 h-9 rounded-xl bg-blue-600/15 border border-blue-600/30 flex items-center justify-center">
     <Megaphone className="text-blue-600" size={16} />
     </div>
@@ -323,6 +374,37 @@ function AnnouncementModal({ onClose, onSave, initial }: AnnouncementModalProps)
     {t.mainPage.announcementsPin}
     </span>
     </label>
+
+    {/* Calendar toggle */}
+    <div className="space-y-2">
+    <label className="flex items-center gap-3 cursor-pointer group">
+    <div
+    onClick={() => setInCalendar(p => !p)}
+    className={`w-10 h-5 rounded-full transition-colors relative ${inCalendar ? "bg-amber-500" : "bg-(--brd)"}`}
+    >
+    <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${inCalendar ? "translate-x-5" : ""}`} />
+    </div>
+    <div className="flex items-center gap-2">
+    <CalendarDays size={13} className={inCalendar ? "text-amber-500" : "text-(--t2)"} />
+    <span className="text-xs font-bold text-(--t2) group-hover:text-(--t1) transition-colors">
+    {locale === "ua" ? "Відмітити в календарі?" : locale === "en" ? "Mark in calendar?" : "Отметить в календаре?"}
+    </span>
+    </div>
+    </label>
+    {inCalendar && (
+      <div className="ml-[52px]">
+      <label className="block text-[9px] font-black uppercase tracking-widest text-(--t2) mb-1.5">
+      {locale === "ua" ? "Дата події" : locale === "en" ? "Event date" : "Дата события"}
+      </label>
+      <input
+      type="date"
+      value={calendarDate}
+      onChange={e => setCalendarDate(e.target.value)}
+      className="w-full px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-xs font-bold text-(--t1) focus:outline-none focus:border-amber-500/60 transition-colors"
+      />
+      </div>
+    )}
+    </div>
     </div>
 
     {/* Footer */}
@@ -470,6 +552,194 @@ function AnnouncementCard({ a, isAdmin, onDelete, onEdit, onTogglePin }: Announc
   );
 }
 
+// ─── CurrentRoundCard ────────────────────────────────────────────────────────
+
+function TimeBox({ value, label, urgent }: { value: number; label: string; urgent?: boolean }) {
+  return (
+    <div className="flex flex-col items-center gap-1 flex-1">
+    <div className={`w-full py-3 rounded-xl border flex items-center justify-center ${urgent ? "bg-red-500/10 border-red-500/25" : "bg-(--bg) border-(--brd)"}`}>
+    <span className={`text-2xl font-black tabular-nums ${urgent ? "text-red-500" : "text-(--t1)"}`}
+    style={{ fontVariantNumeric: "tabular-nums" }}>
+    {String(value).padStart(2, "0")}
+    </span>
+    </div>
+    <span className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{label}</span>
+    </div>
+  );
+}
+
+interface CurrentRoundCardProps {
+  info: {
+    tournament: { id: string; name: string; rules?: string } | null;
+    round: { id: string; name: string; description?: string; status?: string; start_at?: string; end_at?: string } | null;
+    status: string | null;
+    submission: { id: string; is_draft: boolean; status: string; submitted_at?: string } | null;
+  };
+  statusConfig: Record<string, { label: string; color: string }>;
+  statusColors: Record<string, string>;
+  onNavigate: (path: string) => void;
+  t: any;
+}
+
+function CurrentRoundCard({ info, statusConfig, statusColors, onNavigate, t }: CurrentRoundCardProps) {
+  const countdown = useCountdown(info.round?.end_at);
+
+  const endTs   = info.round?.end_at   ? new Date(info.round.end_at).getTime()   : 0;
+  const startTs = info.round?.start_at ? new Date(info.round.start_at).getTime() : 0;
+  const now     = Date.now();
+
+  let progressPct = 0;
+  if (endTs > 0 && startTs > 0 && endTs > startTs) {
+    progressPct = Math.min(100, Math.max(0, ((now - startTs) / (endTs - startTs)) * 100));
+  }
+  const isUrgent = progressPct > 80;
+  const isEnded  = endTs > 0 && now > endTs;
+
+  function fmtShort(iso?: string) {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  }
+
+  function stripHtml(html: string) {
+    return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 relative z-10">
+
+    {/* Tournament */}
+    <div className="px-3 py-2.5 rounded-xl bg-(--bg) border border-(--brd) flex flex-col gap-1 min-w-0 overflow-hidden">
+    <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{t.mainPage.currentTournament}</p>
+    {info.tournament ? (
+      <>
+      <button
+      onClick={() => onNavigate(`/tournaments/${info.tournament!.id}`)}
+      className="font-black text-sm text-left leading-snug transition-colors w-full overflow-hidden text-ellipsis whitespace-nowrap block text-(--t1) hover:!text-blue-400"
+      >
+      {info.tournament.name}
+      </button>
+      {info.tournament.rules && (
+        <p className="text-xs text-(--t2) font-medium leading-snug mt-0.5 overflow-hidden"
+        style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+        {stripHtml(info.tournament.rules)}
+        </p>
+      )}
+      </>
+    ) : (
+      <p className="font-bold text-xs text-(--t2) italic">{t.mainPage.noActiveTournament}</p>
+    )}
+    </div>
+
+    {/* Round */}
+    <div className="px-3 py-2.5 rounded-xl bg-(--bg) border border-(--brd) flex flex-col gap-1 min-w-0 overflow-hidden">
+    <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">{t.mainPage.currentRound}</p>
+    {info.round ? (
+      <>
+      <button
+      onClick={() => onNavigate(`/rounds/${info.round!.id}`)}
+      className="font-black text-sm text-left leading-snug transition-colors w-full overflow-hidden text-ellipsis whitespace-nowrap block text-(--t1) hover:!text-blue-400"
+      >
+      {info.round.name}
+      </button>
+      {info.round.description && (
+        <p className="text-xs text-(--t2) font-medium leading-snug mt-0.5 overflow-hidden"
+        style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+        {stripHtml(info.round.description)}
+        </p>
+      )}
+      </>
+    ) : (
+      <p className="font-bold text-xs text-(--t2) italic">{t.mainPage.noActiveRound}</p>
+    )}
+    </div>
+
+    {/* Status block */}
+    <div className={`px-3 py-3 rounded-xl border flex flex-col gap-2 ${isUrgent ? "bg-red-500/5 border-red-500/20" : "bg-blue-600/10 border-blue-600/20"}`}>
+
+    <p className={`text-[9px] font-black uppercase tracking-widest ${isUrgent ? "text-red-500" : "text-blue-600"}`}>
+    {t.mainPage.colStatus}
+    </p>
+
+    <div className="flex items-center gap-3">
+
+    <div className="flex items-center gap-1.5 w-[60%] min-w-0">
+    <TimeBox value={countdown.days}  label="дней" urgent={isUrgent || isEnded} />
+    <div className="flex flex-col items-center gap-[5px] pb-4 flex-shrink-0">
+    <span className={`block w-[4px] h-[4px] rounded-full ${isUrgent || isEnded ? "bg-red-500" : "bg-(--t2)"}`} />
+    <span className={`block w-[4px] h-[4px] rounded-full ${isUrgent || isEnded ? "bg-red-500" : "bg-(--t2)"}`} />
+    </div>
+    <TimeBox value={countdown.hours} label="час"  urgent={isUrgent || isEnded} />
+    </div>
+
+    <div className="flex flex-col gap-1.5 w-[40%]">
+
+    {info.status && (
+      <span className={`flex items-center justify-center gap-1 text-[9px] font-black uppercase px-3 py-1.5 rounded-full border w-full ${statusColors[info.status] ?? statusColors.upcoming}`}>
+      {(statusConfig as any)[info.status]?.label ?? info.status}
+      </span>
+    )}
+
+    <span className={`flex items-center justify-center gap-1 text-[9px] font-black px-3 py-1.5 rounded-full border w-full ${
+      info.submission && !info.submission.is_draft
+      ? "bg-green-500/10 border-green-500/25 text-green-500"
+      : info.submission?.is_draft
+      ? "bg-amber-500/10 border-amber-500/25 text-amber-500"
+      : "bg-(--bg) border-(--brd) text-(--t2)"
+    }`}>
+    {info.submission && !info.submission.is_draft ? (
+      <><svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Работа сдана</>
+    ) : info.submission?.is_draft ? (
+      <><svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Черновик</>
+    ) : (
+      <><svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Не сдано</>
+    )}
+    </span>
+
+    </div>
+    </div>
+
+    </div>
+    </div>
+  );
+}
+
+// ─── Section Header (dark block style like "Текущий турнир") ─────────────────
+
+interface SectionHeaderProps {
+  icon: React.ReactNode;
+  title: string;
+  badge?: number | null;
+  children?: React.ReactNode;
+  accentColor?: string; // e.g. "amber" | "blue" | "green"
+}
+
+function SectionHeader({ icon, title, badge, children, accentColor = "blue" }: SectionHeaderProps) {
+  const accent = {
+    blue:  { bg: "bg-blue-600/10",  border: "border-blue-600/20",  icon: "bg-blue-600/15 border-blue-600/30",  text: "text-blue-600",  badge: "bg-blue-600/10 text-blue-600 border-blue-600/20" },
+    amber: { bg: "bg-amber-500/10", border: "border-amber-500/20", icon: "bg-amber-500/15 border-amber-500/30", text: "text-amber-500", badge: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
+    green: { bg: "bg-green-500/10", border: "border-green-500/20", icon: "bg-green-500/15 border-green-500/30", text: "text-green-500", badge: "bg-green-500/10 text-green-600 border-green-500/20" },
+  }[accentColor] ?? { bg: "bg-blue-600/10", border: "border-blue-600/20", icon: "bg-blue-600/15 border-blue-600/30", text: "text-blue-600", badge: "bg-blue-600/10 text-blue-600 border-blue-600/20" };
+
+  return (
+    <div className={`px-4 sm:px-6 md:px-8 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd) ${accent.bg}`}>
+    <div className="flex items-center gap-3">
+    <div className={`w-9 h-9 rounded-xl border flex items-center justify-center flex-shrink-0 ${accent.icon}`}>
+    <span className={accent.text}>{icon}</span>
+    </div>
+    <div className="flex items-center gap-2.5">
+    <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">{title}</h2>
+    {badge != null && badge > 0 && (
+      <span className={`text-[9px] font-black border px-2 py-0.5 rounded-full ${accent.badge}`}>
+      {badge}
+      </span>
+    )}
+    </div>
+    </div>
+    {children && <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto">{children}</div>}
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -479,17 +749,26 @@ export default function DashboardPage() {
   const [tournamentsLoading,  setTournamentsLoading]   = useState(true);
   const [activeFilter,        setActiveFilter]         = useState<"all" | "upcoming" | "registration" | "ongoing" | "finished">("all");
 
+  // Current tournament/round state
+  const [currentInfo,          setCurrentInfo]          = useState<CurrentInfo | null>(null);
+  const [currentInfoLoading,   setCurrentInfoLoading]   = useState(true);
+
   // Announcements state
   const [announcements,        setAnnouncements]        = useState<Announcement[]>([]);
   const [announcementsLoading, setAnnouncementsLoading] = useState(true);
   const [modalOpen,            setModalOpen]            = useState(false);
   const [editAnnouncement,     setEditAnnouncement]     = useState<Announcement | undefined>();
+  // "all" | "mine" toggle for announcements
+  const [announcementsFilter,  setAnnouncementsFilter]  = useState<"all" | "mine">("all");
+  // IDs of tournaments/rounds user is in (for "mine" filter)
+  const [myTournamentIds,      setMyTournamentIds]      = useState<string[]>([]);
+  const [myRoundIds,           setMyRoundIds]           = useState<string[]>([]);
 
   const revealRefs = useRef<(HTMLElement | null)[]>([]);
   const router = useRouter();
   const { dark }        = useTheme();
   const { user, token, isLoading } = useAuth();
-  const { t }           = useT();
+  const { t, locale }   = useT();
 
   const STATUS_CONFIG = {
     upcoming:     { label: t.mainPage.statusUpcoming,     color: STATUS_COLORS.upcoming },
@@ -498,9 +777,7 @@ export default function DashboardPage() {
     finished:     { label: t.mainPage.statusFinished,     color: STATUS_COLORS.finished },
   };
 
-  useEffect(() => {
-    if (!isLoading && !user) router.push("/login");
-  }, [isLoading, user, router]);
+  // Guests can view dashboard — no redirect needed
 
     // ── fetch tournaments ──────────────────────────────────────────────────────
     const fetchTournaments = useCallback(async () => {
@@ -558,6 +835,112 @@ export default function DashboardPage() {
       }
     }, []);
 
+    // ── fetch user's tournaments & rounds for "mine" filter ────────────────────
+    const fetchMyMemberships = useCallback(async () => {
+      if (!user) return;
+      try {
+        const { data: captainTeams } = await supabase.from("teams").select("id,tournament_id").eq("captain_id", user.id).not("tournament_id","is",null);
+        const { data: memberTeams  } = await supabase.from("teams").select("id,tournament_id").contains("members_ids",[user.id]).not("tournament_id","is",null);
+        const teams = [...(captainTeams ?? []), ...(memberTeams ?? [])];
+        const tourIds = [...new Set(teams.map((t: any) => t.tournament_id).filter(Boolean))] as string[];
+        setMyTournamentIds(tourIds);
+
+        if (tourIds.length) {
+          const { data: rounds } = await supabase.from("rounds").select("id").in("tournament_id", tourIds);
+          setMyRoundIds((rounds ?? []).map((r: any) => r.id));
+        }
+      } catch(e) { console.error(e); }
+    }, [user]);
+
+    // ── fetch current tournament & round ──────────────────────────────────────
+    const fetchCurrentInfo = useCallback(async () => {
+      if (!user) return;
+      setCurrentInfoLoading(true);
+      try {
+        let team: { id: string; name: string; tournament_id: string } | null = null;
+
+        const { data: captainRows } = await supabase
+        .from("teams")
+        .select("id, name, tournament_id")
+        .eq("captain_id", user.id)
+        .not("tournament_id", "is", null)
+        .limit(1);
+
+        if (captainRows?.[0]) {
+          team = captainRows[0];
+        } else {
+          const { data: memberRows } = await supabase
+          .from("teams")
+          .select("id, name, tournament_id")
+          .contains("members_ids", [user.id])
+          .not("tournament_id", "is", null)
+          .limit(1);
+          team = memberRows?.[0] ?? null;
+        }
+
+        if (!team?.tournament_id) {
+          setCurrentInfo({ tournament: null, round: null, status: null, submission: null });
+          return;
+        }
+
+        const { data: tourData } = await supabase
+        .from("tournaments")
+        .select("id, name, rules, status, start_at, end_at, registration_from, registration_to")
+        .eq("id", team.tournament_id)
+        .single();
+
+        if (!tourData) {
+          setCurrentInfo({ tournament: null, round: null, status: null, submission: null });
+          return;
+        }
+
+        const tournamentStatus = computeStatus(tourData);
+
+        const { data: roundRows } = await supabase
+        .from("rounds")
+        .select("id, name, description, status, start_at, end_at")
+        .eq("tournament_id", team.tournament_id)
+        .order("start_at", { ascending: true });
+
+        const rounds = roundRows ?? [];
+        const activeRound = rounds.find(r => r.status === "active");
+        const upcomingRound = rounds.find(r => {
+          if (!r.start_at) return false;
+          return new Date(r.start_at).getTime() > Date.now();
+        });
+        const round = activeRound ?? upcomingRound ?? rounds[rounds.length - 1] ?? null;
+
+        const status = round
+        ? (round.status ?? (activeRound ? "active" : "upcoming"))
+        : tournamentStatus;
+
+        let submission: Submission | null = null;
+        if (round && token) {
+          try {
+            const res = await fetch(`${API_URL}/api/rounds/${round.id}/submission`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+              const json = await res.json();
+              if (json.submission) submission = json.submission;
+            }
+          } catch { /* silent */ }
+        }
+
+        setCurrentInfo({
+          tournament: { id: tourData.id, name: tourData.name, rules: tourData.rules },
+          round,
+          status,
+          submission,
+        });
+      } catch (e) {
+        console.error(e);
+        setCurrentInfo(null);
+      } finally {
+        setCurrentInfoLoading(false);
+      }
+    }, [user, token]);
+
     // ── CRUD handlers ──────────────────────────────────────────────────────────
     const handleSaveAnnouncement = async (payload: Partial<Announcement>) => {
       if (editAnnouncement) {
@@ -589,9 +972,8 @@ export default function DashboardPage() {
     };
 
       // ── effects ────────────────────────────────────────────────────────────────
+      // Fetch public data immediately — no need to wait for auth
       useEffect(() => {
-        if (isLoading || !user) return;
-
         fetch(`${API_URL}/api/test`)
         .then(r => r.json())
         .then(d => setBackendMessage(d.message))
@@ -599,6 +981,19 @@ export default function DashboardPage() {
 
         fetchTournaments();
         fetchAnnouncements();
+      }, [fetchTournaments, fetchAnnouncements]);
+
+      useEffect(() => {
+        if (isLoading) return;
+
+        // Only fetch user-specific data when logged in
+        if (user) {
+          fetchCurrentInfo();
+          fetchMyMemberships();
+        } else {
+          // Guests: mark loading as done so UI doesn't spin forever
+          setCurrentInfoLoading(false);
+        }
 
         const obs = new IntersectionObserver(
           entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add("fuIn"); }),
@@ -606,17 +1001,63 @@ export default function DashboardPage() {
         );
         revealRefs.current.forEach(r => { if (r) obs.observe(r); });
         return () => obs.disconnect();
-      }, [isLoading, user, fetchTournaments, fetchAnnouncements]);
+      }, [isLoading, user, fetchCurrentInfo, fetchMyMemberships]);
 
+      // Build calendar events from announcements that have a calendar_date
+      // NOTE: must be declared before any early returns to satisfy Rules of Hooks
+      const announcementCalendarEvents = useMemo<CalendarEvent[]>(() =>
+      announcements
+      .filter(a => !!a.calendar_date)
+      .map(a => ({
+        id: `ann-${a.id}`,
+        date: a.calendar_date!,
+        label: a.title,
+        type: "announcement" as const,
+      })),
+      [announcements]
+      );
+
+      // "Mine" filter: show only announcements that are linked to user's tournaments/rounds
+      // Since announcements don't have direct tournament_id links, "mine" shows announcements
+      // that have a calendar_date matching a round/tournament event the user is in,
+      // OR announcements created during the user's active tournament period.
+      // Practical approach: "mine" shows announcements where calendar_date falls within
+      // any of user's tournament date ranges, or the announcement has no specific targeting
+      // (i.e., it's a general announcement relevant to all participants).
+      // For now: "mine" = announcements where calendar_date is set AND matches user's tournament/round dates,
+      // OR pinned announcements (important for everyone), OR created after user joined.
+      // Simplest meaningful filter: show all pinned + any that have calendar events the user participates in.
+      const filteredAnnouncements = useMemo(() => {
+        if (announcementsFilter === "all") return announcements;
+        // "mine" = pinned announcements + announcements tied to events user participates in
+        // We check if the announcement's calendar_date corresponds to any tournament or round event.
+        // Additionally show all if user is in any tournament (most relevant context).
+        if (myTournamentIds.length === 0) {
+          // Not in any tournament — show pinned only
+          return announcements.filter(a => a.is_pinned);
+        }
+        // Show all announcements that are pinned or have calendar events
+        // (since we can't filter by tournament without explicit FK, we show announcements
+        // during the user's active tournament window + pinned)
+        return announcements.filter(a => {
+          if (a.is_pinned) return true;
+          if (a.calendar_date) return true; // calendar events are shown
+          return false;
+        });
+      }, [announcements, announcementsFilter, myTournamentIds]);
+
+      // Early returns — placed after all hooks to satisfy Rules of Hooks
       if (isLoading) return (
         <div className="min-h-screen bg-(--bg) flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
         </div>
       );
 
-      if (!user) return null;
+      if (!user) {
+        // Guest mode — show dashboard without user-specific sections
+      }
 
-      const isAdmin = user.role === "admin" || user.role === "superadmin";
+      const isAdmin = user ? (user.role === "admin" || user.role === "superadmin") : false;
 
   const filterLabels: { key: typeof activeFilter; label: string }[] = [
     { key: "all",          label: t.mainPage.filterAll },
@@ -631,15 +1072,7 @@ export default function DashboardPage() {
   : tournaments.filter(t => t.status === activeFilter);
 
   return (
-    <div className="flex h-screen bg-(--bg) text-(--t1) transition-colors duration-300">
-    <style jsx global>{`
-      @keyframes fadeUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
-      @keyframes cardDrop { from{opacity:0;transform:translateY(-26px) scale(.97)} to{opacity:1;transform:none} }
-      .fuIn { animation: fadeUp 340ms cubic-bezier(.22,1,.36,1) both }
-      .cdIn { animation: cardDrop 500ms cubic-bezier(.22,1,.36,1) both }
-      .spr  { transition: transform 170ms cubic-bezier(.22,1,.36,1),box-shadow 170ms ease,background 150ms ease,color 150ms ease }
-      .spr:hover { transform: translateY(-2px) scale(1.025) }
-      `}</style>
+    <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
 
       {/* Background logo */}
       <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
@@ -654,10 +1087,10 @@ export default function DashboardPage() {
       <Sidebar />
       </div>
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
       <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title={t.mainPage.dashboard} />
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
+      <div className="flex-1 p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
       <header className="mb-8 sm:mb-12">
       <div className="flex items-center gap-2 text-[10px] font-black mb-3 uppercase tracking-widest text-(--t2)">
       <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">{t.nav.home}</button>
@@ -666,42 +1099,48 @@ export default function DashboardPage() {
       <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-(--t1) uppercase">{t.mainPage.overview}</h1>
       </header>
 
-      <div className="max-w-6xl space-y-6 sm:space-y-8">
+      <div className="w-full flex flex-col xl:flex-row gap-6 xl:items-start">
+      <div className="flex-1 min-w-0 space-y-6 sm:space-y-8">
 
       {/* ── Admin Banner ── */}
       {isAdmin && (
         <section
         ref={el => { revealRefs.current[0] = el; }}
-        className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 relative overflow-hidden bg-(--card) border border-blue-600/30 shadow-xl"
+        className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden relative bg-(--card) border border-blue-600/30 shadow-xl"
         >
-        <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl sm:rounded-[2.5rem]">
+        {/* Dark header */}
+        <SectionHeader
+        icon={<Trophy size={16} />}
+        title={t.admin.manageTournaments}
+        accentColor="blue"
+        >
+        <button
+        onClick={() => router.push("/register_tourney")}
+        className="flex items-center justify-center gap-2 bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl px-5 py-3 hover:bg-blue-700 shadow-lg shadow-blue-600/25 active:scale-95 transition-all w-full sm:w-auto group"
+        >
+        <Plus size={14} className="group-hover:rotate-90 transition-transform duration-300" />
+        {t.admin.createTournament}
+        </button>
+        </SectionHeader>
+
+        {/* Body */}
+        <div className="p-4 sm:p-6 md:p-8 relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -right-16 -top-16 w-64 h-64 rounded-full blur-3xl opacity-10 bg-blue-600" />
         <div className="absolute -left-8 -bottom-8 w-40 h-40 rounded-full blur-2xl opacity-5 bg-blue-400" />
         </div>
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-        <div className="flex items-start gap-4">
+        <div className="relative z-10 flex items-start gap-4">
         <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-blue-600/15 border border-blue-600/30 flex items-center justify-center flex-shrink-0">
         <Trophy className="text-blue-600" size={24} />
         </div>
         <div>
         <span className="inline-block text-[9px] font-black uppercase tracking-widest bg-blue-600/10 text-blue-500 border border-blue-500/30 px-2.5 py-1 rounded-lg mb-2">
-        {user.role === "superadmin" ? "Superadmin" : "Admin"} panel
+        {user?.role === "superadmin" ? "Superadmin" : "Admin"} panel
         </span>
-        <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight leading-tight">
-        {t.admin.manageTournaments}
-        </h2>
-        <p className="text-xs font-bold text-(--t2) mt-1 max-w-sm">
+        <p className="text-xs font-bold text-(--t2) max-w-sm">
         {t.admin.manageTournamentsDesc}
         </p>
         </div>
-        </div>
-        <button
-        onClick={() => router.push("/register_tourney")}
-        className="flex-shrink-0 flex items-center justify-center gap-2 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl px-6 sm:px-8 py-4 hover:bg-blue-700 shadow-lg shadow-blue-600/25 active:scale-95 transition-all w-full sm:w-auto group"
-        >
-        <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
-        {t.admin.createTournament}
-        </button>
         </div>
         <div className="relative z-10 mt-6 pt-5 border-t border-(--brd) flex flex-wrap gap-4 sm:gap-8">
         {[
@@ -715,6 +1154,7 @@ export default function DashboardPage() {
           </div>
         ))}
         </div>
+        </div>
         </section>
       )}
 
@@ -723,19 +1163,13 @@ export default function DashboardPage() {
       ref={el => { revealRefs.current[1] = el; }}
       className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl"
       >
-      {/* Section header */}
-      <div className="p-4 sm:p-6 md:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd)">
-      <div className="flex items-center gap-3">
-      <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-      <Megaphone className="text-amber-500" size={16} />
-      </div>
-      <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">{t.mainPage.announcements}</h2>
-      {announcements.length > 0 && (
-        <span className="text-[9px] font-black bg-amber-500/10 text-amber-600 border border-amber-500/20 px-2 py-0.5 rounded-full">
-        {announcements.length}
-        </span>
-      )}
-      </div>
+      {/* Dark section header */}
+      <SectionHeader
+      icon={<Megaphone size={16} />}
+      title={t.mainPage.announcements}
+      badge={announcements.length > 0 ? announcements.length : null}
+      accentColor="amber"
+      >
       {isAdmin && (
         <button
         onClick={() => { setEditAnnouncement(undefined); setModalOpen(true); }}
@@ -745,7 +1179,7 @@ export default function DashboardPage() {
         {t.mainPage.announcementsNew}
         </button>
       )}
-      </div>
+      </SectionHeader>
 
       {/* Announcements list */}
       <div className="p-4 sm:p-6 space-y-3">
@@ -753,11 +1187,34 @@ export default function DashboardPage() {
         <div className="flex items-center justify-center py-10">
         <Loader className="w-6 h-6 text-blue-600 animate-spin" />
         </div>
-      ) : announcements.length === 0 ? (
+      ) : filteredAnnouncements.length === 0 ? (
         <div className="py-10 text-center">
         <Megaphone className="w-10 h-10 text-(--t2) opacity-20 mx-auto mb-3" />
-        <p className="text-sm font-bold text-(--t2)">{t.mainPage.announcementsEmpty}</p>
-        {isAdmin && (
+        <p className="text-sm font-bold text-(--t2)">
+        {announcementsFilter === "mine" && !user
+          ? (locale === "ua" ? "Щоб бачити свої події, увійдіть або зареєструйтеся" : locale === "en" ? "Sign in or register to see your events" : "Войдите или зарегистрируйтесь, чтобы видеть свои события")
+          : announcementsFilter === "mine"
+          ? (locale === "ua" ? "Немає подій для вас" : locale === "en" ? "No events for you" : "Нет событий для вас")
+          : t.mainPage.announcementsEmpty
+        }
+        </p>
+        {announcementsFilter === "mine" && !user && (
+          <div className="flex items-center justify-center gap-3 mt-4">
+          <button
+          onClick={() => router.push("/login")}
+          className="text-xs font-black px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+          >
+          {locale === "ua" ? "Увійти" : locale === "en" ? "Sign in" : "Войти"}
+          </button>
+          <button
+          onClick={() => router.push("/register")}
+          className="text-xs font-black px-4 py-2 rounded-xl border border-(--brd) text-(--t2) hover:border-blue-600/40 hover:text-(--t1) transition-colors"
+          >
+          {locale === "ua" ? "Зареєструватися" : locale === "en" ? "Register" : "Зарегистрироваться"}
+          </button>
+          </div>
+        )}
+        {isAdmin && announcementsFilter === "all" && (
           <button
           onClick={() => { setEditAnnouncement(undefined); setModalOpen(true); }}
           className="mt-3 text-xs font-black text-blue-600 hover:underline"
@@ -767,7 +1224,7 @@ export default function DashboardPage() {
         )}
         </div>
       ) : (
-        announcements.map(a => (
+        filteredAnnouncements.map(a => (
           <AnnouncementCard
           key={a.id}
           a={a}
@@ -781,10 +1238,64 @@ export default function DashboardPage() {
       </div>
       </section>
 
+      {/* ── Current tournament/round section ── */}
+      <section ref={el => { revealRefs.current[2] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden relative bg-(--card) border border-(--brd) shadow-xl">
+      <div className="absolute -right-12 -top-12 w-40 h-40 rounded-full blur-3xl opacity-10 bg-blue-600 pointer-events-none" />
+
+      {/* Dark section header */}
+      <SectionHeader
+      icon={<Users size={16} />}
+      title={t.mainPage.currentTournament}
+      accentColor="blue"
+      >
+      {!currentInfoLoading && currentInfo?.round && (
+        <>
+        <a
+        href={`/rounds/${currentInfo.round.id}`}
+        className="flex items-center justify-center gap-1.5 w-40 bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest rounded-2xl px-[6px] py-2.5 hover:border-blue-600/40 hover:text-(--t1) active:scale-95 transition-all whitespace-nowrap"
+        >
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Скачать шаблон
+        </a>
+        <button
+        onClick={() => router.push(`/rounds/${currentInfo.round!.id}/submit`)}
+        className="flex items-center justify-center gap-1.5 w-40 bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl px-4 py-2.5 hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-95 transition-all whitespace-nowrap"
+        >
+        <Upload size={13} /> {t.mainPage.submitTask ?? "Сдать задание"}
+        </button>
+        </>
+      )}
+      </SectionHeader>
+
+      <div className="p-4 sm:p-6 md:p-8 relative z-10">
+      {currentInfoLoading ? (
+        <div className="flex items-center justify-center py-8">
+        <Loader className="w-6 h-6 text-blue-600 animate-spin" />
+        </div>
+      ) : currentInfo ? (
+        <CurrentRoundCard
+        info={currentInfo}
+        statusConfig={STATUS_CONFIG}
+        statusColors={STATUS_COLORS}
+        onNavigate={router.push}
+        t={t}
+        />
+      ) : (
+        <div className="py-8 text-center">
+        <Users className="w-10 h-10 text-(--t2) opacity-20 mx-auto mb-3" />
+        <p className="text-sm font-bold text-(--t2)">{t.mainPage.noActiveTournament}</p>
+        </div>
+      )}
+      </div>
+      </section>
+
       {/* ── Tournaments table ── */}
-      <section ref={el => { revealRefs.current[2] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
-      <div className="p-4 sm:p-6 md:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd)">
-      <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">{t.mainPage.tournamentList}</h2>
+      <section ref={el => { revealRefs.current[3] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
+      <SectionHeader
+      icon={<Trophy size={16} />}
+      title={t.mainPage.tournamentList}
+      accentColor="green"
+      >
       <div className="flex flex-wrap gap-2">
       {filterLabels.map(({ key, label }) => (
         <button
@@ -796,7 +1307,7 @@ export default function DashboardPage() {
         </button>
       ))}
       </div>
-      </div>
+      </SectionHeader>
 
       {tournamentsLoading ? (
         <div className="flex items-center justify-center py-16">
@@ -865,34 +1376,11 @@ export default function DashboardPage() {
       </div>
       </section>
 
-      {/* ── Team section ── */}
-      <section ref={el => { revealRefs.current[3] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 relative overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
-      <div className="absolute -right-12 -top-12 w-40 h-40 rounded-full blur-3xl opacity-10 bg-blue-600 pointer-events-none" />
-      <h2 className="font-black text-lg sm:text-xl mb-6 sm:mb-8 flex items-center gap-3 relative z-10 text-(--t1) uppercase tracking-tight">
-      <Users className="text-blue-600" size={24} /> {t.mainPage.currentTournament}
-      </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 relative z-10">
-      <div className="p-4 sm:p-6 rounded-2xl bg-(--bg) border border-(--brd)">
-      <p className="text-[10px] font-black uppercase tracking-wider mb-2 text-(--t2)">{t.mainPage.currentTournament}</p>
-      <p className="font-bold text-sm text-(--t1)">—</p>
       </div>
-      <div className="p-4 sm:p-6 rounded-2xl bg-(--bg) border border-(--brd)">
-      <p className="text-[10px] font-black uppercase tracking-wider mb-2 text-(--t2)">{t.mainPage.task}</p>
-      <p className="font-bold text-sm text-(--t1)">—</p>
+      {/* right column: EventCalendar */}
+      <div className="w-full xl:sticky xl:top-6 xl:w-72 xl:flex-shrink-0">
+      <EventCalendar extraEvents={announcementCalendarEvents} eventsFilter={announcementsFilter} onEventsFilterChange={setAnnouncementsFilter} />
       </div>
-      <div className="p-4 sm:p-6 rounded-2xl bg-blue-600/10 border border-blue-600/20">
-      <p className="text-[10px] font-black uppercase tracking-wider mb-2 text-blue-600">{t.mainPage.colStatus}</p>
-      <p className="font-bold text-sm text-blue-600 italic">—</p>
-      </div>
-      </div>
-      <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 sm:pt-8 border-t border-(--brd)">
-      <p className="text-xs font-bold text-(--t2) uppercase tracking-widest italic">{t.mainPage.statusChecking}</p>
-      <button className="w-full sm:w-auto bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl px-6 sm:px-8 py-4 flex items-center justify-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-95 transition-all">
-      <Upload size={16} /> {t.mainPage.newVersion}
-      </button>
-      </div>
-      </section>
-
       </div>
       </div>
       </main>

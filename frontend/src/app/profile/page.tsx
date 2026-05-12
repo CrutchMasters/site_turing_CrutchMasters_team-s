@@ -80,10 +80,10 @@ function parseMeta(raw: string | NotifMeta | null): NotifMeta {
 function timeAgo(iso: string): string {
   try {
     const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-    if (diff < 60) return `${diff}с тому`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}хв тому`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}год тому`;
-    return new Date(iso).toLocaleDateString("uk-UA", { day: "numeric", month: "short", year: "numeric" });
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return new Date(iso).toLocaleString("en-US", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   } catch { return ""; }
 }
 
@@ -110,8 +110,8 @@ const tourStatusStyle: Record<string, string> = {
 };
 
 const tourStatusLabel: Record<string, string> = {
-  registration: "Реєстрація", active: "Активний", ongoing: "Активний",
-  upcoming: "Очікується", finished: "Завершено",
+  registration: "Registration", active: "Active", ongoing: "Active",
+  upcoming: "Upcoming", finished: "Finished",
 };
 
 // ── Teams hook ────────────────────────────────────────────────────────────────
@@ -149,7 +149,7 @@ function useJuryData(userId: string | undefined, isJury: boolean) {
         const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
         const headers = { Authorization: `Bearer ${token}` };
 
-        // 1. Турніри через jury_tournament_invitations
+        // 1. Tournaments via jury_tournament_invitations
         const invRes = await fetch(`${API_URL}/api/jury-invitations/my`, { headers });
         if (invRes.ok) {
           const data = await invRes.json();
@@ -163,7 +163,7 @@ function useJuryData(userId: string | undefined, isJury: boolean) {
           })));
         }
 
-        // 2. Раунди через jury_assignments
+        // 2. Rounds via jury_assignments
         const { data: assignments } = await supabase
         .from("jury_assignments")
         .select("round_id, tournament_id")
@@ -178,7 +178,7 @@ function useJuryData(userId: string | undefined, isJury: boolean) {
           .order("number");
 
           if (rounds) {
-            // Отримуємо назви турнірів
+            // Get tournament names
             const tourIds = [...new Set(rounds.map(r => r.tournament_id).filter(Boolean))];
             const { data: tours } = await supabase.from("tournaments").select("id, name").in("id", tourIds);
             const tourMap: Record<string, string> = {};
@@ -194,7 +194,7 @@ function useJuryData(userId: string | undefined, isJury: boolean) {
               status:          r.status,
             })));
 
-            // 3. Submissions у цих раундах
+            // 3. Submissions in these rounds
             const { data: subs } = await supabase
             .from("submissions")
             .select("id, team_id, submitted_at, github_url, status, round_id")
@@ -302,7 +302,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
       const { error } = await supabase.from("account").update({ username, login }).eq("id", profileUser.id);
       if (error) throw error;
       onSave({ username, login });
-    } catch (e: any) { setSaveError(e?.message ?? "Помилка збереження"); }
+    } catch (e: any) { setSaveError(e?.message ?? "Save error"); }
     finally { setSaving(false); }
   }
   async function sendCode() {
@@ -313,26 +313,26 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
       });
       if (error) throw error;
       setPwStep("code"); setResendCooldown(60);
-    } catch (e: any) { setPwError(e?.message ?? "Помилка відправки"); setPwStep("idle"); }
+    } catch (e: any) { setPwError(e?.message ?? "Send error"); setPwStep("idle"); }
   }
   async function verifyCode() {
-    if (!/^\d{6}$/.test(code)) return setPwError("Введіть 6-значний код");
+    if (!/^\d{6}$/.test(code)) return setPwError("Enter 6-digit code");
     setPwError(null); setPwStep("verifying");
     try {
       const { error } = await supabase.auth.verifyOtp({ email: profileUser.email, token: code, type: "recovery" });
       if (error) throw error;
       setPwStep("newpw");
-    } catch { setPwError("Невірний або застарілий код."); setPwStep("code"); }
+    } catch { setPwError("Invalid or expired code."); setPwStep("code"); }
   }
   async function setPassword() {
-    if (newPw.length < 8) return setPwError("Мінімум 8 символів");
-    if (newPw !== confirmPw) return setPwError("Паролі не співпадають");
+    if (newPw.length < 8) return setPwError("Minimum 8 characters");
+    if (newPw !== confirmPw) return setPwError("Passwords do not match");
     setPwError(null); setPwStep("verifying");
     try {
       const { error } = await supabase.auth.updateUser({ password: newPw });
       if (error) throw error;
       setPwStep("done"); setCode(""); setNewPw(""); setConfirmPw("");
-    } catch (e: any) { setPwError(e?.message ?? "Помилка"); setPwStep("newpw"); }
+    } catch (e: any) { setPwError(e?.message ?? "Error"); setPwStep("newpw"); }
   }
   function resetPw() { setPwStep("idle"); setCode(""); setNewPw(""); setConfirmPw(""); setPwError(null); setShowPwModal(false); onModalChange?.(false); }
 
@@ -342,14 +342,14 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
   return (
     <div className="space-y-5">
     <div className="space-y-3">
-    <h3 className="text-xs font-black uppercase tracking-widest text-(--t2) flex items-center gap-2"><Pencil size={12} /> Редагування профілю</h3>
+    <h3 className="text-xs font-black uppercase tracking-widest text-(--t2) flex items-center gap-2"><Pencil size={12} /> Edit Profile</h3>
     <div className="flex flex-col gap-1.5">
-    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Ім'я</label>
-    <input type="text" value={username} onChange={e => setUsername(e.target.value)} className={inputClass} placeholder="Ваше ім'я" />
+    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Name</label>
+    <input type="text" value={username} onChange={e => setUsername(e.target.value)} className={inputClass} placeholder="Your name" />
     </div>
     <div className="flex flex-col gap-1.5">
-    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Логін</label>
-    <input type="text" value={login} onChange={e => setLogin(e.target.value)} className={inputClass} placeholder="Ваш логін" />
+    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Login</label>
+    <input type="text" value={login} onChange={e => setLogin(e.target.value)} className={inputClass} placeholder="Your login" />
     </div>
     <div className="flex flex-col gap-1.5">
     <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Email</label>
@@ -359,10 +359,10 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
     <div className="flex gap-2">
     <button onClick={handleSave} disabled={saving || !username.trim() || !login.trim()}
     className="flex items-center gap-2 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-xl px-5 py-3 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-40 shadow-lg shadow-blue-600/20">
-    {saving ? <Loader size={13} className="animate-spin" /> : <Save size={13} />} {saving ? "Збереження..." : "Зберегти"}
+    {saving ? <Loader size={13} className="animate-spin" /> : <Save size={13} />} {saving ? "Saving..." : "Save"}
     </button>
     <button onClick={onCancel} className="flex items-center gap-2 border border-(--brd) text-(--t2) font-black text-xs uppercase tracking-widest rounded-xl px-4 py-3 hover:border-red-500/40 hover:text-red-500 active:scale-95 transition-all">
-    <X size={13} /> Скасувати
+    <X size={13} /> Cancel
     </button>
     </div>
     </div>
@@ -374,11 +374,11 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
     <div className="w-7 h-7 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center flex-shrink-0">
     <KeyRound size={13} className="text-blue-600" />
     </div>
-    <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Зміна пароля</p>
+    <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Change Password</p>
     </div>
     <div className="p-5 space-y-3">
     <p className="text-xs font-medium text-(--t2)">
-    Код підтвердження надійде на{" "}
+    A verification code will be sent to{" "}
     <span className="font-black text-(--t1)">{profileUser.email}</span>
     </p>
     <button
@@ -390,7 +390,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
     <span className="absolute inset-0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12" />
     <span className="relative flex items-center gap-2 drop-shadow">
     <KeyRound size={14} />
-    <span className="tracking-[0.15em]">Змінити пароль</span>
+    <span className="tracking-[0.15em]">Change password</span>
     </span>
     </button>
     </div>
@@ -423,7 +423,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
         <div className="w-full flex items-center justify-between px-7 py-4 border-b border-(--brd)">
         <div className="flex items-center gap-2.5">
         <KeyRound size={14} className="text-blue-500" />
-        <span className="text-xs font-black uppercase tracking-widest text-(--t1)">Зміна пароля</span>
+        <span className="text-xs font-black uppercase tracking-widest text-(--t1)">Change Password</span>
         </div>
         <button onClick={resetPw} className="w-7 h-7 rounded-xl border border-(--brd) bg-(--bg) flex items-center justify-center text-(--t2) hover:text-red-500 hover:border-red-500/40 transition-all active:scale-95">
         <X size={13} />
@@ -438,7 +438,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600">
           <Loader size={32} className="animate-spin" />
           </div>
-          <p className="text-xs font-black uppercase tracking-widest text-(--t2)">Надсилання коду...</p>
+          <p className="text-xs font-black uppercase tracking-widest text-(--t2)">Sending code...</p>
           </div>
         )}
 
@@ -450,7 +450,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           </div>
           <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">Verify</h2>
           <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-8 leading-relaxed">
-          Введіть 6-значний код надісланий на<br />
+          Enter the 6-digit code sent to<br />
           <span className="text-(--t1) font-black">{profileUser.email}</span>
           </p>
 
@@ -478,7 +478,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
             : "bg-(--brd) text-(--t2) cursor-not-allowed"
           }`}
           >
-          Підтвердити
+          Confirm
           </button>
 
           <div className="flex items-center justify-between w-full">
@@ -488,10 +488,10 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-(--t2) hover:text-blue-600 transition-colors disabled:opacity-40"
           >
           <RefreshCw size={10} />
-          {resendCooldown > 0 ? `Повторно через ${resendCooldown}с` : "Надіслати ще раз"}
+          {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend"}
           </button>
           <button onClick={resetPw} className="text-[10px] font-black text-(--t2) hover:text-red-500 uppercase tracking-[0.2em] transition-all flex items-center gap-1.5">
-          <span>←</span> Назад
+          <span>←</span> Back
           </button>
           </div>
           </>
@@ -503,7 +503,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600">
           <Loader size={32} className="animate-spin" />
           </div>
-          <p className="text-xs font-black uppercase tracking-widest text-(--t2)">Перевірка...</p>
+          <p className="text-xs font-black uppercase tracking-widest text-(--t2)">Verifying...</p>
           </div>
         )}
 
@@ -513,8 +513,8 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center text-green-500 mb-6">
           <Lock size={28} />
           </div>
-          <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">Новий пароль</h2>
-          <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-6">Встановіть новий пароль для вашого акаунту</p>
+          <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">New Password</h2>
+          <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-6">Set a new password for your account</p>
 
           <div className="w-full space-y-3">
           <div className="relative">
@@ -522,7 +522,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           type={showPw ? "text" : "password"}
           value={newPw}
           onChange={e => setNewPw(e.target.value)}
-          placeholder="Мінімум 8 символів..."
+          placeholder="Minimum 8 characters..."
           className="w-full px-5 py-4 pr-12 rounded-2xl border border-(--brd) bg-(--bg)/50 focus:ring-2 focus:ring-blue-500 focus:bg-(--card) outline-none text-sm text-(--t1) transition-all"
           />
           <button type="button" onClick={() => setShowPw(p => !p)} className="absolute right-4 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-600 transition-colors">
@@ -541,7 +541,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
             ))}
             </div>
             <p className="text-[10px] font-bold text-(--t2)">
-            {pwStrength <= 1 ? "Слабкий" : pwStrength === 2 ? "Середній" : pwStrength === 3 ? "Хороший" : "Надійний"}
+            {pwStrength <= 1 ? "Weak" : pwStrength === 2 ? "Medium" : pwStrength === 3 ? "Good" : "Strong"}
             </p>
             </div>
           )}
@@ -550,7 +550,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           type={showConfirm ? "text" : "password"}
           value={confirmPw}
           onChange={e => setConfirmPw(e.target.value)}
-          placeholder="Повторіть пароль..."
+          placeholder="Repeat password..."
           className={`w-full px-5 py-4 pr-12 rounded-2xl border bg-(--bg)/50 focus:ring-2 focus:bg-(--card) outline-none text-sm text-(--t1) transition-all ${
             confirmPw && confirmPw !== newPw
             ? "border-red-500 focus:ring-red-500/30"
@@ -582,10 +582,10 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
             : "bg-(--brd) text-(--t2) cursor-not-allowed"
           }`}
           >
-          Встановити пароль
+          Set Password
           </button>
           <button onClick={resetPw} className="w-full text-[10px] font-black text-(--t2) hover:text-red-500 uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-1.5">
-          <span>←</span> Скасувати
+          <span>←</span> Cancel
           </button>
           </div>
           </>
@@ -597,10 +597,10 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center mb-6">
           <CheckCircle size={32} className="text-green-500" />
           </div>
-          <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">Готово!</h2>
-          <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-8">Пароль успішно змінено</p>
+          <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">Done!</h2>
+          <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-8">Password changed successfully</p>
           <button onClick={resetPw} className="w-full py-5 rounded-[1.8rem] bg-blue-600 text-white font-black uppercase shadow-lg hover:bg-blue-700 active:scale-95 transition-all text-sm tracking-wider shadow-blue-500/20">
-          Закрити
+          Close
           </button>
           </>
         )}
@@ -618,17 +618,18 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
 
 // ── Notification card (compact for profile) ───────────────────────────────────
 function NotificationCard({
-  notif, idx, responded, responding, error, onAccept, onDecline, onMarkRead, onGoTeam,
+  notif, idx, responded, responding, inactive, onAccept, onDecline, onJuryAccept, onJuryDecline, onMarkRead, onGoTeam,
 }: {
   notif: Notification; idx: number; responded: "accepted" | "declined" | undefined;
   responding: "accept" | "decline" | null;
-  error: string;
-  onAccept: () => void; onDecline: () => void; onMarkRead: () => void; onGoTeam: (id: string) => void;
+  inactive?: "already_member" | "already_jury";
+  onAccept: () => void; onDecline: () => void;
+  onJuryAccept: () => void; onJuryDecline: () => void;
+  onMarkRead: () => void; onGoTeam: (id: string) => void;
 }) {
-  const meta        = parseMeta(notif.meta);
-  const isTeamInvite = notif.type === "team_invitation";
-  const isJuryInvite = notif.type === "jury_invitation";
-  const isInvite    = isTeamInvite || isJuryInvite;
+  const meta      = parseMeta(notif.meta);
+  const isInvite  = notif.type === "team_invitation";
+  const isJury    = notif.type === "jury_invitation";
   const borderClass = typeBorder[notif.type] ?? "border-l-gray-400";
   return (
     <div className={`fuIn bg-(--bg) rounded-xl border border-(--brd) border-l-4 ${borderClass} p-3.5 transition-all ${!notif.read ? "shadow-sm" : "opacity-60"}`} style={{ animationDelay: `${idx * 40}ms` }}>
@@ -644,25 +645,46 @@ function NotificationCard({
     <p className="text-[10px] font-bold text-(--t2) mt-0.5 leading-relaxed">{notif.message}</p>
     {meta.team_id && <button onClick={() => onGoTeam(meta.team_id!)} className="mt-1.5 flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-blue-500 hover:text-blue-400 transition-colors"><Users size={9} /> {meta.team_name} <ChevronRight size={8} /></button>}
     <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-(--t2) opacity-50">{timeAgo(notif.created_at)}</p>
+
+    {/* Team invitation */}
     {isInvite && !responded && (
-      <div className="flex items-center gap-1.5 mt-2.5">
-      <button onClick={onAccept} disabled={!!responding} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-white font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all disabled:opacity-60 ${isJuryInvite ? "bg-amber-500 hover:bg-amber-600 shadow-sm shadow-amber-500/25" : "bg-blue-600 hover:bg-blue-700"}`}>
-      {responding === "accept" ? <Loader size={10} className="animate-spin" /> : <Check size={10} />} Прийняти
-      </button>
-      <button onClick={onDecline} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-(--card) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 active:scale-95 transition-all disabled:opacity-60">
-      {responding === "decline" ? <Loader size={10} className="animate-spin" /> : <X size={10} />} Відхилити
-      </button>
-      </div>
+      inactive === "already_member" ? (
+        <div className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border bg-gray-500/10 text-gray-500 border-gray-500/20">
+        <Check size={9} /> Вже в команді
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5 mt-2.5">
+        <button onClick={onAccept} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-60">
+        {responding === "accept" ? <Loader size={10} className="animate-spin" /> : <Check size={10} />} Accept
+        </button>
+        <button onClick={onDecline} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-(--card) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 active:scale-95 transition-all disabled:opacity-60">
+        {responding === "decline" ? <Loader size={10} className="animate-spin" /> : <X size={10} />} Decline
+        </button>
+        </div>
+      )
     )}
-    {isInvite && !responded && error && (
-      <div className="mt-2 flex items-start gap-1.5 px-2.5 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
-      <AlertCircle size={11} className="text-red-500 flex-shrink-0 mt-0.5" />
-      <p className="text-[10px] font-bold text-red-500 leading-snug">{error}</p>
-      </div>
+
+    {/* Jury invitation */}
+    {isJury && !responded && (
+      inactive === "already_jury" ? (
+        <div className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border bg-amber-500/10 text-amber-500 border-amber-500/20">
+        <Star size={9} /> Вже суддя
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5 mt-2.5">
+        <button onClick={onJuryAccept} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 text-white font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 active:scale-95 transition-all disabled:opacity-60">
+        {responding === "accept" ? <Loader size={10} className="animate-spin" /> : <Star size={10} />} Accept
+        </button>
+        <button onClick={onJuryDecline} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-(--card) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 active:scale-95 transition-all disabled:opacity-60">
+        {responding === "decline" ? <Loader size={10} className="animate-spin" /> : <X size={10} />} Decline
+        </button>
+        </div>
+      )
     )}
-    {isInvite && responded && (
+
+    {(isInvite || isJury) && responded && (
       <div className={`mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border ${responded==="accepted"?"bg-green-500/10 text-green-500 border-green-500/20":"bg-red-500/10 text-red-500 border-red-500/20"}`}>
-      {responded === "accepted" ? <><Check size={9} /> Прийнято</> : <><X size={9} /> Відхилено</>}
+      {responded === "accepted" ? <><Check size={9} /> Accepted</> : <><X size={9} /> Declined</>}
       </div>
     )}
     </div>
@@ -685,7 +707,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
     declined: "text-(--t2) bg-(--bg) border-(--brd)",
   };
   const invStatusLabel: Record<string, string> = {
-    accepted: "Залучений", pending: "Очікує", declined: "Відхилено",
+    accepted: "Engaged", pending: "Pending", declined: "Declined",
   };
   const roundStatusStyle: Record<string, string> = {
     active:   "text-green-500 bg-green-500/10 border-green-500/20",
@@ -707,15 +729,15 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
     <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-amber-500/5">
     <div className="w-7 h-7 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0"><Trophy size={14} /></div>
     <div>
-    <p className="text-xs font-black uppercase tracking-widest text-amber-500">Турніри (журі)</p>
-    {juryTournaments.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{juryTournaments.length} турнірів</p>}
+    <p className="text-xs font-black uppercase tracking-widest text-amber-500">Tournaments (Jury)</p>
+    {juryTournaments.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{juryTournaments.length} tournaments</p>}
     </div>
     </div>
     <div className="p-5 sm:p-7">
     {juryTournaments.length === 0 ? (
       <div className="text-center py-5">
       <Trophy className="w-10 h-10 text-(--t2) opacity-30 mx-auto mb-2" />
-      <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Ще не залучені до жодного турніру</p>
+      <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Not assigned to any tournament yet</p>
       </div>
     ) : (
       <div className="space-y-2">
@@ -730,7 +752,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
         {invStatusLabel[t.invitation_status] ?? t.invitation_status}
         </span>
         </div>
-        {t.start_at && <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">Старт: {new Date(t.start_at).toLocaleDateString("uk-UA")}</p>}
+        {t.start_at && <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">Start: {new Date(t.start_at).toLocaleString("en-US", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>}
         </div>
         <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
@@ -745,7 +767,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
       <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
       <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/40">
       <div className="w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0"><Flag size={14} /></div>
-      <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Раунди ({juryRounds.length})</p>
+      <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Rounds ({juryRounds.length})</p>
       </div>
       <div className="p-5 sm:p-7 space-y-2">
       {juryRounds.map(r => (
@@ -753,10 +775,10 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
         className="w-full flex items-center gap-3 p-3 rounded-xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group text-left">
         <div className="w-7 h-7 rounded-lg bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-xs flex-shrink-0">{r.number}</div>
         <div className="flex-1 min-w-0">
-        <p className="text-xs font-black text-(--t1) truncate group-hover:text-blue-600 transition-colors">{r.name || `Раунд ${r.number}`}</p>
+        <p className="text-xs font-black text-(--t1) truncate group-hover:text-blue-600 transition-colors">{r.name || `Round ${r.number}`}</p>
         <p className="text-[10px] font-bold text-(--t2) truncate">{r.tournament_name}</p>
         </div>
-        {r.status && <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${roundStatusStyle[r.status] ?? roundStatusStyle.pending}`}>{r.status === "active" ? "Активний" : r.status === "finished" ? "Завершено" : "Очікується"}</span>}
+        {r.status && <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${roundStatusStyle[r.status] ?? roundStatusStyle.pending}`}>{r.status === "active" ? "Active" : r.status === "finished" ? "Finished" : "Pending"}</span>}
         <ExternalLink size={12} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       ))}
@@ -769,7 +791,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
       <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
       <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/40">
       <div className="w-7 h-7 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center flex-shrink-0"><FileText size={14} /></div>
-      <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Роботи для оцінки ({jurySubmissions.length})</p>
+      <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Submissions for review ({jurySubmissions.length})</p>
       </div>
       <div className="p-5 sm:p-7 space-y-2">
       {jurySubmissions.map(s => (
@@ -778,10 +800,10 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
         <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-500 flex-shrink-0"><FileText size={12} /></div>
         <div className="flex-1 min-w-0">
         <p className="text-xs font-black text-(--t1) truncate group-hover:text-purple-500 transition-colors">{s.team_name}</p>
-        <p className="text-[10px] font-bold text-(--t2)">{new Date(s.submitted_at).toLocaleDateString("uk-UA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
+        <p className="text-[10px] font-bold text-(--t2)">{new Date(s.submitted_at).toLocaleString("en-US", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
         </div>
         <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${s.status === "submitted" ? "text-green-500 bg-green-500/10 border-green-500/20" : "text-(--t2) bg-(--bg) border-(--brd)"}`}>
-        {s.status === "submitted" ? "Здано" : s.status}
+        {s.status === "submitted" ? "Submitted" : s.status}
         </span>
         <ExternalLink size={12} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
@@ -815,7 +837,7 @@ export default function ProfilePage() {
   const [notifLoading, setNotifLoading]   = useState(true);
   const [responding, setResponding]       = useState<Record<string, "accept" | "decline" | null>>({});
   const [responded, setResponded]         = useState<Record<string, "accepted" | "declined">>({});
-  const [notifErrors, setNotifErrors]     = useState<Record<string, string>>({});
+  const [isInactive, setIsInactive]       = useState<Record<string, "already_member" | "already_jury">>({});
   const [tournaments, setTournaments]     = useState<Tournament[]>([]);
   const [tourLoading, setTourLoading]     = useState(true);
 
@@ -827,15 +849,53 @@ export default function ProfilePage() {
   const fetchNotifications = useCallback(async () => {
     setNotifLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/notifications?limit=50`, { headers: authHeader() });
-      const data = await res.json();
-      setNotifications(data.notifications ?? []);
+      const [notifRes, teamInvRes, juryInvRes] = await Promise.allSettled([
+        fetch(`${API_URL}/api/notifications?limit=50`, { headers: authHeader() }),
+                                                                          fetch(`${API_URL}/api/invitations/my`, { headers: authHeader() }),
+                                                                          fetch(`${API_URL}/api/jury-invitations/my`, { headers: authHeader() }),
+      ]);
+
+      const notifData = notifRes.status === "fulfilled" && notifRes.value.ok
+      ? await notifRes.value.json() : { notifications: [] };
+      const notifs: Notification[] = notifData.notifications ?? [];
+      setNotifications(notifs);
+
+      // Pending invitation IDs з бекенду (реальний стан)
+      const pendingTeamIds = new Set<string>();
+      if (teamInvRes.status === "fulfilled" && teamInvRes.value.ok) {
+        const d = await teamInvRes.value.json();
+        (d.invitations ?? []).forEach((inv: { id: string }) => pendingTeamIds.add(inv.id));
+      }
+      const pendingJuryIds = new Set<string>();
+      if (juryInvRes.status === "fulfilled" && juryInvRes.value.ok) {
+        const d = await juryInvRes.value.json();
+        (d.invitations ?? []).forEach((inv: { id: string; status: string }) => {
+          if (inv.status === "pending") pendingJuryIds.add(inv.id);
+        });
+      }
+
+      // Якщо invitation_id сповіщення відсутній у pending — вже оброблено → isInactive
+      const inactiveMap: Record<string, "already_member" | "already_jury"> = {};
+      notifs.forEach((n) => {
+        const meta = parseMeta(n.meta);
+        if (n.type === "team_invitation" && meta.invitation_id) {
+          if (!pendingTeamIds.has(meta.invitation_id)) {
+            inactiveMap[n.id] = "already_member";
+          }
+        }
+        if (n.type === "jury_invitation" && meta.invitation_id) {
+          if (!pendingJuryIds.has(meta.invitation_id)) {
+            inactiveMap[n.id] = "already_jury";
+          }
+        }
+      });
+      setIsInactive(inactiveMap);
     } catch { setNotifications([]); }
     finally { setNotifLoading(false); }
   }, [authHeader]);
 
   const fetchTournaments = useCallback(async () => {
-    if (isJury) { setTourLoading(false); return; } // журі не має командних турнірів
+    if (isJury) { setTourLoading(false); return; } // jury members have no team tournaments
     setTourLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/users/me/tournaments`, { headers: authHeader() });
@@ -854,12 +914,21 @@ export default function ProfilePage() {
         const { data, error } = await supabase.from("account").select("id, username, login, email, role, status, avatar_url").eq("id", currentUser.id).single();
         if (error) throw error;
         setProfileUser(data);
-      } catch { setError("Користувача не знайдено"); }
+      } catch { setError("User not found"); }
       finally { setIsLoading(false); }
     };
     fetchUser();
     fetchNotifications();
     fetchTournaments();
+    // Mark all notifications as read when entering profile page
+    const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+    if (token) {
+      fetch(`${API_URL}/api/notifications/mark-read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ all: true }),
+      }).catch(() => {});
+    }
   }, [authLoading, currentUser, router, fetchNotifications, fetchTournaments]);
 
   const markAllRead = async () => {
@@ -875,17 +944,47 @@ export default function ProfilePage() {
     if (!invitationId) return;
     const key = notif.id;
     setResponding(prev => ({ ...prev, [key]: accept ? "accept" : "decline" }));
-    setNotifErrors(prev => ({ ...prev, [key]: "" }));
     try {
-      // Вибираємо правильний endpoint залежно від типу запрошення
-      const endpoint = notif.type === "jury_invitation"
-        ? `${API_URL}/api/jury-invitations/respond`
-        : `${API_URL}/api/invitations/respond`;
-      const res = await fetch(endpoint, { method: "POST", headers: authHeader(), body: JSON.stringify({ invitation_id: invitationId, accept }) });
-      if (!res.ok) { const err = await res.json(); alert(err.detail ?? "Помилка відповіді"); return; }
+      const res = await fetch(`${API_URL}/api/invitations/respond`, { method: "POST", headers: authHeader(), body: JSON.stringify({ invitation_id: invitationId, accept }) });
+      if (!res.ok) {
+        const err = await res.json();
+        const detail: string = err.detail ?? "Response error";
+        // Якщо вже в команді — показуємо isInactive замість alert
+        if (detail.includes("вже є членом") || detail.includes("вже оброблено")) {
+          setIsInactive(prev => ({ ...prev, [key]: "already_member" }));
+          await markRead(notif.id);
+          return;
+        }
+        alert(detail);
+        return;
+      }
       setResponded(prev => ({ ...prev, [key]: accept ? "accepted" : "declined" }));
       await markRead(notif.id);
-    } catch { setNotifErrors(prev => ({ ...prev, [key]: "Помилка з'єднання з сервером" })); }
+    } catch { alert("Server connection error"); }
+    finally { setResponding(prev => ({ ...prev, [key]: null })); }
+  };
+
+  const respondJuryInvitation = async (notif: Notification, accept: boolean) => {
+    const meta = parseMeta(notif.meta); const invitationId = meta.invitation_id;
+    if (!invitationId) return;
+    const key = notif.id;
+    setResponding(prev => ({ ...prev, [key]: accept ? "accept" : "decline" }));
+    try {
+      const res = await fetch(`${API_URL}/api/jury-invitations/respond`, { method: "POST", headers: authHeader(), body: JSON.stringify({ invitation_id: invitationId, accept }) });
+      if (!res.ok) {
+        const err = await res.json();
+        const detail: string = err.detail ?? "Response error";
+        if (detail.includes("вже") || detail.includes("already")) {
+          setIsInactive(prev => ({ ...prev, [key]: "already_jury" }));
+          await markRead(notif.id);
+          return;
+        }
+        alert(detail);
+        return;
+      }
+      setResponded(prev => ({ ...prev, [key]: accept ? "accepted" : "declined" }));
+      await markRead(notif.id);
+    } catch { alert("Server connection error"); }
     finally { setResponding(prev => ({ ...prev, [key]: null })); }
   };
 
@@ -922,22 +1021,22 @@ export default function ProfilePage() {
       </div>
 
       <main className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isPwModalOpen ? "blur-sm brightness-75" : ""}`}>
-      <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Профіль" icon={<UserCircle size={18} className="text-blue-600" />} />
+      <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Profile" icon={<UserCircle size={18} className="text-blue-600" />} />
       <div className={`flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10 ${allReady ? "page-ready" : ""}`}>
 
       <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2)">
-      <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
-      <ChevronRight size={10} /><span className="text-(--t1)">Профіль</span>
+      <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Home</button>
+      <ChevronRight size={10} /><span className="text-(--t1)">Profile</span>
       </nav>
       <button onClick={() => router.back()} className="mb-5 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
-      <ArrowLeft size={14} /> Назад
+      <ArrowLeft size={14} /> Back
       </button>
 
       {!allReady && !error && (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
         <div className="flex flex-col items-center gap-3">
         <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 opacity-70">Завантаження...</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 opacity-70">Loading...</p>
         </div>
         </div>
       )}
@@ -980,20 +1079,20 @@ export default function ProfilePage() {
           <h1 className="text-xl font-black text-(--t1) uppercase tracking-tight">{profileUser?.username}</h1>
           {!isEditing && (
             <button onClick={() => setIsEditing(true)} className="flex items-center gap-1.5 border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2 hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all">
-            <Pencil size={11} /> Редагувати
+            <Pencil size={11} /> Edit
             </button>
           )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[9px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg">Ваш профіль</span>
+          <span className="text-[9px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg">Your Profile</span>
           <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-lg border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>{profileUser?.role ?? "user"}</span>
-          {isJury && <span className="text-[9px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1"><Star size={9} className="fill-amber-500" /> Журі</span>}
+          {isJury && <span className="text-[9px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1"><Star size={9} className="fill-amber-500" /> Jury</span>}
           </div>
           <div className="space-y-2 text-sm">
-          <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Ім'я:</span><span className="font-bold text-sm">{profileUser?.username}</span></p>
-          <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Логін:</span><span className="font-bold text-sm">{profileUser?.login}</span></p>
+          <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Name:</span><span className="font-bold text-sm">{profileUser?.username}</span></p>
+          <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Login:</span><span className="font-bold text-sm">{profileUser?.login}</span></p>
           <p className="flex items-center gap-2.5 font-medium"><Mail size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Email:</span><span className="font-bold text-sm break-all">{profileUser?.email}</span></p>
-          <p className="flex items-center gap-2.5 font-medium"><Shield size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Роль:</span><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>{profileUser?.role ?? "user"}</span></p>
+          <p className="flex items-center gap-2.5 font-medium"><Shield size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Role:</span><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>{profileUser?.role ?? "user"}</span></p>
           </div>
           <div className="pt-2.5 border-t border-(--brd) text-[9px] font-bold uppercase tracking-widest text-(--t2)">ID: {profileUser?.id}</div>
           </div>
@@ -1029,8 +1128,8 @@ export default function ProfilePage() {
           <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
           <div className="w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0"><Users size={14} /></div>
           <div>
-          <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Команди</p>
-          {!teamsLoading && userTeams.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{userTeams.length} команд</p>}
+          <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Teams</p>
+          {!teamsLoading && userTeams.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{userTeams.length} teams</p>}
           </div>
           </div>
           <div className="p-5 sm:p-7">
@@ -1039,8 +1138,8 @@ export default function ProfilePage() {
           ) : userTeams.length === 0 ? (
             <div className="text-center py-5">
             <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2"><Users className="w-5 h-5 text-(--t2) opacity-40" /></div>
-            <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Не перебуває в жодній команді</p>
-            <button onClick={() => router.push("/register_team")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">Створити команду →</button>
+            <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Not a member of any team</p>
+            <button onClick={() => router.push("/register_team")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">Create a team →</button>
             </div>
           ) : (
             <div className="space-y-2">
@@ -1054,11 +1153,11 @@ export default function ProfilePage() {
                 <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-black text-(--t1) text-sm truncate group-hover:text-blue-600 transition-colors">{team.name}</span>
-                {isCaptain && <span className="text-[8px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1"><Crown size={7} /> Капітан</span>}
+                {isCaptain && <span className="text-[8px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1"><Crown size={7} /> Captain</span>}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
                 {team.city_school_org && <span className="text-[10px] font-bold text-(--t2) truncate">{team.city_school_org}</span>}
-                <span className="text-[10px] font-bold text-(--t2) flex items-center gap-1 flex-shrink-0"><Users size={8} /> {memberCount} уч.</span>
+                <span className="text-[10px] font-bold text-(--t2) flex items-center gap-1 flex-shrink-0"><Users size={8} /> {memberCount} members</span>
                 </div>
                 </div>
                 <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1075,8 +1174,8 @@ export default function ProfilePage() {
           <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
           <div className="w-7 h-7 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0"><Trophy size={14} /></div>
           <div>
-          <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Турніри</p>
-          {!tourLoading && tournaments.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{tournaments.length} турнірів</p>}
+          <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Tournaments</p>
+          {!tourLoading && tournaments.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{tournaments.length} tournaments</p>}
           </div>
           </div>
           <div className="p-5 sm:p-7">
@@ -1085,8 +1184,8 @@ export default function ProfilePage() {
           ) : tournaments.length === 0 ? (
             <div className="text-center py-5">
             <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2"><Trophy className="w-5 h-5 text-(--t2) opacity-40" /></div>
-            <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Не бере участь у турнірах</p>
-            <button onClick={() => router.push("/tournaments")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-amber-500 hover:underline">Переглянути турніри →</button>
+            <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Not participating in any tournaments</p>
+            <button onClick={() => router.push("/tournaments")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-amber-500 hover:underline">View tournaments →</button>
             </div>
           ) : (
             <div className="space-y-2">
@@ -1101,7 +1200,7 @@ export default function ProfilePage() {
                 <span className="font-black text-(--t1) text-sm truncate group-hover:text-amber-500 transition-colors">{t.name}</span>
                 <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${tourStatusStyle[st] ?? tourStatusStyle.upcoming}`}>{tourStatusLabel[st] ?? st}</span>
                 </div>
-                {t.start_at && <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">Початок: {new Date(t.start_at).toLocaleDateString("uk-UA")}</p>}
+                {t.start_at && <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">Start: {new Date(t.start_at).toLocaleString("en-US", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>}
                 </div>
                 <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </button>
@@ -1125,13 +1224,13 @@ export default function ProfilePage() {
         {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black flex items-center justify-center">{unreadCount > 9 ? "9+" : unreadCount}</span>}
         </div>
         <div>
-        <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Сповіщення</p>
-        {!notifLoading && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{unreadCount > 0 ? `${unreadCount} непрочитаних` : "Все прочитано"}</p>}
+        <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Notifications</p>
+        {!notifLoading && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{unreadCount > 0 ? `${unreadCount} unread` : "All read"}</p>}
         </div>
         </div>
         {unreadCount > 0 && (
           <button onClick={markAllRead} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 border border-(--brd) bg-(--bg) rounded-xl px-3 py-1.5 transition-all hover:border-blue-600/40 active:scale-95">
-          <CheckCheck size={12} /> Всі
+          <CheckCheck size={12} /> All
           </button>
         )}
         </div>
@@ -1141,7 +1240,7 @@ export default function ProfilePage() {
         ) : notifications.length === 0 ? (
           <div className="flex flex-col items-center py-12 text-center">
           <Bell className="w-10 h-10 text-(--t2) mb-3 opacity-25" />
-          <p className="text-sm font-black text-(--t1) mb-1">Немає сповіщень</p>
+          <p className="text-sm font-black text-(--t1) mb-1">No notifications</p>
           </div>
         ) : (
           <div className="space-y-2.5">
@@ -1150,9 +1249,11 @@ export default function ProfilePage() {
             key={notif.id} notif={notif} idx={i}
             responded={responded[notif.id]}
             responding={responding[notif.id] ?? null}
-            error={notifErrors[notif.id] ?? ""}
+            inactive={isInactive[notif.id]}
             onAccept={() => respondInvitation(notif, true)}
             onDecline={() => respondInvitation(notif, false)}
+            onJuryAccept={() => respondJuryInvitation(notif, true)}
+            onJuryDecline={() => respondJuryInvitation(notif, false)}
             onMarkRead={() => markRead(notif.id)}
             onGoTeam={(teamId) => router.push("/teams/" + teamId)}
             />

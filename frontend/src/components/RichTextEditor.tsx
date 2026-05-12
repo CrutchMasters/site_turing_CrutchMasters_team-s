@@ -262,43 +262,6 @@ export function RichTextEditor({
             className="wysiwyg w-full px-5 py-4 outline-none text-sm text-(--t1) leading-relaxed"
             style={{ minHeight: `${rows * 1.75}rem` }}
             />
-
-            <style jsx global>{`
-                .wysiwyg:empty::before {
-                    content: attr(data-placeholder);
-                    color: var(--t2);
-                    opacity: 0.35;
-                    pointer-events: none;
-                }
-                .wysiwyg { outline: none; }
-                .wysiwyg h1 { font-size: 1.5em; font-weight: 900; margin: 0.5em 0 0.25em; letter-spacing: -0.02em; }
-                .wysiwyg h2 { font-size: 1.25em; font-weight: 800; margin: 0.45em 0 0.2em; }
-                .wysiwyg h3 { font-size: 1.1em;  font-weight: 700; margin: 0.4em 0 0.15em; }
-                .wysiwyg p  { margin: 0.3em 0; line-height: 1.7; }
-                .wysiwyg ul { margin: 0.4em 0; padding-left: 1.5em; list-style: disc; }
-                .wysiwyg li { margin: 0.2em 0; line-height: 1.6; }
-                .wysiwyg blockquote {
-                    border-left: 3px solid rgb(59 130 246 / 0.5);
-                    padding: 0.25em 0.8em;
-                    margin: 0.5em 0;
-                    color: var(--t2);
-                    font-style: italic;
-                    background: rgb(59 130 246 / 0.05);
-                    border-radius: 0 0.5rem 0.5rem 0;
-                }
-                .wysiwyg code {
-                    background: var(--bg);
-                    border: 1px solid var(--brd);
-                    border-radius: 0.3em;
-                    padding: 0.1em 0.4em;
-                    font-family: ui-monospace, monospace;
-                    font-size: 0.85em;
-                }
-                .wysiwyg strong, .wysiwyg b { font-weight: 800; }
-                .wysiwyg em, .wysiwyg i     { font-style: italic; }
-                .wysiwyg u  { text-decoration: underline; text-underline-offset: 3px; }
-                .wysiwyg s  { text-decoration: line-through; opacity: 0.65; }
-                `}</style>
                 </div>
         );
 }

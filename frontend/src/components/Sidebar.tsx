@@ -40,7 +40,7 @@ export default function Sidebar({}: SidebarProps) {
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
-  const [backendMessage, setBackendMessage] = useState("checking...");
+
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -69,14 +69,9 @@ export default function Sidebar({}: SidebarProps) {
   const avatarLetter = user?.username?.charAt(0).toUpperCase() ?? "?";
   const avatarUrl = user?.avatar_url;
 
-  useEffect(() => {
-    fetch(`${API_URL}/api/test`)
-    .then(r => r.ok ? r.json() : Promise.reject())
-    .then(d => setBackendMessage(d.message ?? "online"))
-    .catch(() => setBackendMessage("unavailable"));
-  }, []);
 
-  // Fetch notifications when panel opens
+
+  // Fetch notifications when panel opens, then mark all as read
   useEffect(() => {
     if (!isNotificationsPanelOpen) return;
     setNotifLoading(true);
@@ -87,8 +82,19 @@ export default function Sidebar({}: SidebarProps) {
     .then(r => r.ok ? r.json() : Promise.reject())
     .then(data => {
       const list: Notification[] = data.notifications ?? data ?? [];
-      setNotifications(list);
-      setUnreadCount(list.filter(n => !n.read).length);
+      const hasUnread = list.some((n: Notification) => !n.read);
+      if (hasUnread) {
+        fetch(`${API_URL}/api/notifications/mark-read`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ all: true }),
+        }).catch(() => {});
+        setNotifications(list.map((n: Notification) => ({ ...n, read: true })));
+        setUnreadCount(0);
+      } else {
+        setNotifications(list);
+        setUnreadCount(0);
+      }
     })
     .catch(() => setNotifications([]))
     .finally(() => setNotifLoading(false));
@@ -106,11 +112,36 @@ export default function Sidebar({}: SidebarProps) {
     .catch(() => {});
   }, []);
 
+  const markAllNotificationsRead = async () => {
+    const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+    if (!token) return;
+    try {
+      await fetch(`${API_URL}/api/notifications/mark-read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ all: true }),
+      });
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+    } catch {}
+  };
+
   const handleNotificationsClick = () => {
     if (!collapsed) {
-      setIsNotificationsPanelOpen(p => !p);
+      const opening = !isNotificationsPanelOpen;
+      setIsNotificationsPanelOpen(opening);
       if (isSettingsPanelOpen) setIsSettingsPanelOpen(false);
+      if (opening && unreadCount > 0) {
+        markAllNotificationsRead();
+      }
     }
+  };
+
+  const handleProfileClick = () => {
+    if (unreadCount > 0) {
+      markAllNotificationsRead();
+    }
+    go("/profile");
   };
 
   const respondInvitation = async (notif: Notification, accept: boolean) => {
@@ -122,8 +153,8 @@ export default function Sidebar({}: SidebarProps) {
       const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
       // Вибираємо правильний endpoint залежно від типу запрошення
       const endpoint = notif.type === "jury_invitation"
-        ? `${API_URL}/api/jury-invitations/respond`
-        : `${API_URL}/api/invitations/respond`;
+      ? `${API_URL}/api/jury-invitations/respond`
+      : `${API_URL}/api/invitations/respond`;
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -142,11 +173,11 @@ export default function Sidebar({}: SidebarProps) {
       const date = new Date(iso);
       const now = new Date();
       const diff = Math.floor((now.getTime() - date.getTime()) / 1000);
-      const localeMap: Record<string, string> = { ua: "uk-UA", ru: "ru-RU", en: "en-US" };
+      const localeMap: Record<string, string> = { ua: "uk-UA", en: "en-US" };
       const loc = localeMap[locale] ?? "uk-UA";
-      if (diff < 60) return locale === "ru" ? `${diff}с назад` : locale === "en" ? `${diff}s ago` : `${diff}с тому`;
-      if (diff < 3600) return locale === "ru" ? `${Math.floor(diff/60)}мин назад` : locale === "en" ? `${Math.floor(diff/60)}m ago` : `${Math.floor(diff/60)}хв тому`;
-      if (diff < 86400) return locale === "ru" ? `${Math.floor(diff/3600)}ч назад` : locale === "en" ? `${Math.floor(diff/3600)}h ago` : `${Math.floor(diff/3600)}год тому`;
+      if (diff < 60) return locale === "en" ? `${diff}s ago` : `${diff}с тому`;
+      if (diff < 3600) return locale === "en" ? `${Math.floor(diff/60)}m ago` : `${Math.floor(diff/60)}хв тому`;
+      if (diff < 86400) return locale === "en" ? `${Math.floor(diff/3600)}h ago` : `${Math.floor(diff/3600)}год тому`;
       return date.toLocaleDateString(loc, { day: "numeric", month: "short" });
     } catch {
       return "";
@@ -341,15 +372,16 @@ export default function Sidebar({}: SidebarProps) {
 
           {/* Nav */}
           <nav className="flex-1 flex flex-col gap-1 p-3 overflow-y-auto overflow-x-hidden">
-          <NavItem icon={<UserCircle size={18} />}      label={t.sidebar.profile}   active={pathname === "/profile"}   collapsed={collapsed} onClick={() => go("/profile")} />
-          <NavItem icon={<LayoutDashboard size={18} />} label={t.sidebar.mainPage}  active={pathname === "/dashboard"} collapsed={collapsed} onClick={() => go("/dashboard")} />
-          <NavItem icon={<Search size={18} />}          label={t.sidebar.search}    active={pathname === "/search"}    collapsed={collapsed} onClick={() => go("/search")} />
+          <NavItem icon={<UserCircle size={18} />}      label={t.sidebar.profile}   active={pathname === "/profile"}   collapsed={collapsed} onClick={() => go("/profile")}    href="/profile" />
+          <NavItem icon={<LayoutDashboard size={18} />} label={t.sidebar.mainPage}  active={pathname === "/dashboard"} collapsed={collapsed} onClick={() => go("/dashboard")} href="/dashboard" />
+          <NavItem icon={<Search size={18} />}          label={t.sidebar.search}    active={pathname === "/search"}    collapsed={collapsed} onClick={() => go("/search")}    href="/search" />
           <NavItem
           icon={<Trophy size={18} />}
           label={t.sidebar.tournaments}
           active={pathname === "/tournaments" || pathname?.startsWith("/tournaments/")}
           collapsed={collapsed}
           onClick={() => go("/tournaments")}
+          href="/tournaments"
           />
           <NavItem
           icon={<Users size={18} />}
@@ -357,6 +389,7 @@ export default function Sidebar({}: SidebarProps) {
           active={pathname === "/teams" || pathname?.startsWith("/teams/")}
           collapsed={collapsed}
           onClick={() => go("/teams")}
+          href="/teams"
           />
           <NavItem
           icon={<Settings size={18} />}
@@ -389,10 +422,7 @@ export default function Sidebar({}: SidebarProps) {
             ))}
             </div>
             </div>
-            <div className="pt-2 border-t border-(--brd)">
-            <span className="text-[10px] font-black text-(--t2) uppercase tracking-tighter block mb-0.5">{t.settings.status}:</span>
-            <span className="text-[10px] font-bold text-(--t1) break-all">{backendMessage}</span>
-            </div>
+
             </div>
           )}
           </nav>
@@ -412,12 +442,21 @@ export default function Sidebar({}: SidebarProps) {
   );
 }
 
-function NavItem({ icon, label, active, collapsed, onClick, suffix }: any) {
+function NavItem({ icon, label, active, collapsed, onClick, suffix, href }: any) {
+  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    // Middle click — браузер сам відкриє в новій вкладці завдяки <a>
+    if (e.button === 1) return;
+    // Звичайний клік — використовуємо клієнтську навігацію Next.js
+    e.preventDefault();
+    onClick?.();
+  };
+
   return (
-    <button
-    onClick={onClick}
+    <a
+    href={href ?? "#"}
+    onClick={handleClick}
     className={`
-      flex items-center gap-3 rounded-xl text-sm font-bold transition-all w-full
+      flex items-center gap-3 rounded-xl text-sm font-bold transition-all w-full cursor-pointer
       ${collapsed ? "justify-center p-3" : "px-4 py-3"}
       ${active ? "bg-blue-600 text-white shadow-lg" : "text-(--t2) hover:bg-(--bg)"}
       `}
@@ -431,6 +470,6 @@ function NavItem({ icon, label, active, collapsed, onClick, suffix }: any) {
         </span>
       )}
       {!collapsed && suffix}
-      </button>
+      </a>
   );
 }

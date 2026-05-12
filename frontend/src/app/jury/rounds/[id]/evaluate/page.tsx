@@ -13,7 +13,7 @@ import {
     CheckCircle2, AlertCircle, Github, Video,
     RefreshCw, Star, BarChart2, Shuffle, Users,
     Lock, Unlock, ChevronDown, ChevronUp, Eye,
-    Clock, Shield, Zap, Award,
+    Clock, Shield, Zap, Award, X, FileText,
 } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -31,10 +31,13 @@ interface SubmissionWork {
     team_id: string;
     team_name: string;
     team_org?: string;
+    team_avatar_url?: string;
     round_id: string;
     submitted_at: string;
     github_url?: string;
     youtube_url?: string;
+    live_url?: string;
+    description?: string;
     files?: { name: string; path: string; url: string | null }[];
     status: "not_evaluated" | "in_progress" | "evaluated";
     // filled after evaluation load
@@ -47,6 +50,7 @@ interface RoundInfo {
     id: string;
     number: number;
     name: string;
+    description?: string;
     tournament_id: string;
     tournament_name?: string;
     end_at?: string;
@@ -59,7 +63,7 @@ interface DistributionStats {
     evaluated: number;
 }
 
-// ── Default criteria ─────────────────────────────────────────────────────────
+// ── Default criteria (fallback if round has no criteria column) ───────────────
 
 const DEFAULT_CRITERIA: Omit<CriterionScore, "score" | "comment">[] = [
     { key: "backend_quality",    label: "Backend якість коду",       weight: 20 },
@@ -69,8 +73,9 @@ const DEFAULT_CRITERIA: Omit<CriterionScore, "score" | "comment">[] = [
 { key: "no_bugs",            label: "Робото­здатність, без багів", weight: 20 },
 ];
 
-function buildDefaultCriteria(): CriterionScore[] {
-    return DEFAULT_CRITERIA.map(c => ({ ...c, score: "", comment: "" }));
+function buildCriteriaFromRound(roundCriteria: Omit<CriterionScore, "score" | "comment">[] | null): CriterionScore[] {
+    const source = (roundCriteria && roundCriteria.length > 0) ? roundCriteria : DEFAULT_CRITERIA;
+    return source.map(c => ({ ...c, score: "", comment: "" }));
 }
 
 function computeTotal(criteria: CriterionScore[]): number {
@@ -84,10 +89,171 @@ function computeTotal(criteria: CriterionScore[]): number {
 
 function fmtDate(iso?: string) {
     if (!iso) return "—";
-    return new Date(iso).toLocaleDateString("uk-UA", {
+    return new Date(iso).toLocaleString("uk-UA", {
         day: "numeric", month: "short", year: "numeric",
-        hour: "2-digit", minute: "2-digit",
-    });
+        hour: "2-digit", minute: "2-digit" });
+}
+
+// ── Readme Modal ──────────────────────────────────────────────────────────────
+// source="html"  → description з таблиці rounds (HTML від RichTextEditor)
+// source="file"  → файл з bucket (завантажуємо, рендеримо як Markdown або plain text)
+
+function ReadmeModal({
+    htmlContent,
+    fileUrl,
+    title,
+    onClose,
+}: {
+    htmlContent?: string | null;   // description з БД — готовий HTML
+    fileUrl?: string | null;       // URL файлу з bucket
+    title?: string;
+    onClose: () => void;
+}) {
+    const [fileText, setFileText]     = useState<string | null>(null);
+    const [loading, setLoading]       = useState(!!fileUrl);
+    const [error, setError]           = useState<string | null>(null);
+
+    // Завантажуємо файл тільки якщо передано fileUrl
+    useEffect(() => {
+        if (!fileUrl) return;
+        setLoading(true);
+        setError(null);
+        fetch(fileUrl)
+        .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
+        .then(t  => { setFileText(t); setLoading(false); })
+        .catch(e => { setError(e.message); setLoading(false); });
+    }, [fileUrl]);
+
+    // Escape + Backdrop click
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+        document.addEventListener("keydown", onKey);
+        return () => document.removeEventListener("keydown", onKey);
+    }, [onClose]);
+
+    // Markdown → HTML (для файлів з bucket)
+    const renderMarkdown = (md: string): string => {
+        return md
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/```[\w]*\n?([\s\S]*?)```/g, '<pre class="md-pre"><code>$1</code></pre>')
+        .replace(/`([^`]+)`/g, '<code class="md-code">$1</code>')
+        .replace(/^### (.+)$/gm, '<h3 class="md-h3">$1</h3>')
+        .replace(/^## (.+)$/gm,  '<h2 class="md-h2">$1</h2>')
+        .replace(/^# (.+)$/gm,   '<h1 class="md-h1">$1</h1>')
+        .replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>")
+        .replace(/\*\*(.+?)\*\*/g,   "<strong>$1</strong>")
+        .replace(/\*(.+?)\*/g,     "<em>$1</em>")
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="md-link">$1</a>')
+        .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="md-img" />')
+        .replace(/^---$/gm, '<hr class="md-hr" />')
+        .replace(/^\s*[-*+] (.+)$/gm, '<li class="md-li">$1</li>')
+        .replace(/(<li[\s\S]*?<\/li>)(\s*(?!<li))/g, '<ul class="md-ul">$1</ul>$2')
+        .replace(/^\d+\. (.+)$/gm, '<li class="md-oli">$1</li>')
+        .replace(/(<li class="md-oli"[\s\S]*?<\/li>)(\s*(?!<li))/g, '<ol class="md-ol">$1</ol>$2')
+        .replace(/^> (.+)$/gm, '<blockquote class="md-blockquote">$1</blockquote>')
+        .replace(/^(?!<[hupobaldio]|<li|<pre|<blockquote|<hr)(.+)$/gm, '<p class="md-p">$1</p>')
+        .replace(/\n{2,}/g, "\n");
+    };
+
+    // Що рендерити:
+    // 1. Якщо є fileUrl → показуємо fileText (markdown) або loading/error
+    // 2. Якщо є htmlContent → рендеримо HTML напряму
+    const renderBody = () => {
+        if (fileUrl) {
+            if (loading) return (
+                <div className="flex items-center justify-center py-16">
+                <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+            );
+            if (error) return (
+                <div className="flex flex-col items-center gap-3 py-16 text-center">
+                <AlertCircle size={28} className="text-red-400" />
+                <p className="text-sm font-bold text-(--t2)">Не вдалося завантажити файл</p>
+                <p className="text-xs text-(--t2) opacity-60">{error}</p>
+                <a href={fileUrl} target="_blank" rel="noopener noreferrer"
+                className="text-xs font-black text-blue-600 hover:underline mt-1">
+                Відкрити напряму ↗
+                </a>
+                </div>
+            );
+            if (fileText !== null) return (
+                <div className="md-body"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(fileText) }} />
+            );
+        }
+        if (htmlContent) return (
+            <div className="rich-body"
+            dangerouslySetInnerHTML={{ __html: htmlContent }} />
+        );
+        return null;
+    };
+
+    return (
+        <div
+        className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+        style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)" }}
+        onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+        >
+        <div
+        className="relative w-full max-w-3xl max-h-[85vh] flex flex-col rounded-[2rem] border border-(--brd) shadow-2xl overflow-hidden"
+        style={{ background: "var(--card)" }}
+        >
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-(--brd)" style={{ background: "var(--bg)" }}>
+        <FileText size={16} className="text-blue-600 flex-shrink-0" />
+        <span className="text-[11px] font-black uppercase tracking-widest text-(--t1) flex-1">
+        {title ?? (fileUrl ? "README" : "Опис раунду")}
+        </span>
+        {fileUrl && (
+            <a href={fileUrl} target="_blank" rel="noopener noreferrer"
+            className="mr-2 text-[9px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
+            ↗ Відкрити
+            </a>
+        )}
+        <button onClick={onClose}
+        className="w-8 h-8 rounded-xl flex items-center justify-center border border-(--brd) text-(--t2) hover:text-(--t1) hover:border-blue-600/40 transition-all active:scale-95">
+        <X size={14} />
+        </button>
+        </div>
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-8 py-6">
+        {renderBody()}
+        </div>
+        </div>
+        <style>{`
+            /* Markdown styles (файл з bucket) */
+            .md-body { color: var(--t1); font-size: 14px; line-height: 1.7; }
+            .md-h1 { font-size: 1.6em; font-weight: 900; margin: 1.2em 0 0.5em; color: var(--t1); }
+            .md-h2 { font-size: 1.3em; font-weight: 900; margin: 1em 0 0.4em; color: var(--t1); border-bottom: 1px solid var(--brd); padding-bottom: 0.3em; }
+            .md-h3 { font-size: 1.1em; font-weight: 800; margin: 0.8em 0 0.3em; color: var(--t1); }
+            .md-p { margin: 0.5em 0; color: var(--t2); }
+            .md-pre { background: var(--bg); border: 1px solid var(--brd); border-radius: 12px; padding: 14px 16px; overflow-x: auto; margin: 0.8em 0; font-size: 12px; line-height: 1.5; }
+            .md-pre code { background: none; padding: 0; border: none; font-family: monospace; }
+            .md-code { background: var(--bg); border: 1px solid var(--brd); border-radius: 6px; padding: 1px 6px; font-size: 12px; font-family: monospace; color: #3b82f6; }
+            .md-link { color: #3b82f6; text-decoration: underline; text-underline-offset: 2px; }
+            .md-img { max-width: 100%; border-radius: 10px; margin: 0.5em 0; }
+            .md-hr { border: none; border-top: 1px solid var(--brd); margin: 1.2em 0; }
+            .md-ul, .md-ol { padding-left: 1.5em; margin: 0.4em 0; }
+            .md-li, .md-oli { margin: 0.2em 0; color: var(--t2); }
+            .md-blockquote { border-left: 3px solid #3b82f6; padding-left: 1em; margin: 0.6em 0; color: var(--t2); opacity: 0.8; font-style: italic; }
+            /* Rich HTML styles (опис з БД) */
+            .rich-body { color: var(--t1); font-size: 14px; line-height: 1.7; }
+            .rich-body h1 { font-size: 1.6em; font-weight: 900; margin: 1.2em 0 0.5em; }
+            .rich-body h2 { font-size: 1.3em; font-weight: 900; margin: 1em 0 0.4em; border-bottom: 1px solid var(--brd); padding-bottom: 0.3em; }
+            .rich-body h3 { font-size: 1.1em; font-weight: 800; margin: 0.8em 0 0.3em; }
+            .rich-body p  { margin: 0.5em 0; color: var(--t2); }
+            .rich-body ul { padding-left: 1.5em; margin: 0.4em 0; list-style: disc; }
+            .rich-body ol { padding-left: 1.5em; margin: 0.4em 0; list-style: decimal; }
+            .rich-body li { margin: 0.2em 0; color: var(--t2); }
+            .rich-body a  { color: #3b82f6; text-decoration: underline; text-underline-offset: 2px; }
+            .rich-body blockquote { border-left: 3px solid #3b82f6; padding-left: 1em; margin: 0.6em 0; color: var(--t2); font-style: italic; }
+            .rich-body code { background: var(--bg); border: 1px solid var(--brd); border-radius: 6px; padding: 1px 6px; font-size: 12px; font-family: monospace; color: #3b82f6; }
+            .rich-body pre { background: var(--bg); border: 1px solid var(--brd); border-radius: 12px; padding: 14px 16px; overflow-x: auto; margin: 0.8em 0; font-size: 12px; }
+            .rich-body strong { font-weight: 800; color: var(--t1); }
+            .rich-body em { font-style: italic; }
+            `}</style>
+            </div>
+    );
 }
 
 // ── Score slider / input ─────────────────────────────────────────────────────
@@ -109,11 +275,14 @@ function ScoreInput({
 
     return (
         <div className="flex items-center gap-3">
-        {/* Track */}
-        <div className="relative flex-1 h-2 rounded-full bg-(--brd) overflow-hidden">
+        {/* Track wrapper */}
+        <div className="relative flex-1 flex items-center" style={{ height: 24 }}>
+        {/* Background track */}
+        <div className="absolute inset-x-0 h-2 rounded-full" style={{ top: "50%", transform: "translateY(-50%)", background: "var(--brd)" }} />
+        {/* Fill track — smooth color + width transition */}
         <div
-        className="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
-        style={{ width: `${num}%`, background: color }}
+        className="absolute left-0 h-2 rounded-full pointer-events-none"
+        style={{ top: "50%", transform: "translateY(-50%)", width: `${num}%`, background: color, transition: "background 0.35s ease, width 0.05s linear" }}
         />
         <input
         type="range"
@@ -121,8 +290,8 @@ function ScoreInput({
         value={num}
         onChange={e => onChange(Number(e.target.value))}
         disabled={disabled}
-        className="absolute inset-0 w-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-        style={{ height: "100%" }}
+        className="absolute inset-0 w-full cursor-pointer disabled:cursor-not-allowed"
+        style={{ height: "100%", opacity: 1, background: "transparent", WebkitAppearance: "none", appearance: "none" }}
         />
         </div>
         {/* Number input */}
@@ -152,6 +321,7 @@ function ScoreInput({
             borderColor: focused ? color : "var(--brd)",
             color: value !== "" ? color : "var(--t2)",
             boxShadow: focused ? `0 0 0 2px ${color}30` : "none",
+            fontVariantNumeric: "tabular-nums",
             }}
             />
             </div>
@@ -193,7 +363,13 @@ function SubmissionCard({
                 : "border-(--brd) bg-(--card) hover:border-blue-600/40 hover:bg-(--bg)"
             }`}
             >
-            <div className="flex items-start justify-between gap-2 mb-2">
+            <div className="flex items-start gap-2 mb-2">
+            <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0 mt-0.5">
+            {work.team_avatar_url
+                ? <img src={work.team_avatar_url} alt={work.team_name} className="w-full h-full object-cover" />
+                : <div className="w-full h-full bg-blue-600/10 text-blue-600 flex items-center justify-center text-xs font-black">{work.team_name.charAt(0).toUpperCase()}</div>
+            }
+            </div>
             <div className="flex-1 min-w-0">
             <p className={`font-black text-sm truncate ${isActive ? "text-blue-600" : "text-(--t1) group-hover:text-blue-600 transition-colors"}`}>
             {work.team_name}
@@ -204,15 +380,14 @@ function SubmissionCard({
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
             {statusIcon}
-            {total !== undefined && (
-                <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg border ${
-                    total >= 80 ? "text-green-500 bg-green-500/10 border-green-500/20" :
-                    total >= 50 ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
-                    "text-amber-500 bg-amber-500/10 border-amber-500/20"
-                }`}>
-                {total}
-                </span>
-            )}
+            <span className={`text-[10px] font-black rounded-lg border ${
+                total === undefined ? "text-transparent border-transparent bg-transparent" :
+                total >= 80 ? "text-green-500 bg-green-500/10 border-green-500/20" :
+                total >= 50 ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
+                "text-amber-500 bg-amber-500/10 border-amber-500/20"
+            }`} style={{ width: 40, textAlign: "center", padding: "2px 0", fontVariantNumeric: "tabular-nums", display: "inline-block" }}>
+            {total !== undefined ? total : ""}
+            </span>
             </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -244,6 +419,7 @@ export default function JuryEvaluationPage() {
 
     // -- Data --
     const [round, setRound] = useState<RoundInfo | null>(null);
+    const [roundCriteria, setRoundCriteria] = useState<Omit<CriterionScore, "score" | "comment">[] | null>(null);
     const [works, setWorks] = useState<SubmissionWork[]>([]);
     const [stats, setStats] = useState<DistributionStats>({ total: 0, distributed: 0, evaluated: 0 });
     const [pageLoading, setPageLoading] = useState(true);
@@ -254,15 +430,17 @@ export default function JuryEvaluationPage() {
     const [saveMsg, setSaveMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
     const [redistributing, setRedistributing] = useState(false);
     const [showAllInfo, setShowAllInfo] = useState(false);
+    const [readmeModal, setReadmeModal] = useState<{ fileUrl?: string; htmlContent?: string; title?: string } | null>(null);
+    const [mobileTab, setMobileTab] = useState<"list" | "form">("list");
     const saveMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const isJury     = user?.role === "jury";
-    const isAdmin    = user?.role === "admin" || user?.role === "superadmin";
-    const canAccess  = isJury || isAdmin;
+    const isJury       = user?.role === "jury";
+    const isSuperAdmin = user?.role === "superadmin";
+    const canAccess    = isJury || isSuperAdmin;
 
     const API_URL = typeof window !== "undefined" && window.location.hostname === "localhost"
-        ? "http://localhost:8000"
-        : "https://site-turing-crutchmasters-team-s.onrender.com";
+    ? "http://localhost:8000"
+    : "https://site-turing-crutchmasters-team-s.onrender.com";
 
     // ── Access guard ──────────────────────────────────────────────────────────
     useEffect(() => {
@@ -280,10 +458,21 @@ export default function JuryEvaluationPage() {
             // 1. Round info (через Supabase — публічні дані)
             const { data: roundData } = await supabase
             .from("rounds")
-            .select("id, number, name, tournament_id, end_at, status")
+            .select("id, number, name, description, tournament_id, end_at, status, criteria")
             .eq("id", roundId)
             .single();
             if (!roundData) throw new Error("Раунд не знайдено");
+
+            // Parse criteria from round table
+            let parsedCriteria: Omit<CriterionScore, "score" | "comment">[] | null = null;
+            if (roundData.criteria && Array.isArray(roundData.criteria) && roundData.criteria.length > 0) {
+                parsedCriteria = roundData.criteria.map((c: any, idx: number) => ({
+                    key: c.key ?? `criterion_${idx}`,
+                    label: c.label ?? c.name ?? `Критерій ${idx + 1}`,
+                    weight: typeof c.weight === "number" ? c.weight : Math.floor(100 / roundData.criteria.length),
+                }));
+            }
+            setRoundCriteria(parsedCriteria);
 
             // Tournament name
             let tournamentName = "";
@@ -326,7 +515,7 @@ export default function JuryEvaluationPage() {
             const workList: SubmissionWork[] = assignedSubmissions.map((s: any) => {
                 // my_evaluation присутній якщо роль === "jury", інакше null
                 const existingEval = s.my_evaluation ?? null;
-                let criteria = buildDefaultCriteria();
+                let criteria = buildCriteriaFromRound(parsedCriteria);
                 let general_comment = "";
                 let total_score: number | undefined;
                 let status: SubmissionWork["status"] = "not_evaluated";
@@ -349,10 +538,14 @@ export default function JuryEvaluationPage() {
                     team_id: s.team_id,
                     team_name: s.team_name ?? "Команда",
                     team_org: s.team_org,
+                    team_avatar_url: s.team_avatar_url ?? undefined,
+                    team_leader: s.team_leader ?? undefined,
                     round_id: s.round_id,
                     submitted_at: s.submitted_at,
                     github_url: s.github_url,
                     youtube_url: s.youtube_url,
+                    live_url: s.live_url ?? undefined,
+                    description: s.description ?? undefined,
                     files: s.files ?? [],
                     status,
                     criteria,
@@ -360,6 +553,43 @@ export default function JuryEvaluationPage() {
                     total_score,
                 };
             });
+
+            // Fetch team avatars + captain from Supabase
+            const teamIds = [...new Set(workList.map(w => w.team_id).filter(Boolean))];
+            if (teamIds.length > 0) {
+                const { data: teamsData } = await supabase
+                .from("teams")
+                .select("id, avatar_url, captain_id")
+                .in("id", teamIds);
+                if (teamsData) {
+                    const avatarMap: Record<string, string> = {};
+                    const captainIdMap: Record<string, string> = {};
+                    teamsData.forEach((t: any) => {
+                        if (t.avatar_url) avatarMap[t.id] = t.avatar_url;
+                        if (t.captain_id) captainIdMap[t.id] = t.captain_id;
+                    });
+                        workList.forEach(w => {
+                            if (avatarMap[w.team_id]) w.team_avatar_url = avatarMap[w.team_id];
+                        });
+
+                            // Fetch captain names from account table
+                            const captainIds = [...new Set(Object.values(captainIdMap).filter(Boolean))];
+                            if (captainIds.length > 0) {
+                                const { data: accountsData } = await supabase
+                                .from("account")
+                                .select("id, username, login")
+                                .in("id", captainIds);
+                                if (accountsData) {
+                                    const nameMap: Record<string, string> = {};
+                                    accountsData.forEach((a: any) => { nameMap[a.id] = a.username || a.login || "—"; });
+                                    workList.forEach(w => {
+                                        const capId = captainIdMap[w.team_id];
+                                        if (capId && nameMap[capId]) (w as any).team_leader = nameMap[capId];
+                                    });
+                                }
+                            }
+                }
+            }
 
             setWorks(workList);
             setStats({
@@ -473,7 +703,7 @@ export default function JuryEvaluationPage() {
 
         // ── Redistribute (admin only) ─────────────────────────────────────────────
         const handleRedistribute = async () => {
-            if (!isAdmin || !roundId) return;
+            if (!isSuperAdmin || !roundId) return;
             setRedistributing(true);
             setSaveMsg(null);
             try {
@@ -518,7 +748,12 @@ export default function JuryEvaluationPage() {
                 .cdIn { animation: cardDrop 380ms cubic-bezier(.22,1,.36,1) both }
                 .score-glow { animation: scoreGlow 2s ease-in-out infinite }
                 input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; }
-                input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--t1); border: 2px solid var(--card); cursor: pointer; }
+                input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--t1); border: 3px solid var(--card); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.25); transition: transform 0.25s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.2s ease; }
+                input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.25); box-shadow: 0 2px 10px rgba(59,130,246,0.45); }
+                input[type=range]:active::-webkit-slider-thumb { transform: scale(0.92); transition: transform 0.12s cubic-bezier(0.34, 1.2, 0.64, 1), box-shadow 0.1s ease; }
+                input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--t1); border: 3px solid var(--card); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.25); transition: transform 0.25s cubic-bezier(0.34, 1.4, 0.64, 1); }
+                html, body { max-width: 100vw; overflow-x: hidden; }
+                @media (min-width: 480px) { .xs\\:inline { display: inline !important; } }
                 `}} />
 
                 {/* Watermark */}
@@ -534,24 +769,24 @@ export default function JuryEvaluationPage() {
                 <Sidebar />
                 </div>
 
-                <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                <main className="flex-1 flex flex-col min-w-0 overflow-hidden max-w-full">
                 <MobileHeader
                 onOpenSidebar={() => setIsMobileSidebarOpen(true)}
                 title="Оцінювання"
                 icon={<Star size={18} className="text-blue-600" />}
                 />
 
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 relative z-10">
+                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 relative z-10 w-full max-w-full">
 
                 {/* Breadcrumb */}
-                <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2) flex-wrap">
-                <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Головна</button>
-                <ChevronRight size={10} />
-                <button onClick={() => round && router.push(`/tournaments/${round.tournament_id}`)} className="hover:text-blue-600 transition-colors truncate max-w-[100px]">
+                <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2) flex-wrap overflow-hidden">
+                <a href={"/"} onClick={(e) => { e.preventDefault(); router.push("/"); }} className="hover:text-blue-600 transition-colors flex-shrink-0">Головна</a>
+                <ChevronRight size={10} className="flex-shrink-0" />
+                <button onClick={() => round && router.push(`/tournaments/${round.tournament_id}`)} className="hover:text-blue-600 transition-colors truncate max-w-[80px]">
                 {round?.tournament_name ?? "Турнір"}
                 </button>
-                <ChevronRight size={10} />
-                <span className="text-(--t1) truncate max-w-[120px]">{round ? `Раунд ${round.number}` : "..."} — Оцінювання</span>
+                <ChevronRight size={10} className="flex-shrink-0" />
+                <span className="text-(--t1) truncate max-w-[100px]">{round ? `Раунд ${round.number}` : "..."} — Оцінювання</span>
                 </nav>
 
                 <div className="flex items-center gap-3 mb-6">
@@ -582,17 +817,44 @@ export default function JuryEvaluationPage() {
                     </div>
                     </div>
                 ) : (
-                    <div className="flex flex-col xl:flex-row gap-5 items-start w-full">
+                    <div className="flex flex-col xl:flex-row gap-4 w-full">
+
+                    {/* ══ Mobile tab switcher ══════════════════════════════════════ */}
+                    <div className="xl:hidden w-full flex rounded-2xl border border-(--brd) bg-(--card) p-1 gap-1">
+                    <button
+                    onClick={() => setMobileTab("list")}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                        mobileTab === "list" ? "bg-blue-600 text-white shadow-md" : "text-(--t2) hover:text-(--t1)"
+                    }`}
+                    >
+                    <Users size={13} /> Роботи ({works.length})
+                    </button>
+                    <button
+                    onClick={() => setMobileTab("form")}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                        mobileTab === "form" ? "bg-blue-600 text-white shadow-md" : "text-(--t2) hover:text-(--t1)"
+                    }`}
+                    >
+                    <Star size={13} />
+                    <span className="truncate max-w-[110px]">{activeWork ? activeWork.team_name : "Оцінка"}</span>
+                    {activeWork && (
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                            activeWork.status === "evaluated" ? "bg-green-500" :
+                            activeWork.status === "in_progress" ? "bg-amber-500" : "bg-(--brd)"
+                        }`} />
+                    )}
+                    </button>
+                    </div>
 
                     {/* ══ LEFT — Submission list + Stats ═══════════════════════════ */}
-                    <div className="w-full xl:w-[320px] flex-shrink-0 flex flex-col gap-4">
+                    <div className={`w-full xl:w-[320px] flex-shrink-0 flex-col gap-4 ${mobileTab === "list" ? "flex" : "hidden xl:flex"}`}>
 
                     {/* Stats card */}
                     <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm overflow-hidden">
                     <div className="flex items-center gap-3 px-5 py-3.5 border-b border-(--brd) bg-(--bg)/40">
                     <BarChart2 size={14} className="text-blue-600" />
                     <span className="text-[10px] font-black uppercase tracking-widest text-(--t1)">
-                    {isAdmin ? "Загальний стан розподілу" : "Мої роботи до оцінки"}
+                    {isSuperAdmin ? "Загальний стан розподілу" : "Мої роботи до оцінки"}
                     </span>
                     </div>
                     <div className="p-4 grid grid-cols-3 gap-3">
@@ -623,7 +885,7 @@ export default function JuryEvaluationPage() {
                     </div>
                     </div>
                     {/* Admin redistribute */}
-                    {isAdmin && (
+                    {isSuperAdmin && (
                         <div className="px-4 pb-4 flex flex-col gap-2">
                         <button
                         onClick={() => router.push(`/jury/rounds/${roundId}/distribute`)}
@@ -667,7 +929,7 @@ export default function JuryEvaluationPage() {
                             key={work.id}
                             work={work}
                             isActive={activeIdx === idx}
-                            onSelect={() => setActiveIdx(idx)}
+                            onSelect={() => { setActiveIdx(idx); setMobileTab("form"); }}
                             juryId={user?.id ?? ""}
                             />
                         ))
@@ -678,86 +940,206 @@ export default function JuryEvaluationPage() {
                     </div>
 
                     {/* ══ RIGHT — Evaluation form ═══════════════════════════════════ */}
-                    <div className="flex-1 min-w-0 flex flex-col gap-4">
+                    <div className={`flex-1 min-w-0 flex-col gap-4 ${mobileTab === "form" ? "flex" : "hidden xl:flex"}`}>
 
                     {activeWork ? (
                         <>
-                        {/* Work header */}
-                        <div className="cdIn bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm p-5 sm:p-6">
-                        <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-xl flex-shrink-0">
-                        {activeWork.team_name.charAt(0).toUpperCase()}
+                        {/* ── Work header: team card + score island ── */}
+                        <div className="cdIn flex flex-col sm:flex-row gap-3 items-stretch">
+
+                        {/* MAIN INFO CARD */}
+                        <div className="flex-1 min-w-0 bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm overflow-hidden">
+
+                        {/* ── Mobile layout ── */}
+                        <div className="sm:hidden">
+                        {/* Top: avatar + team name + score */}
+                        <div className="flex items-center gap-3 p-4">
+                        <div className="flex-shrink-0 w-12 h-12 rounded-xl overflow-hidden border border-(--brd)">
+                        {activeWork.team_avatar_url
+                            ? <img src={activeWork.team_avatar_url} alt={activeWork.team_name} className="w-full h-full object-cover" />
+                            : <div className="w-full h-full bg-blue-600/10 flex items-center justify-center text-blue-600 font-black text-xl">{activeWork.team_name.charAt(0).toUpperCase()}</div>
+                        }
                         </div>
                         <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-3 flex-wrap">
-                        <div>
-                        <h2 className="font-black text-(--t1) text-base sm:text-lg uppercase tracking-tight">
-                        {activeWork.team_name}
-                        </h2>
-                        {activeWork.team_org && (
-                            <p className="text-[10px] font-bold text-(--t2) uppercase tracking-wider mt-0.5">
-                            {activeWork.team_org}
-                            </p>
+                        <h2 className="font-black text-(--t1) text-base uppercase tracking-tight truncate">{activeWork.team_name}</h2>
+                        {activeWork.team_org && <p className="text-[10px] font-bold text-(--t2) truncate">{activeWork.team_org}</p>}
+                        {(activeWork as any).team_leader && (
+                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                            <span className="text-[10px] font-bold text-(--t2) truncate max-w-[120px]">{(activeWork as any).team_leader}</span>
+                            <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">капітан</span>
+                            </div>
                         )}
                         </div>
-                        {/* Total score display */}
-                        <div className="flex flex-col items-end gap-1">
-                        <div className={`score-glow text-3xl font-black px-4 py-1 rounded-2xl border ${
+                        {/* Inline score badge */}
+                        <div className={`flex-shrink-0 flex flex-col items-center justify-center w-14 h-14 rounded-2xl border font-black text-2xl ${
                             activeTotal >= 80 ? "text-green-500 bg-green-500/10 border-green-500/20" :
                             activeTotal >= 50 ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
                             activeTotal >  0  ? "text-amber-500 bg-amber-500/10 border-amber-500/20" :
                             "text-(--t2) bg-(--bg) border-(--brd)"
-                        }`}>
+                        }`} style={{ fontVariantNumeric: "tabular-nums" }}>
                         {activeWork.criteria.every(c => c.score !== "") || activeTotal > 0 ? activeTotal : "—"}
                         </div>
-                        <span className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Підсумкова оцінка (авто)</span>
+                        </div>
+                        {/* Bottom: link buttons row — icon-only on mobile, icon+text on sm+ */}
+                        <div className="flex items-center gap-2 px-4 pb-4 border-t border-(--brd) pt-3">
+                        {activeWork.github_url ? (
+                            <a href={activeWork.github_url} target="_blank" rel="noopener noreferrer" title="GitHub"
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:text-blue-600 hover:border-blue-600/40 active:scale-95 transition-all min-w-0">
+                            <Github size={13} className="flex-shrink-0" /><span className="hidden xs:inline truncate">GitHub</span>
+                            </a>
+                        ) : (
+                            <span className="flex-1 flex items-center justify-center py-2.5 rounded-xl border border-(--brd) text-(--t2) opacity-30 cursor-not-allowed min-w-0">
+                            <Github size={13} />
+                            </span>
+                        )}
+                        {activeWork.youtube_url ? (
+                            <a href={activeWork.youtube_url} target="_blank" rel="noopener noreferrer" title="YouTube"
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:text-red-500 hover:border-red-500/40 active:scale-95 transition-all min-w-0">
+                            <Video size={13} className="flex-shrink-0" /><span className="hidden xs:inline truncate">YouTube</span>
+                            </a>
+                        ) : (
+                            <span className="flex-1 flex items-center justify-center py-2.5 rounded-xl border border-(--brd) text-(--t2) opacity-30 cursor-not-allowed min-w-0">
+                            <Video size={13} />
+                            </span>
+                        )}
+                        {activeWork.live_url ? (
+                            <a href={activeWork.live_url} target="_blank" rel="noopener noreferrer" title="Live Demo"
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:text-green-500 hover:border-green-500/40 active:scale-95 transition-all min-w-0">
+                            <Zap size={13} className="flex-shrink-0" /><span className="hidden xs:inline truncate">Live</span>
+                            </a>
+                        ) : (
+                            <span className="flex-1 flex items-center justify-center py-2.5 rounded-xl border border-(--brd) text-(--t2) opacity-30 cursor-not-allowed min-w-0">
+                            <Zap size={13} />
+                            </span>
+                        )}
+                        {(() => {
+                            // README: перевіряємо файл README у submission АБО текстовий опис submission
+                            const rf = (activeWork.files ?? []).find(f => f.name?.toLowerCase().includes("readme") && f.url);
+                            const subDescStripped = (activeWork.description ?? "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+                            const hasReadme = !!rf?.url || subDescStripped.length > 0;
+                            const openReadme = () => {
+                                if (rf?.url) {
+                                    setReadmeModal({ fileUrl: rf.url, title: "README" });
+                                } else {
+                                    setReadmeModal({ htmlContent: activeWork.description!, title: `Опис від команди: ${activeWork.team_name}` });
+                                }
+                            };
+                            return hasReadme ? (
+                                <button onClick={openReadme} title="README"
+                                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:text-blue-600 hover:border-blue-600/40 active:scale-95 transition-all min-w-0">
+                                <Eye size={13} className="flex-shrink-0" /><span className="hidden xs:inline truncate">README</span>
+                                </button>
+                            ) : (
+                                <span className="flex-1 flex items-center justify-center py-2.5 rounded-xl border border-(--brd) text-(--t2) opacity-30 cursor-not-allowed min-w-0" title="Команда не надала опис">
+                                <Eye size={13} />
+                                </span>
+                            );
+                        })()}
                         </div>
                         </div>
 
-                        {/* Submission links */}
-                        <div className="flex flex-wrap gap-2 mt-3">
-                        {activeWork.github_url && (
-                            <a
-                            href={activeWork.github_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"
-                            >
-                            <Github size={12} /> GitHub
-                            </a>
+                        {/* ── Desktop layout ── */}
+                        <div className="hidden sm:flex items-stretch">
+                        {/* LEFT — avatar + team info */}
+                        <div className="flex items-center gap-4 p-5 sm:p-6 flex-1 min-w-0">
+                        <div className="flex-shrink-0">
+                        <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-(--brd) shadow-md">
+                        {activeWork.team_avatar_url
+                            ? <img src={activeWork.team_avatar_url} alt={activeWork.team_name} className="w-full h-full object-cover" />
+                            : <div className="w-full h-full bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-3xl">{activeWork.team_name.charAt(0).toUpperCase()}</div>
+                        }
+                        </div>
+                        </div>
+                        <div className="flex flex-col justify-center gap-1 min-w-0">
+                        <h2 className="font-black text-(--t1) text-xl uppercase tracking-tight truncate">{activeWork.team_name}</h2>
+                        {activeWork.team_org && <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider truncate">{activeWork.team_org}</p>}
+                        {(activeWork as any).team_leader && (
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                            <Shield size={11} className="text-(--t2) flex-shrink-0" />
+                            <span className="text-[11px] font-bold text-(--t2) truncate">{(activeWork as any).team_leader}</span>
+                            <span className="ml-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-400 border border-orange-500/20">капітан</span>
+                            </div>
                         )}
-                        {activeWork.youtube_url && (
-                            <a
-                            href={activeWork.youtube_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"
-                            >
-                            <Video size={12} /> Відео
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                        <Clock size={11} className="text-(--t2) flex-shrink-0" />
+                        <span className="text-[11px] font-bold text-(--t2)">Здано: {fmtDate(activeWork.submitted_at)}</span>
+                        </div>
+                        </div>
+                        </div>
+                        {/* RIGHT — video + buttons */}
+                        <div className="flex items-stretch border-l border-(--brd)">
+                        <div className="flex flex-col items-center justify-center p-3 bg-(--bg)/40 gap-2">
+                        <div className="w-28 h-[72px] rounded-xl overflow-hidden border border-(--brd) shadow-sm relative flex-shrink-0">
+                        {activeWork.youtube_url ? (
+                            <a href={activeWork.youtube_url} target="_blank" rel="noopener noreferrer" className="block w-full h-full group">
+                            <img src={`https://img.youtube.com/vi/${activeWork.youtube_url.match(/(?:v=|youtu\.be\/)([^&\n?#]+)/)?.[1]}/hqdefault.jpg`} alt="preview" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-7 h-7 rounded-full bg-black/60 flex items-center justify-center"><Video size={12} className="text-white ml-0.5" /></div>
+                            </div>
                             </a>
+                        ) : (
+                            <div className="w-full h-full bg-(--bg) flex flex-col items-center justify-center gap-1">
+                            <Video size={16} className="text-(--t2) opacity-25" />
+                            <span className="text-[8px] font-black uppercase text-(--t2) opacity-30 text-center leading-tight px-1">Відео відсутнє</span>
+                            </div>
                         )}
-                        {/* Uploaded files */}
-                        {(activeWork.files ?? []).map(f => f.url ? (
-                            <a
-                            key={f.path}
-                            href={f.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            download={f.name}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"
-                            >
-                            📎 {f.name || "Файл"}
-                            </a>
-                        ) : null)}
-                        {!activeWork.github_url && !activeWork.youtube_url && !(activeWork.files?.some(f => f.url)) && (
-                            <span className="text-[10px] font-bold text-(--t2) opacity-50 italic">Посилання не додані</span>
+                        </div>
+                        {activeWork.youtube_url ? (
+                            <a href={activeWork.youtube_url} target="_blank" rel="noopener noreferrer" className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-(--bg) border border-(--brd) text-(--t2) font-black text-[9px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 transition-all active:scale-95"><Video size={10} /> YouTube</a>
+                        ) : (
+                            <span className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-(--brd) text-(--t2) opacity-30 font-black text-[9px] uppercase tracking-widest cursor-not-allowed"><Video size={10} /> YouTube</span>
                         )}
-                        <span className="ml-auto text-[9px] font-bold text-(--t2) opacity-50 self-center">
-                        Здано: {fmtDate(activeWork.submitted_at)}
+                        </div>
+                        <div className="flex flex-col justify-center gap-2 px-4 py-4 min-w-[120px]">
+                        {activeWork.github_url ? (
+                            <a href={activeWork.github_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"><Github size={11} /> GitHub</a>
+                        ) : (
+                            <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed"><Github size={11} /> GitHub</span>
+                        )}
+                        {activeWork.live_url ? (
+                            <a href={activeWork.live_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-green-500/40 hover:text-green-500 transition-all active:scale-95"><Zap size={11} /> Live Demo</a>
+                        ) : (
+                            <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed"><Zap size={11} /> Live Demo</span>
+                        )}
+                        {(() => {
+                            // README: перевіряємо файл README у submission АБО текстовий опис submission
+                            const rf2 = (activeWork.files ?? []).find(f => f.name?.toLowerCase().includes("readme") && f.url);
+                            const subDescStripped2 = (activeWork.description ?? "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+                            const hasReadme2 = !!rf2?.url || subDescStripped2.length > 0;
+                            const openReadme2 = () => {
+                                if (rf2?.url) {
+                                    setReadmeModal({ fileUrl: rf2.url, title: "README" });
+                                } else {
+                                    setReadmeModal({ htmlContent: activeWork.description!, title: `Опис від команди: ${activeWork.team_name}` });
+                                }
+                            };
+                            return hasReadme2 ? (
+                                <button onClick={openReadme2} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-(--bg) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 transition-all active:scale-95"><Eye size={11} /> README</button>
+                            ) : (
+                                <span className="flex items-center gap-2 px-3 py-2 rounded-xl border border-(--brd) text-(--t2) opacity-30 font-black text-[10px] uppercase tracking-widest cursor-not-allowed" title="Команда не надала опис"><Eye size={11} /> README</span>
+                            );
+                        })()}
+                        </div>
+                        </div>
+                        </div>
+
+                        </div>
+
+                        {/* SCORE ISLAND — hidden on mobile (shown inline above), visible on sm+ */}
+                        <div className="hidden sm:flex flex-shrink-0 bg-(--card) rounded-2xl sm:rounded-[2rem] border border-(--brd) shadow-sm flex-col items-center justify-center px-6 py-5 gap-2" style={{ width: 140, minWidth: 140 }}>
+                        <div className={`text-4xl font-black rounded-2xl border flex items-center justify-center ${
+                            activeTotal >= 80 ? "text-green-500 bg-green-500/10 border-green-500/20" :
+                            activeTotal >= 50 ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
+                            activeTotal >  0  ? "text-amber-500 bg-amber-500/10 border-amber-500/20" :
+                            "text-(--t2) bg-(--bg) border-(--brd)"
+                        }`} style={{ width: 104, height: 60, fontVariantNumeric: "tabular-nums" }}>
+                        {activeWork.criteria.every(c => c.score !== "") || activeTotal > 0 ? activeTotal : "—"}
+                        </div>
+                        <span className="text-[8px] font-black uppercase tracking-widest text-(--t2) text-center leading-tight">
+                        Підсумкова<br/>оцінка (авто)
                         </span>
                         </div>
-                        </div>
-                        </div>
+
                         </div>
 
                         {/* Criteria scores */}
@@ -825,27 +1207,17 @@ export default function JuryEvaluationPage() {
                         <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">
                         Підсумкова оцінка (авто)
                         </span>
-                        <div className="flex items-center gap-3">
-                        {/* Visual bar */}
-                        <div className="hidden sm:flex items-center gap-2">
-                        <div className="relative w-32 h-2 rounded-full bg-(--brd) overflow-hidden">
-                        <div
-                        className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
-                        style={{
-                            width: `${activeTotal}%`,
-                            background: activeTotal >= 80 ? "#22c55e" : activeTotal >= 50 ? "#3b82f6" : "#f59e0b",
-                        }}
-                        />
-                        </div>
-                        </div>
+                        <div className="flex items-center gap-2">
+                        <div style={{ width: 64, textAlign: "right" }}>
                         <span className={`text-2xl font-black ${
                             !allCriteriaFilled      ? "text-(--t2)" :
                             activeTotal >= 80       ? "text-green-500" :
                             activeTotal >= 50       ? "text-blue-500" :
                             "text-amber-500"
-                        }`}>
+                        }`} style={{ fontVariantNumeric: "tabular-nums" }}>
                         {allCriteriaFilled ? activeTotal : "—"}
                         </span>
+                        </div>
                         <span className="text-[9px] font-bold text-(--t2) uppercase">/ 100</span>
                         </div>
                         </div>
@@ -866,12 +1238,13 @@ export default function JuryEvaluationPage() {
                         </div>
 
                         {/* Action bar */}
-                        <div className="cdIn flex flex-col sm:flex-row items-start sm:items-center gap-3" style={{ animationDelay: "130ms" }}>
-                        {/* Save button */}
+                        <div className="cdIn flex flex-col gap-3" style={{ animationDelay: "130ms" }}>
+                        {/* Save + Cancel */}
+                        <div className="flex items-center gap-3">
                         <button
                         onClick={handleSave}
                         disabled={saving}
-                        className={`flex items-center gap-2 px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all active:scale-95 shadow-lg ${
+                        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all active:scale-95 shadow-lg ${
                             saving
                             ? "bg-(--brd) text-(--t2) cursor-not-allowed shadow-none"
                             : allCriteriaFilled
@@ -886,43 +1259,36 @@ export default function JuryEvaluationPage() {
                             : <><Save size={14} /> Зберегти оцінку</>
                         }
                         </button>
-
-                        {/* Cancel (reset to saved) */}
                         <button
                         onClick={() => { fetchData(); setSaveMsg(null); }}
-                        className="flex items-center gap-2 px-5 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest border border-(--brd) bg-(--bg) text-(--t2) hover:bg-(--card) hover:text-(--t1) active:scale-95 transition-all"
+                        className="flex items-center gap-2 px-4 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest border border-(--brd) bg-(--bg) text-(--t2) hover:bg-(--card) hover:text-(--t1) active:scale-95 transition-all"
                         >
-                        <RefreshCw size={14} /> Відмінити
+                        <RefreshCw size={14} /><span className="hidden sm:inline"> Відмінити</span>
                         </button>
-
-                        {/* Status message */}
                         {saveMsg && (
                             <div className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest ${
                                 saveMsg.type === "ok"
                                 ? "bg-green-500/10 border border-green-500/20 text-green-500"
                                 : "bg-red-500/10 border border-red-500/20 text-red-500"
                             }`}>
-                            {saveMsg.type === "ok"
-                                ? <CheckCircle2 size={13} />
-                                : <AlertCircle size={13} />
-                            }
-                            {saveMsg.text}
+                            {saveMsg.type === "ok" ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+                            <span className="hidden sm:inline">{saveMsg.text}</span>
                             </div>
                         )}
-
-                        {/* Navigate prev/next */}
-                        <div className="flex items-center gap-2 ml-auto">
+                        </div>
+                        {/* Prev / Next — full width on mobile */}
+                        <div className="flex items-center gap-2">
                         <button
                         onClick={() => setActiveIdx(i => (i !== null && i > 0) ? i - 1 : i)}
                         disabled={activeIdx === 0 || activeIdx === null}
-                        className="px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all disabled:opacity-30"
+                        className="flex-1 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all disabled:opacity-30 text-center"
                         >
                         ← Попередня
                         </button>
                         <button
                         onClick={() => setActiveIdx(i => (i !== null && i < works.length - 1) ? i + 1 : i)}
                         disabled={activeIdx === works.length - 1 || activeIdx === null}
-                        className="px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all disabled:opacity-30"
+                        className="flex-1 px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all disabled:opacity-30 text-center"
                         >
                         Наступна →
                         </button>
@@ -954,6 +1320,10 @@ export default function JuryEvaluationPage() {
                 )}
                 </div>
                 </main>
+                {/* README Modal */}
+                {readmeModal && (
+                    <ReadmeModal fileUrl={readmeModal.fileUrl} htmlContent={readmeModal.htmlContent} title={readmeModal.title} onClose={() => setReadmeModal(null)} />
+                )}
                 </div>
         );
 }

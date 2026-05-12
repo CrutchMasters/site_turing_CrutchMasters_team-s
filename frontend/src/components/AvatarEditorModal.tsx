@@ -2,14 +2,24 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { X, Loader } from "lucide-react";
 
+interface TableConfig {
+    table: string;
+    idColumn: string;
+}
+
 interface Props {
     userId: string;
     onSave: (url: string) => void;
     onClose: () => void;
     supabase: any;
+    // Какую таблицу обновлять: по умолчанию "account" / "id"
+    // Для команд передавай: tableConfig={{ table: "teams", idColumn: "id" }}
+    tableConfig?: TableConfig;
+    // Если true — только загружает в Storage, НЕ обновляет БД (для pre-creation аватаров)
+    skipDbUpdate?: boolean;
 }
 
-export default function AvatarEditorModal({ userId, onSave, onClose, supabase }: Props) {
+export default function AvatarEditorModal({ userId, onSave, onClose, supabase, tableConfig, skipDbUpdate }: Props) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [img, setImg] = useState<HTMLImageElement | null>(null);
     const [scale, setScale] = useState(100);
@@ -17,6 +27,10 @@ export default function AvatarEditorModal({ userId, onSave, onClose, supabase }:
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [uploading, setUploading] = useState(false);
     const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+
+    // Резолвим таблицу и колонку — берём из пропса или дефолт "account"/"id"
+    const dbTable   = tableConfig?.table    ?? "account";
+    const dbIdCol   = tableConfig?.idColumn ?? "id";
 
     const SIZE = 260;
 
@@ -69,40 +83,46 @@ export default function AvatarEditorModal({ userId, onSave, onClose, supabase }:
         setUploading(true);
         try {
             const blob: Blob = await new Promise(res => canvas.toBlob(b => res(b!), "image/webp", 0.85));
-            // Используем уникальное имя файла с timestamp — обходим upsert/UPDATE проблему
-            // Старый файл будем удалять через account.avatar_url
             const timestamp = Date.now();
             const path = `${userId}/avatar_${timestamp}.webp`;
 
-            const { error } = await supabase.storage
-                .from("avatars")
-                .upload(path, blob, { contentType: "image/webp" });
+            // 1. Загружаем новый файл в bucket
+            const { error: uploadError } = await supabase.storage
+            .from("avatars")
+            .upload(path, blob, { contentType: "image/webp" });
 
-            if (error) throw error;
+            if (uploadError) throw uploadError;
 
-            const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-            const finalUrl = `${data.publicUrl}?v=${timestamp}`;
+            const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
+            const finalUrl = `${urlData.publicUrl}?v=${timestamp}`;
 
-            // Получаем старый URL чтобы удалить старый файл
-            const { data: accountData } = await supabase
-                .from("account")
+            if (!skipDbUpdate) {
+                // 2. Получаем старый avatar_url из нужной таблицы (account ИЛИ teams)
+                const { data: existingRow } = await supabase
+                .from(dbTable)
                 .select("avatar_url")
-                .eq("id", userId)
-                .single();
+                .eq(dbIdCol, userId)
+                .maybeSingle();
 
-            // Обновляем URL в БД
-            await supabase.from("account").update({ avatar_url: finalUrl }).eq("id", userId);
+                // 3. Обновляем avatar_url в нужной таблице
+                const { error: updateError } = await supabase
+                .from(dbTable)
+                .update({ avatar_url: finalUrl })
+                .eq(dbIdCol, userId);
 
-            // Удаляем старый файл если был
-            if (accountData?.avatar_url) {
-                try {
-                    const url = new URL(accountData.avatar_url);
-                    const pathParts = url.pathname.split("/object/public/avatars/");
-                    if (pathParts[1]) {
-                        const oldPath = pathParts[1].split("?")[0];
-                        await supabase.storage.from("avatars").remove([oldPath]);
-                    }
-                } catch { /* игнорируем ошибку удаления */ }
+                if (updateError) throw updateError;
+
+                // 4. Удаляем старый файл из storage если был
+                if (existingRow?.avatar_url) {
+                    try {
+                        const url = new URL(existingRow.avatar_url);
+                        const pathParts = url.pathname.split("/object/public/avatars/");
+                        if (pathParts[1]) {
+                            const oldPath = pathParts[1].split("?")[0];
+                            await supabase.storage.from("avatars").remove([oldPath]);
+                        }
+                    } catch { /* игнорируем ошибку удаления старого файла */ }
+                }
             }
 
             onSave(finalUrl);

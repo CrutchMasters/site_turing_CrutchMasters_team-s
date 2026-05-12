@@ -37,3 +37,124 @@ body {
   font-family:      var(--font-barlow), Arial, sans-serif;
   transition:       background-color 0.3s ease, color 0.3s ease;
 }
+
+/* ── Animations ─────────────────────────────────────────────────────────────── */
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes cardDrop {
+  from { opacity: 0; transform: translateY(-20px) scale(.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-24px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+
+/* ── Animation utility classes ──────────────────────────────────────────────── */
+
+.fuIn { animation: fadeUp   340ms cubic-bezier(.22,1,.36,1) both; }
+.cdIn { animation: cardDrop 400ms cubic-bezier(.22,1,.36,1) both; }
+.scIn { animation: scaleIn  300ms cubic-bezier(.22,1,.36,1) both; }
+
+.spr { transition: transform 170ms cubic-bezier(.22,1,.36,1), box-shadow 170ms ease, background 150ms ease, color 150ms ease; }
+.spr:hover { transform: translateY(-2px) scale(1.015); box-shadow: 0 8px 24px rgba(37,99,235,0.12); }
+
+.modal-in { animation: scaleIn 280ms cubic-bezier(.22,1,.36,1) both; }
+
+/* ── Login / Register reveal animation ─────────────────────────────────────── */
+
+.reveal-drop { transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
+.otp-animate { animation: slideUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+/* ── Skeleton loader ────────────────────────────────────────────────────────── */
+
+.skeleton {
+  background: linear-gradient(90deg, var(--brd) 25%, var(--bg) 50%, var(--brd) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 0.75rem;
+}
+
+/* ── Rich text / Markdown preview ──────────────────────────────────────────── */
+
+.rich-preview h1 { font-size: 1.35em; font-weight: 900; margin: 0.6em 0 0.3em; letter-spacing: -0.02em; }
+.rich-preview h2 { font-size: 1.15em; font-weight: 800; margin: 0.5em 0 0.25em; }
+.rich-preview h3 { font-size: 1.05em; font-weight: 700; margin: 0.4em 0 0.2em; }
+.rich-preview p  { margin: 0.35em 0; line-height: 1.65; }
+.rich-preview ul { margin: 0.4em 0; padding-left: 1.4em; list-style: disc; }
+.rich-preview li { margin: 0.2em 0; line-height: 1.55; }
+.rich-preview blockquote {
+  border-left: 3px solid rgb(59 130 246 / 0.5);
+  padding: 0.25em 0.8em;
+  margin: 0.5em 0;
+  color: var(--t2);
+  font-style: italic;
+  background: rgb(59 130 246 / 0.05);
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+.rich-preview code {
+  background: var(--bg);
+  border: 1px solid var(--brd);
+  border-radius: 0.35em;
+  padding: 0.1em 0.4em;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+}
+.rich-preview strong, .rich-preview b { font-weight: 800; }
+.rich-preview em,     .rich-preview i { font-style: italic; }
+.rich-preview u  { text-decoration: underline; text-underline-offset: 3px; }
+.rich-preview s  { text-decoration: line-through; opacity: 0.7; }
+.rich-preview a  { color: rgb(59 130 246); text-decoration: underline; }
+
+/* ── WYSIWYG editor ─────────────────────────────────────────────────────────── */
+
+.wysiwyg:empty::before {
+  content: attr(data-placeholder);
+  color: var(--t2);
+  opacity: 0.35;
+  pointer-events: none;
+}
+.wysiwyg { outline: none; }
+.wysiwyg h1 { font-size: 1.5em;  font-weight: 900; margin: 0.5em  0 0.25em; letter-spacing: -0.02em; }
+.wysiwyg h2 { font-size: 1.25em; font-weight: 800; margin: 0.45em 0 0.2em; }
+.wysiwyg h3 { font-size: 1.1em;  font-weight: 700; margin: 0.4em  0 0.15em; }
+.wysiwyg p  { margin: 0.3em 0; line-height: 1.7; }
+.wysiwyg ul { margin: 0.4em 0; padding-left: 1.5em; list-style: disc; }
+.wysiwyg li { margin: 0.2em 0; line-height: 1.6; }
+.wysiwyg blockquote {
+  border-left: 3px solid rgb(59 130 246 / 0.5);
+  padding: 0.25em 0.8em;
+  margin: 0.5em 0;
+  color: var(--t2);
+  font-style: italic;
+  background: rgb(59 130 246 / 0.05);
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+.wysiwyg code {
+  background: var(--bg);
+  border: 1px solid var(--brd);
+  border-radius: 0.3em;
+  padding: 0.1em 0.4em;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+}

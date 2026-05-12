@@ -152,7 +152,7 @@ export default function HomePage() {
       <div className="flex flex-col gap-2">
       <span className="text-sm font-bold text-(--t2)">{t.settings.lang}</span>
       <div className="flex bg-(--bg) p-1 rounded-xl gap-1 border border-(--brd)">
-      {(["en", "ru", "ua"] as const).map((lang) => (
+      {(["en", "ua"] as const).map((lang) => (
         <button
         key={lang}
         onClick={() => setLocale(lang)}
@@ -239,14 +239,14 @@ export default function HomePage() {
           className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-(--t2) hover:bg-(--bg) hover:text-blue-600 transition-colors"
           >
           <UserCircle size={16} />{" "}
-          {locale === "en" ? "Profile" : locale === "ru" ? "Профиль" : "Профіль"}
+          {locale === "en" ? "Profile" : "Профіль"}
           </Link>
           <button
           onClick={logout}
           className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-500/10 transition-colors border-t border-(--brd)"
           >
           <LogOut size={16} />{" "}
-          {locale === "en" ? "Sign Out" : locale === "ru" ? "Выйти" : "Вийти"}
+          {locale === "en" ? "Sign Out" : "Вийти"}
           </button>
           </div>
         )}
@@ -312,7 +312,7 @@ export default function HomePage() {
       ref={(el) => { revealRefs.current[1] = el; }}
       className="reveal-fade opacity-0 flex flex-col items-center justify-center gap-6 sm:gap-10"
       >
-      <Link href={mounted && user ? "/dashboard" : "/register"} className="w-full max-w-[260px]">
+      <Link href="/dashboard" className="w-full max-w-[260px]">
       <button className="bg-blue-600 text-white px-6 py-4 sm:px-8 sm:py-6 rounded-2xl sm:rounded-[2rem] text-lg sm:text-2xl font-black shadow-[0_20px_40px_rgba(37,99,235,0.3)] hover:bg-blue-700 hover:scale-105 transition-all w-full uppercase">
       {mounted && user
         ? locale === "en" ? "Dashboard" : "Кабінет"
