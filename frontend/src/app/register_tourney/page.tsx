@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Zap, Trophy, Clock, Users, Layers, ChevronRight, ArrowLeft, X, CalendarDays,
+  Zap, Trophy, Clock, Users, Layers, ChevronRight, ArrowLeft, X, CalendarDays, ImageIcon, Upload, AlertCircle,
 } from 'lucide-react';
 import { RichTextEditor } from '@/components/RichTextEditor';
 
@@ -87,10 +87,13 @@ export default function RegisterTourney() {
   const [roundsData, setRoundsData]       = useState<Record<number, RoundData>>({});
   const [isSubmitting, setIsSubmitting]   = useState(false);
   const [submitError, setSubmitError]     = useState<string | null>(null);
+  const [bannerUrl, setBannerUrl]         = useState('');
+  const [bannerUploading, setBannerUploading] = useState(false);
+  const [bannerError, setBannerError]     = useState('');
 
   // Зовнішні дати для RoundSettingsPanel (від таймлайну)
   const [externalRoundDates, setExternalRoundDates] = useState<
-    Record<number, Partial<Pick<RoundData, "startDate"|"startTime"|"deadlineDate"|"deadlineTime">>>
+  Record<number, Partial<Pick<RoundData, "startDate"|"startTime"|"deadlineDate"|"deadlineTime">>>
   >({});
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -106,9 +109,9 @@ export default function RegisterTourney() {
           evalEndDate: "", evalEndTime: "", requirements: [], criteria: [], links: [], files: [],
         }),
         ...(patch.startDate    !== undefined ? { startDate:    patch.startDate }    : {}),
-        ...(patch.startTime    !== undefined ? { startTime:    patch.startTime }    : {}),
-        ...(patch.deadlineDate !== undefined ? { deadlineDate: patch.deadlineDate } : {}),
-        ...(patch.deadlineTime !== undefined ? { deadlineTime: patch.deadlineTime } : {}),
+                           ...(patch.startTime    !== undefined ? { startTime:    patch.startTime }    : {}),
+                           ...(patch.deadlineDate !== undefined ? { deadlineDate: patch.deadlineDate } : {}),
+                           ...(patch.deadlineTime !== undefined ? { deadlineTime: patch.deadlineTime } : {}),
       },
     }));
     // Також оновлюємо externalRoundDates щоб RoundSettingsPanel отримав нові дати
@@ -116,10 +119,10 @@ export default function RegisterTourney() {
       ...prev,
       [num]: {
         ...(prev[num] ?? {}),
-        ...(patch.startDate    !== undefined ? { startDate:    patch.startDate }    : {}),
-        ...(patch.startTime    !== undefined ? { startTime:    patch.startTime }    : {}),
-        ...(patch.deadlineDate !== undefined ? { deadlineDate: patch.deadlineDate } : {}),
-        ...(patch.deadlineTime !== undefined ? { deadlineTime: patch.deadlineTime } : {}),
+                                   ...(patch.startDate    !== undefined ? { startDate:    patch.startDate }    : {}),
+                                   ...(patch.startTime    !== undefined ? { startTime:    patch.startTime }    : {}),
+                                   ...(patch.deadlineDate !== undefined ? { deadlineDate: patch.deadlineDate } : {}),
+                                   ...(patch.deadlineTime !== undefined ? { deadlineTime: patch.deadlineTime } : {}),
       },
     }));
   }, []);
@@ -179,6 +182,33 @@ export default function RegisterTourney() {
     return data.signed_url as string;
   };
 
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBannerError('');
+    setBannerUploading(true);
+    try {
+      const token = await getToken();
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`${API_URL}/api/upload/tournament-banner-temp`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail ?? res.statusText);
+      }
+      const data = await res.json();
+      setBannerUrl(data.public_url as string);
+    } catch (err: any) {
+      setBannerError(err?.message ?? 'Помилка завантаження банера');
+    } finally {
+      setBannerUploading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
@@ -199,13 +229,13 @@ export default function RegisterTourney() {
     const te = parseLocalDt(endDate,      endTime);
 
     if (rf && ts && rf >= ts)
-      { setSubmitError('Реєстрація повинна починатися раніше за старт турніру.'); return; }
+    { setSubmitError('Реєстрація повинна починатися раніше за старт турніру.'); return; }
     if (rt && ts && rt > ts)
-      { setSubmitError('Реєстрація повинна закінчуватися не пізніше старту турніру (вони не можуть перетинатися).'); return; }
+    { setSubmitError('Реєстрація повинна закінчуватися не пізніше старту турніру (вони не можуть перетинатися).'); return; }
     if (rf && rt && rf >= rt)
-      { setSubmitError('Початок реєстрації повинен бути раніше за кінець реєстрації.'); return; }
+    { setSubmitError('Початок реєстрації повинен бути раніше за кінець реєстрації.'); return; }
     if (ts && te && ts >= te)
-      { setSubmitError('Початок турніру повинен бути раніше за кінець турніру.'); return; }
+    { setSubmitError('Початок турніру повинен бути раніше за кінець турніру.'); return; }
 
     // Валідація раундів
     const roundSlices = Array.from({ length: roundCount }, (_, i) => {
@@ -214,23 +244,23 @@ export default function RegisterTourney() {
       return {
         n,
         start: parseLocalDt(rd?.startDate ?? '', rd?.startTime ?? ''),
-        end:   parseLocalDt(rd?.deadlineDate ?? '', rd?.deadlineTime ?? ''),
+                                   end:   parseLocalDt(rd?.deadlineDate ?? '', rd?.deadlineTime ?? ''),
       };
     }).filter(r => r.start || r.end);
 
     for (const r of roundSlices) {
       if (r.start && r.end && r.start >= r.end)
-        { setSubmitError(`Раунд ${r.n}: початок повинен бути раніше за дедлайн.`); return; }
+      { setSubmitError(`Раунд ${r.n}: початок повинен бути раніше за дедлайн.`); return; }
       if (ts && r.start && r.start < ts)
-        { setSubmitError(`Раунд ${r.n}: початок раунду не може бути раніше за старт турніру.`); return; }
+      { setSubmitError(`Раунд ${r.n}: початок раунду не може бути раніше за старт турніру.`); return; }
       if (te && r.end && r.end > te)
-        { setSubmitError(`Раунд ${r.n}: дедлайн раунду не може виходити за межі турніру.`); return; }
+      { setSubmitError(`Раунд ${r.n}: дедлайн раунду не може виходити за межі турніру.`); return; }
     }
     for (let i = 0; i < roundSlices.length - 1; i++) {
       const cur = roundSlices[i];
       const nxt = roundSlices[i + 1];
       if (cur.end && nxt.start && cur.end > nxt.start)
-        { setSubmitError(`Раунд ${nxt.n} починається до завершення раунду ${cur.n}. Раунди не можуть перекриватися.`); return; }
+      { setSubmitError(`Раунд ${nxt.n} починається до завершення раунду ${cur.n}. Раунди не можуть перекриватися.`); return; }
     }
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -320,9 +350,15 @@ export default function RegisterTourney() {
                                                                          p_rounds:            roundCount,
                                                                          p_rounds_data:       null,
                                                                          p_created_by:        user?.id ?? null,
+                                                                         p_banner_url:        bannerUrl.trim() || null,
       });
       if (rpcError) throw new Error(rpcError.message || rpcError.details || JSON.stringify(rpcError));
       if (!tournamentId) throw new Error(t.tourney?.errNoId ?? 'Турнір створено, але ID не повернуто');
+
+      // Якщо є банер — зберігаємо banner_url окремо (на випадок якщо RPC його не підтримує)
+      if (bannerUrl.trim()) {
+        await supabase.from('tournaments').update({ banner_url: bannerUrl.trim() }).eq('id', tournamentId);
+      }
 
       // Вставляємо раунди через бекенд (service_role) — anon key не має прав на INSERT в rounds (RLS 401)
       // БАГ 8 fix: перевіряємо ліміт constraint (1-8) перед відправкою
@@ -591,6 +627,56 @@ export default function RegisterTourney() {
         </div>
         </section>
 
+        {/* BLOCK BANNER: Банер турніру */}
+        <section className="cdIn bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden" style={{ animationDelay: '60ms' }}>
+        <div className="flex items-center gap-3 px-6 sm:px-8 py-4 border-b border-(--brd) bg-(--bg)/50">
+        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
+        <ImageIcon size={16} />
+        </div>
+        <span className="text-xs font-black uppercase tracking-widest text-(--t2)">{t.tourney?.bannerBlock ?? 'Банер турніру'}</span>
+        </div>
+        <div className="p-6 sm:p-8 space-y-4">
+        {bannerUrl ? (
+          <div className="relative rounded-2xl overflow-hidden border border-(--brd) group">
+          <img src={bannerUrl} alt="Banner preview" className="w-full h-40 object-cover" />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+          <label className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-white/90 text-gray-900 rounded-xl text-xs font-black uppercase tracking-wide shadow-lg hover:bg-white transition-all">
+          <Upload size={14} />
+          {t.tourney?.bannerChange ?? 'Змінити'}
+          <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={bannerUploading} />
+          </label>
+          </div>
+          <button
+          type="button"
+          onClick={() => setBannerUrl('')}
+          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-red-600 transition-colors"
+          >
+          <X size={13} />
+          </button>
+          </div>
+        ) : (
+          <label className={`flex flex-col items-center justify-center gap-3 p-8 rounded-2xl border-2 border-dashed cursor-pointer transition-all ${bannerUploading ? 'border-(--brd) opacity-60 cursor-wait' : 'border-(--brd) hover:border-purple-500/50 hover:bg-purple-500/5'}`}>
+          <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center">
+          {bannerUploading
+            ? <span className="w-5 h-5 border-2 border-purple-500/40 border-t-purple-500 rounded-full animate-spin" />
+            : <ImageIcon size={22} className="text-purple-500" />
+          }
+          </div>
+          <div className="text-center">
+          <p className="text-sm font-black text-(--t1)">{bannerUploading ? (t.tourney?.bannerUploading ?? 'Завантаження...') : (t.tourney?.bannerUploadTitle ?? 'Завантажити банер')}</p>
+          <p className="text-[11px] text-(--t2) mt-0.5">{t.tourney?.bannerUploadHint ?? 'PNG, JPG, WEBP — рекомендований розмір 1200×400'}</p>
+          </div>
+          <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={bannerUploading} />
+          </label>
+        )}
+        {bannerError && (
+          <div className="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-500 text-xs font-bold">
+          <AlertCircle size={14} /> {bannerError}
+          </div>
+        )}
+        </div>
+        </section>
+
         {/* BLOCK 2: Реєстрація + Дати */}
         <section className="cdIn grid grid-cols-1 md:grid-cols-2 gap-5" style={{ animationDelay: '80ms' }}>
 
@@ -627,26 +713,26 @@ export default function RegisterTourney() {
         <section className="cdIn" style={{ animationDelay: '110ms' }}>
         <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden p-5">
         <TournamentTimeline
-          regFromDate={regStartDate} setRegFromDate={setRegStartDate}
-          regFromTime={regStartTime} setRegFromTime={setRegStartTime}
-          regToDate={regEndDate}     setRegToDate={setRegEndDate}
-          regToTime={regEndTime}     setRegToTime={setRegEndTime}
-          startDate={startDate}      setStartDate={setStartDate}
-          startTime={startTime}      setStartTime={setStartTime}
-          endDate={endDate}          setEndDate={setEndDate}
-          endTime={endTime}          setEndTime={setEndTime}
-          rounds={Array.from({ length: roundCount }, (_, i) => {
-            const n  = i + 1;
-            const rd = roundsData[n];
-            return {
-              number:       n,
-              startDate:    rd?.startDate    ?? "",
-              startTime:    rd?.startTime    ?? "",
-              deadlineDate: rd?.deadlineDate ?? "",
-              deadlineTime: rd?.deadlineTime ?? "",
-            } satisfies RoundSlice;
-          })}
-          onRoundChange={handleRoundTimelineChange}
+        regFromDate={regStartDate} setRegFromDate={setRegStartDate}
+        regFromTime={regStartTime} setRegFromTime={setRegStartTime}
+        regToDate={regEndDate}     setRegToDate={setRegEndDate}
+        regToTime={regEndTime}     setRegToTime={setRegEndTime}
+        startDate={startDate}      setStartDate={setStartDate}
+        startTime={startTime}      setStartTime={setStartTime}
+        endDate={endDate}          setEndDate={setEndDate}
+        endTime={endTime}          setEndTime={setEndTime}
+        rounds={Array.from({ length: roundCount }, (_, i) => {
+          const n  = i + 1;
+          const rd = roundsData[n];
+          return {
+            number:       n,
+            startDate:    rd?.startDate    ?? "",
+            startTime:    rd?.startTime    ?? "",
+            deadlineDate: rd?.deadlineDate ?? "",
+            deadlineTime: rd?.deadlineTime ?? "",
+          } satisfies RoundSlice;
+        })}
+        onRoundChange={handleRoundTimelineChange}
         />
         </div>
         </section>

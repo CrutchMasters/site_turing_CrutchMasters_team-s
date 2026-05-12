@@ -560,8 +560,8 @@ function SearchTeamCard({
 }) {
     const isMyTeam = team.captain_id === currentUserId;
     const memberCount = team.members_ids?.length ?? 0;
-    const myLabel = locale === "ru" ? "Моя" : locale === "en" ? "Mine" : "Моя";
-    const membersLabel = locale === "ru" ? "уч." : locale === "en" ? "mbr." : "уч.";
+    const myLabel = locale === "en" ? "Mine" : "Моя";
+    const membersLabel = locale === "en" ? "mbr." : "уч.";
     const gradient = gradients[idx % gradients.length];
 
     return (

@@ -385,9 +385,10 @@ def ensure_buckets():
     if not supabase:
         return
     required = [
-        {"id": "submissions",  "name": "submissions",  "public": False},
-        {"id": "round-files",  "name": "round-files",  "public": False},
-    ]
+    {"id": "submissions",        "name": "submissions",        "public": False},
+    {"id": "round-files",        "name": "round-files",        "public": False},
+    {"id": "tournament-banners", "name": "tournament-banners", "public": True},
+]
     try:
         existing = {b.id for b in supabase.storage.list_buckets()}
     except Exception as e:
@@ -1328,6 +1329,100 @@ async def update_tournament(
     print(f"[TOURNAMENT] {caller['username']} оновив турнір {tournament_id}: {list(update_data.keys())}", flush=True)
     return {"success": True, "tournament": result.data[0] if result.data else None}
 
+@app.post("/api/tournaments/{tournament_id}/banner")
+async def upload_tournament_banner(
+    tournament_id: str,
+    file: UploadFile = File(...),
+    authorization: str = Header(...),
+):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    if caller.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки адміністратор може змінювати банер")
+
+    tournament = fetch_one(
+        supabase.table("tournaments").select("id").eq("id", tournament_id)
+    )
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Турнір не знайдено")
+
+    allowed_types = {"image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"}
+    content_type  = file.content_type or ""
+    if content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Непідтримуваний тип файлу: {content_type}. Дозволені: JPEG, PNG, WEBP, GIF",
+        )
+
+    ext_map = {"image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
+    ext  = ext_map.get(content_type, "jpg")
+    path = f"{tournament_id}/banner.{ext}"
+
+    try:
+        file_bytes = await file.read()
+        if len(file_bytes) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Файл занадто великий. Максимум 10 MB")
+
+        supabase.storage.from_("tournament-banners").upload(
+            path, file_bytes, {"content-type": content_type, "upsert": "true"},
+        )
+
+        url_data   = supabase.storage.from_("tournament-banners").get_public_url(path)
+        public_url = url_data if isinstance(url_data, str) else url_data.get("publicUrl", "")
+
+        import time as _time
+        public_url_cache = f"{public_url}?t={int(_time.time())}"
+
+        supabase.table("tournaments").update({"banner_url": public_url_cache}).eq("id", tournament_id).execute()
+
+        print(f"[BANNER] Турнір {tournament_id}: банер завантажено → {public_url_cache}", flush=True)
+        return {"banner_url": public_url_cache, "path": path}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[BANNER] Помилка завантаження банера для {tournament_id}: {e}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Помилка завантаження банера: {str(e)}")
+
+
+@app.delete("/api/tournaments/{tournament_id}/banner")
+async def delete_tournament_banner(
+    tournament_id: str,
+    authorization: str = Header(...),
+):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    if caller.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки адміністратор може видаляти банер")
+
+    tournament = fetch_one(
+        supabase.table("tournaments").select("id, banner_url").eq("id", tournament_id)
+    )
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Турнір не знайдено")
+
+    errors = []
+    for ext in ("jpg", "png", "webp", "gif"):
+        try:
+            supabase.storage.from_("tournament-banners").remove([f"{tournament_id}/banner.{ext}"])
+        except Exception as e:
+            errors.append(str(e))
+
+    try:
+        supabase.table("tournaments").update({"banner_url": None}).eq("id", tournament_id).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Помилка оновлення БД: {str(e)}")
+
+    print(f"[BANNER] Турнір {tournament_id}: банер видалено", flush=True)
+    return {"ok": True, "storage_errors": errors}
 
 @app.delete("/api/tournaments/{tournament_id}")
 async def delete_tournament(tournament_id: str, authorization: str = Header(...)):

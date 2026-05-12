@@ -58,14 +58,14 @@ const DAYS_RU = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
 const DAYS_UA = ["Пн","Вт","Ср","Чт","Пт","Сб","Нд"];
 const DAYS_EN = ["Mo","Tu","We","Th","Fr","Sa","Su"];
 
-const LEGEND: { type: CalendarEvent["type"]; ru: string; ua: string; en: string }[] = [
-  { type: "tournament_start",   ru: "Начало турнира",     ua: "Початок турніру",    en: "Tournament start" },
-{ type: "tournament_end",     ru: "Конец турнира",      ua: "Кінець турніру",     en: "Tournament end"   },
-{ type: "registration_start", ru: "Начало регистрации", ua: "Початок реєстрації", en: "Reg. start"       },
-{ type: "registration_end",   ru: "Конец регистрации",  ua: "Кінець реєстрації",  en: "Reg. end"         },
-{ type: "round_start",        ru: "Начало раунда",      ua: "Початок раунду",     en: "Round start"      },
-{ type: "round_end",          ru: "Конец раунда",       ua: "Кінець раунду",      en: "Round end"        },
-{ type: "announcement",       ru: "Объявление",         ua: "Оголошення",         en: "Announcement"     },
+const LEGEND: { type: CalendarEvent["type"]; ua: string; en: string }[] = [
+  { type: "tournament_start",   ua: "Початок турніру",    en: "Tournament start" },
+{ type: "tournament_end",     ua: "Кінець турніру",     en: "Tournament end"   },
+{ type: "registration_start", ua: "Початок реєстрації", en: "Reg. start"       },
+{ type: "registration_end",   ua: "Кінець реєстрації",  en: "Reg. end"         },
+{ type: "round_start",        ua: "Початок раунду",     en: "Round start"      },
+{ type: "round_end",          ua: "Кінець раунду",      en: "Round end"        },
+{ type: "announcement",       ua: "Оголошення",         en: "Announcement"     },
 ];
 
 function EventRow({ event }: { event: CalendarEvent }) {
@@ -344,7 +344,7 @@ export default function EventCalendar({ extraEvents = [], eventsFilter = "all", 
           <div key={item.type} className="flex items-center gap-1.5">
           <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${EVENT_COLORS[item.type]}`} />
           <span className="text-[9px] font-black text-(--t2) truncate">
-          {locale === "ua" ? item.ua : locale === "en" ? item.en : item.ru}
+          {locale === "ua" ? item.ua : item.en}
           </span>
           </div>
         ))}

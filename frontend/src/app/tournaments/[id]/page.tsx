@@ -47,6 +47,7 @@ interface Tournament {
     end_at?: string;
     registration_from?: string;
     registration_to?: string;
+    banner_url?: string;
     teams: Team[];
 }
 
@@ -79,7 +80,7 @@ export default function TournamentPage() {
             try {
                 const { data: tourData, error: tourErr } = await supabase
                 .from("tournaments")
-                .select("id, name, rules, max_teams, rounds, status, start_at, end_at, registration_from, registration_to")
+                .select("id, name, rules, max_teams, rounds, status, start_at, end_at, registration_from, registration_to, banner_url")
                 .eq("id", id)
                 .single();
                 if (tourErr) throw tourErr;
@@ -249,7 +250,16 @@ export default function TournamentPage() {
             >
             <ArrowLeft size={16} /> Назад до турнірів
             </button>
-
+            {/* Banner */}
+            {tournament.banner_url && (
+                <div className="mb-5 rounded-2xl overflow-hidden border border-(--brd)">
+                <img
+                src={tournament.banner_url}
+                alt={tournament.name}
+                className="w-full max-h-72 object-cover"
+                />
+                </div>
+            )}
             <div className="flex items-start justify-between gap-3 mb-4">
             <h1 className="text-2xl font-black text-(--t1)">{tournament.name}</h1>
             {isAdmin && (
