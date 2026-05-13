@@ -818,6 +818,19 @@ export default function JuryEvaluationPage() {
                     </div>
                     </div>
                 ) : (
+                    <div className="flex flex-col gap-4 w-full">
+
+                    {/* ══ Judged locked banner ═════════════════════════════════════ */}
+                    {round?.status === "judged" && (
+                        <div className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl border-2 border-amber-500/40 bg-amber-500/10">
+                            <Lock size={18} className="text-amber-500 shrink-0" />
+                            <div>
+                                <p className="text-[11px] font-black uppercase tracking-widest text-amber-500">Оцінювання закрито</p>
+                                <p className="text-[11px] text-(--t2) mt-0.5">Адміністратор закрив оцінювання для цього раунду. Редагування оцінок заблоковано.</p>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="flex flex-col xl:flex-row gap-4 w-full">
 
                     {/* ══ Mobile tab switcher ══════════════════════════════════════ */}
@@ -1244,9 +1257,9 @@ export default function JuryEvaluationPage() {
                         <div className="flex items-center gap-3">
                         <button
                         onClick={handleSave}
-                        disabled={saving}
+                        disabled={saving || round?.status === "judged"}
                         className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all active:scale-95 shadow-lg ${
-                            saving
+                            saving || round?.status === "judged"
                             ? "bg-(--brd) text-(--t2) cursor-not-allowed shadow-none"
                             : allCriteriaFilled
                             ? "bg-green-600 text-white hover:bg-green-700 shadow-green-600/25"
@@ -1316,6 +1329,7 @@ export default function JuryEvaluationPage() {
                         </p>
                         </div>
                     )}
+                    </div>
                     </div>
                     </div>
                 )}

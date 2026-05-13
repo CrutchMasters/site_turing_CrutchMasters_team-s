@@ -236,15 +236,16 @@ def _recalc_round_status(round_id: str) -> str | None:
         if not r:
             return None
         current  = r.get("status") or "pending"
-        if current in ("closed", "reviewed"):
+        if current in ("judging", "judged"):
             return current  # не чіпаємо ручні статуси
         now      = datetime.now(timezone.utc)
         start_at = _parse_dt(r.get("start_at"))
         end_at   = _parse_dt(r.get("end_at"))
-        if end_at and now >= end_at:
-            new_status = "finished"
-        elif start_at and now >= start_at:
+        if start_at and now >= start_at and (not end_at or now < end_at):
             new_status = "active"
+        elif end_at and now >= end_at:
+            # Час вийшов — переходимо в judging (чекає ручного підтвердження адміном)
+            new_status = "judging"
         else:
             new_status = "pending"
         if new_status != current:
@@ -457,7 +458,7 @@ def update_tournament_statuses():
                 try:
                     rounds_res = supabase.table("rounds").select("status").eq("tournament_id", t["id"]).execute()
                     rounds = rounds_res.data or []
-                    if rounds and all(r.get("status") == "finished" for r in rounds):
+                    if rounds and all(r.get("status") == "judged" for r in rounds):
                         new_status = "finished"
                 except Exception:
                     pass
@@ -497,16 +498,15 @@ def update_round_statuses():
             start_at = _parse_dt(r.get("start_at"))
             end_at   = _parse_dt(r.get("end_at"))
 
-            # НЕ пропускаємо finished — адмін міг відсунути дедлайн,
-            # тому раунд повинен повернутися до active якщо end_at ще не минув.
-            # Єдиний виняток — статуси що встановлюються вручну: closed, reviewed.
-            if current in ("closed", "reviewed"):
+            # НЕ пропускаємо active — адмін міг змінити дати.
+            # Єдиний виняток — статуси що встановлюються вручну: judging, judged.
+            if current in ("judging", "judged"):
                 continue
 
-            if end_at and now >= end_at:
-                new_status = "finished"
-            elif start_at and now >= start_at:
+            if start_at and now >= start_at and (not end_at or now < end_at):
                 new_status = "active"
+            elif end_at and now >= end_at:
+                new_status = "judging"
             else:
                 new_status = "pending"
 
@@ -2528,12 +2528,19 @@ async def save_jury_evaluation(
         raise HTTPException(status_code=404, detail="Раунд не знайдено")
 
     # Перевірка статусу раунду тільки для журі — суперадмін може оцінювати завжди
-    if caller_role == "jury" and round_.get("status") not in ("finished", "closed", "reviewed"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Оцінювання недоступне: раунд ще не завершено (статус: '{round_.get('status')}'). "
-                   "Оцінювання дозволено лише після завершення раунду."
-        )
+    if caller_role == "jury":
+        round_status = round_.get("status")
+        if round_status == "judged":
+            raise HTTPException(
+                status_code=403,
+                detail="Оцінювання заблоковано: раунд вже оцінено та закрито адміністратором."
+            )
+        if round_status not in ("judging", "active", "finished", "closed", "reviewed"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Оцінювання недоступне: раунд ще не завершено (статус: '{round_status}'). "
+                       "Оцінювання дозволено лише після завершення раунду."
+            )
 
     if caller_role == "jury":
         assignment = fetch_one(
@@ -2607,6 +2614,50 @@ async def save_jury_evaluation(
 
     print(f"[EVAL] {caller['username']} зберіг оцінку для submission {payload.submission_id}", flush=True)
     return {"success": True, "evaluation": result.data[0]}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ROUND STATUS — ручне управління статусом раунду адміном
+# ─────────────────────────────────────────────────────────────────────────────
+
+class RoundStatusUpdate(BaseModel):
+    status: str
+
+@app.patch("/api/rounds/{round_id}/status")
+async def set_round_status(round_id: str, body: RoundStatusUpdate, authorization: str = Header(...)):
+    """
+    Ручна зміна статусу раунду адміністратором.
+    Дозволені переходи:
+      judging → judged   (закрити оцінювання)
+      judged  → judging  (відкрити оцінювання знову)
+    Перехід active/pending контролюється планувальником автоматично.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+    if not caller or caller.get("role") not in ("superadmin", "admin"):
+        raise HTTPException(status_code=403, detail="Доступ заборонено: тільки адміністратори")
+
+    allowed_statuses = ("judging", "judged", "active", "pending")
+    new_status = body.status
+    if new_status not in allowed_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Недозволений статус '{new_status}'. Дозволені: {', '.join(allowed_statuses)}"
+        )
+
+    round_ = fetch_one(
+        supabase.table("rounds").select("id, status, tournament_id").eq("id", round_id)
+    )
+    if not round_:
+        raise HTTPException(status_code=404, detail="Раунд не знайдено")
+
+    old_status = round_.get("status")
+    supabase.table("rounds").update({"status": new_status}).eq("id", round_id).execute()
+    print(f"[ADMIN] Раунд {round_id}: {old_status} → {new_status} (адмін {caller.get('id')})", flush=True)
+    return {"round_id": round_id, "old_status": old_status, "status": new_status}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3178,11 +3229,13 @@ async def get_round_submissions(round_id: str, authorization: str = Header(...))
 
         # Журі може переглядати роботи тільки після завершення раунду;
         # суперадмін може переглядати завжди
-        if caller.get("role") == "jury" and round_.get("status") not in ("finished", "closed", "reviewed"):
-            raise HTTPException(
-                status_code=403,
-                detail=f"Оцінювання недоступне: раунд ще не завершено (статус: '{round_.get('status')}')."
-            )
+        if caller.get("role") == "jury":
+            round_status = round_.get("status")
+            if round_status not in ("judging", "judged", "finished", "closed", "reviewed"):
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Оцінювання недоступне: раунд ще не завершено (статус: '{round_status}')."
+                )
 
         assignment = fetch_one(
             supabase.table("jury_assignments")
