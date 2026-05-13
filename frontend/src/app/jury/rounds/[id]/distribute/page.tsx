@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/hooks/useTheme";
 import { supabase } from "@/lib/supabase";
@@ -82,12 +83,12 @@ function AssignCell({
 
 export default function DistributePage() {
     const params = useParams();
-    const router = useRouter();
+    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
+  const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
     const { dark } = useTheme();
     const roundId = params?.id as string;
 
-    const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [round, setRound] = useState<RoundInfo | null>(null);
     const [jury, setJury] = useState<JuryMember[]>([]);
     const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
@@ -246,7 +247,7 @@ export default function DistributePage() {
         <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
             {/* Mobile sidebar overlay */}
             {isMobileSidebarOpen && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => closeMobileSidebar()} />
             )}
             <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
                 <Sidebar />
@@ -254,7 +255,7 @@ export default function DistributePage() {
 
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 <MobileHeader
-                    onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+                    onOpenSidebar={openMobile}
                     title="Розподіл робіт"
                     icon={<Shuffle size={18} className="text-blue-600" />}
                 />

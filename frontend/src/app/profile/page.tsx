@@ -9,9 +9,11 @@ import {
   Users, Crown, ExternalLink, Lock, Eye, EyeOff, KeyRound,
   CheckCircle, AlertCircle, RefreshCw, Pencil, X, Save,
   Bell, Check, CheckCheck, UserPlus, Trophy, Star, Flag, FileText,
+  MapPin, MessageCircle, Hash,
 } from "lucide-react";
 import AvatarEditorModal from "@/components/AvatarEditorModal";
 import { useTheme } from "@/hooks/useTheme";
+import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
@@ -267,10 +269,14 @@ function CodeInput({ value, onChange, disabled }: { value: string; onChange: (v:
 type PwStep = "idle" | "sending" | "code" | "verifying" | "newpw" | "done";
 
 function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
-  profileUser: any; onSave: (updated: { username: string; login: string }) => void; onCancel: () => void; onModalChange?: (open: boolean) => void;
+  profileUser: any; onSave: (updated: { username: string; login: string; full_name: string; city_school: string; telegram: string; discord: string }) => void; onCancel: () => void; onModalChange?: (open: boolean) => void;
 }) {
   const [username, setUsername] = useState(profileUser.username ?? "");
   const [login, setLogin]       = useState(profileUser.login ?? "");
+  const [fullName, setFullName]   = useState(profileUser.full_name ?? "");
+  const [citySchool, setCitySchool] = useState(profileUser.city_school ?? "");
+  const [telegram, setTelegram]   = useState(profileUser.telegram ?? "");
+  const [discord, setDiscord]     = useState(profileUser.discord ?? "");
   const [saving, setSaving]     = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pwStep, setPwStep]     = useState<PwStep>("idle");
@@ -299,9 +305,9 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
   async function handleSave() {
     setSaving(true); setSaveError(null);
     try {
-      const { error } = await supabase.from("account").update({ username, login }).eq("id", profileUser.id);
+      const { error } = await supabase.from("account").update({ username, login, full_name: fullName, city_school: citySchool, telegram, discord }).eq("id", profileUser.id);
       if (error) throw error;
-      onSave({ username, login });
+      onSave({ username, login, full_name: fullName, city_school: citySchool, telegram, discord });
     } catch (e: any) { setSaveError(e?.message ?? "Save error"); }
     finally { setSaving(false); }
   }
@@ -350,6 +356,22 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
     <div className="flex flex-col gap-1.5">
     <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Login</label>
     <input type="text" value={login} onChange={e => setLogin(e.target.value)} className={inputClass} placeholder="Your login" />
+    </div>
+    <div className="flex flex-col gap-1.5">
+    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">ПІБ</label>
+    <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} className={inputClass} placeholder="Прізвище Ім'я По-батькові" />
+    </div>
+    <div className="flex flex-col gap-1.5">
+    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Місто / Школа / Організація</label>
+    <input type="text" value={citySchool} onChange={e => setCitySchool(e.target.value)} className={inputClass} placeholder="Київ, Школа №1" />
+    </div>
+    <div className="flex flex-col gap-1.5">
+    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Telegram</label>
+    <input type="text" value={telegram} onChange={e => setTelegram(e.target.value)} className={inputClass} placeholder="@username" />
+    </div>
+    <div className="flex flex-col gap-1.5">
+    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Discord</label>
+    <input type="text" value={discord} onChange={e => setDiscord(e.target.value)} className={inputClass} placeholder="username#0000" />
     </div>
     <div className="flex flex-col gap-1.5">
     <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Email</label>
@@ -817,8 +839,8 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const { dark } = useTheme();
+  const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
   const router = useRouter();
   const { user: currentUser, token, isLoading: authLoading } = useAuth();
 
@@ -830,6 +852,7 @@ export default function ProfilePage() {
   const [isPwModalOpen, setIsPwModalOpen] = useState(false);
 
   const isJury = currentUser?.role === "jury";
+  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "superadmin";
   const { teams: userTeams, loading: teamsLoading } = useUserTeams(isJury ? undefined : currentUser?.id);
   const { juryTournaments, juryRounds, jurySubmissions, loading: juryLoading } = useJuryData(currentUser?.id, isJury);
 
@@ -911,7 +934,7 @@ export default function ProfilePage() {
     const fetchUser = async () => {
       setIsLoading(true);
       try {
-        const { data, error } = await supabase.from("account").select("id, username, login, email, role, status, avatar_url").eq("id", currentUser.id).single();
+        const { data, error } = await supabase.from("account").select("id, username, login, email, role, status, avatar_url, full_name, city_school, telegram, discord").eq("id", currentUser.id).single();
         if (error) throw error;
         setProfileUser(data);
       } catch { setError("User not found"); }
@@ -1015,13 +1038,13 @@ export default function ProfilePage() {
       <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
 
-      {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />}
+      {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => closeMobileSidebar()} />}
       <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
       <Sidebar />
       </div>
 
       <main className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isPwModalOpen ? "blur-sm brightness-75" : ""}`}>
-      <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Profile" icon={<UserCircle size={18} className="text-blue-600" />} />
+      <MobileHeader onOpenSidebar={openMobile} title="Profile" icon={<UserCircle size={18} className="text-blue-600" />} />
       <div className={`flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10 ${allReady ? "page-ready" : ""}`}>
 
       <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2)">
@@ -1091,9 +1114,25 @@ export default function ProfilePage() {
           <div className="space-y-2 text-sm">
           <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Name:</span><span className="font-bold text-sm">{profileUser?.username}</span></p>
           <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Login:</span><span className="font-bold text-sm">{profileUser?.login}</span></p>
+          {/* Email — видно тільки власнику і admin/superadmin */}
           <p className="flex items-center gap-2.5 font-medium"><Mail size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Email:</span><span className="font-bold text-sm break-all">{profileUser?.email}</span></p>
           <p className="flex items-center gap-2.5 font-medium"><Shield size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Role:</span><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>{profileUser?.role ?? "user"}</span></p>
+          {profileUser?.full_name && (
+            <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs flex-shrink-0">ПІБ:</span><span className="font-bold text-sm ml-1">{profileUser.full_name}</span></p>
+          )}
+          {profileUser?.city_school && (
+            <p className="flex items-center gap-2.5 font-medium"><MapPin size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs flex-shrink-0">Місто:</span><span className="font-bold text-sm ml-1">{profileUser.city_school}</span></p>
+          )}
+          {/* Telegram — тільки власнику і admin */}
+          {profileUser?.telegram && (
+            <p className="flex items-center gap-2.5 font-medium"><MessageCircle size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs flex-shrink-0">Telegram:</span><span className="font-bold text-sm ml-1">{profileUser.telegram}</span></p>
+          )}
+          {/* Discord — тільки власнику і admin */}
+          {profileUser?.discord && (
+            <p className="flex items-center gap-2.5 font-medium"><Hash size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs flex-shrink-0">Discord:</span><span className="font-bold text-sm ml-1">{profileUser.discord}</span></p>
+          )}
           </div>
+          {/* ID — тільки власнику і admin */}
           <div className="pt-2.5 border-t border-(--brd) text-[9px] font-bold uppercase tracking-widest text-(--t2)">ID: {profileUser?.id}</div>
           </div>
           </div>
@@ -1102,7 +1141,7 @@ export default function ProfilePage() {
           <div className="mt-5 pt-5 border-t border-(--brd)">
           <EditProfileSection
           profileUser={profileUser}
-          onSave={({ username, login }) => { setProfileUser((prev: any) => ({ ...prev, username, login })); setIsEditing(false); }}
+          onSave={({ username, login, full_name, city_school, telegram, discord }) => { setProfileUser((prev: any) => ({ ...prev, username, login, full_name, city_school, telegram, discord })); setIsEditing(false); }}
           onCancel={() => setIsEditing(false)}
           onModalChange={setIsPwModalOpen}
           />

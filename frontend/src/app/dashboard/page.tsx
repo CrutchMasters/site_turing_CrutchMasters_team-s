@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useTheme } from "@/hooks/useTheme";
+import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { useT, useLanguage } from "@/context/LanguageContext";
 import {
@@ -743,7 +744,6 @@ function SectionHeader({ icon, title, badge, children, accentColor = "blue" }: S
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [backendMessage,      setBackendMessage]       = useState("waiting...");
   const [tournaments,         setTournaments]          = useState<Tournament[]>([]);
   const [tournamentsLoading,  setTournamentsLoading]   = useState(true);
@@ -765,6 +765,7 @@ export default function DashboardPage() {
   const [myRoundIds,           setMyRoundIds]           = useState<string[]>([]);
 
   const revealRefs = useRef<(HTMLElement | null)[]>([]);
+  const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
   const router = useRouter();
   const { dark }        = useTheme();
   const { user, token, isLoading } = useAuth();
@@ -1080,7 +1081,7 @@ export default function DashboardPage() {
       </div>
 
       {isMobileSidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => closeMobileSidebar()} />
       )}
 
       <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
@@ -1088,7 +1089,7 @@ export default function DashboardPage() {
       </div>
 
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
-      <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title={t.mainPage.dashboard} />
+      <MobileHeader onOpenSidebar={openMobile} title={t.mainPage.dashboard} />
 
       <div className="flex-1 p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
       <header className="mb-8 sm:mb-12">

@@ -14,6 +14,7 @@ import TournamentTimeline, { type RoundSlice } from "@/components/TournamentTime
 import MobileHeader from "@/components/MobileHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { useT } from "@/context/LanguageContext";
+import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { localToIso } from "@/lib/datetime";
 import { supabase } from '@/lib/supabase';
@@ -85,9 +86,9 @@ export default function RegisterTourney() {
   const { dark } = useTheme();
   const { t } = useT();
   const { user, isLoading } = useAuth();
+  const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
   const router = useRouter();
 
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [accessState, setAccessState] = useState<AccessState>('loading');
   const [countdown, setCountdown] = useState(COUNTDOWN_SEC);
 
@@ -589,7 +590,7 @@ export default function RegisterTourney() {
       </div>
 
       {isMobileSidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => closeMobileSidebar()} />
       )}
       <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
       <Sidebar />
@@ -623,7 +624,7 @@ export default function RegisterTourney() {
       )}
 
       <MobileHeader
-      onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+      onOpenSidebar={openMobile}
       title={t.tourney?.create ?? 'Створення турніру'}
       icon={<Trophy size={18} className="text-blue-600" />}
       />

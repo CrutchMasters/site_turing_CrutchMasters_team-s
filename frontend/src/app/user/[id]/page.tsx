@@ -5,9 +5,10 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   User, Mail, Shield, ChevronRight, UserCircle, ArrowLeft, Loader,
-  Users, Crown, ExternalLink,
+  Users, Crown, ExternalLink, MapPin, MessageCircle, Hash,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
+import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
@@ -106,8 +107,8 @@ function useUserTeams(userId: string | undefined) {
 }
 
 export default function PublicUserProfile() {
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const { dark } = useTheme();
+  const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
   const router = useRouter();
   const params = useParams();
   const { user: currentUser, isLoading: authLoading } = useAuth();
@@ -121,6 +122,7 @@ export default function PublicUserProfile() {
   const [roleMsg, setRoleMsg]               = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   const isSuperAdmin = useMemo(() => currentUser?.role === "superadmin", [currentUser?.role]);
+  const isAdmin = useMemo(() => currentUser?.role === "admin" || currentUser?.role === "superadmin", [currentUser?.role]);
   const isOwnProfile = currentUser?.id === params.id;
 
   const { teams: userTeams, loading: teamsLoading } = useUserTeams(params.id as string | undefined);
@@ -134,7 +136,7 @@ export default function PublicUserProfile() {
       try {
         const { data, error } = await supabase
         .from("account")
-        .select("id, username, login, email, role, status, avatar_url")
+        .select("id, username, login, email, role, status, avatar_url, full_name, city_school, telegram, discord")
         .eq("id", params.id)
         .single();
 
@@ -192,12 +194,12 @@ export default function PublicUserProfile() {
       <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
       <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
-      {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />}
+      {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => closeMobileSidebar()} />}
       <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
       <Sidebar />
       </div>
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-      <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Profile" icon={<UserCircle size={18} className="text-blue-600" />} />
+      <MobileHeader onOpenSidebar={openMobile} title="Profile" icon={<UserCircle size={18} className="text-blue-600" />} />
       <div className="flex-1 flex items-center justify-center">
       <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
       </div>
@@ -214,13 +216,13 @@ export default function PublicUserProfile() {
     <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
     </div>
 
-    {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />}
+    {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => closeMobileSidebar()} />}
     <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
     <Sidebar />
     </div>
 
     <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-    <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title="Profile" icon={<UserCircle size={18} className="text-blue-600" />} />
+    <MobileHeader onOpenSidebar={openMobile} title="Profile" icon={<UserCircle size={18} className="text-blue-600" />} />
 
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative z-10">
     <nav className="flex items-center gap-2 text-[10px] font-black mb-6 uppercase tracking-widest text-(--t2)">
@@ -279,11 +281,14 @@ export default function PublicUserProfile() {
       <span className="text-(--t2)">Login:</span>
       <span className="font-bold">{profileUser.login}</span>
       </p>
-      <p className="flex items-center gap-3 font-medium">
-      <Mail size={16} className="text-blue-600 flex-shrink-0" />
-      <span className="text-(--t2)">Email:</span>
-      <span className="font-bold break-all">{profileUser.email}</span>
-      </p>
+      {/* Email — видно тільки admin/superadmin */}
+      {isAdmin && (
+        <p className="flex items-center gap-3 font-medium">
+        <Mail size={16} className="text-blue-600 flex-shrink-0" />
+        <span className="text-(--t2)">Email:</span>
+        <span className="font-bold break-all">{profileUser.email}</span>
+        </p>
+      )}
       <p className="flex items-center gap-3 font-medium">
       <Shield size={16} className="text-blue-600 flex-shrink-0" />
       <span className="text-(--t2)">Role:</span>
@@ -291,11 +296,46 @@ export default function PublicUserProfile() {
       {profileUser.role ?? "user"}
       </span>
       </p>
+      {/* ПІБ — видно всім */}
+      {profileUser.full_name && (
+        <p className="flex items-center gap-3 font-medium">
+        <User size={16} className="text-blue-600 flex-shrink-0" />
+        <span className="text-(--t2)">ПІБ:</span>
+        <span className="font-bold">{profileUser.full_name}</span>
+        </p>
+      )}
+      {/* Місто/школа — видно всім */}
+      {profileUser.city_school && (
+        <p className="flex items-center gap-3 font-medium">
+        <MapPin size={16} className="text-blue-600 flex-shrink-0" />
+        <span className="text-(--t2)">Місто/школа:</span>
+        <span className="font-bold">{profileUser.city_school}</span>
+        </p>
+      )}
+      {/* Telegram — видно тільки admin/superadmin */}
+      {isAdmin && profileUser.telegram && (
+        <p className="flex items-center gap-3 font-medium">
+        <MessageCircle size={16} className="text-blue-600 flex-shrink-0" />
+        <span className="text-(--t2)">Telegram:</span>
+        <span className="font-bold">{profileUser.telegram}</span>
+        </p>
+      )}
+      {/* Discord — видно тільки admin/superadmin */}
+      {isAdmin && profileUser.discord && (
+        <p className="flex items-center gap-3 font-medium">
+        <Hash size={16} className="text-blue-600 flex-shrink-0" />
+        <span className="text-(--t2)">Discord:</span>
+        <span className="font-bold">{profileUser.discord}</span>
+        </p>
+      )}
       </div>
 
-      <div className="pt-3 border-t border-(--brd) text-[9px] font-bold uppercase tracking-widest text-(--t2)">
-      ID: {profileUser.id}
-      </div>
+      {/* ID — видно тільки admin/superadmin */}
+      {isAdmin && (
+        <div className="pt-3 border-t border-(--brd) text-[9px] font-bold uppercase tracking-widest text-(--t2)">
+        ID: {profileUser.id}
+        </div>
+      )}
       </div>
       </div>
       </section>

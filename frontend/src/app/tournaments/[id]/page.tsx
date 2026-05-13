@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/hooks/useTheme";
 import Sidebar from "@/components/Sidebar";
@@ -62,7 +63,8 @@ function fmtDate(iso?: string) {
 }
 
 export default function TournamentPage() {
-    const router = useRouter();
+    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
+  const router = useRouter();
     const params = useParams();
     const { user, isLoading: authLoading } = useAuth();
     const { dark } = useTheme();
@@ -209,63 +211,19 @@ export default function TournamentPage() {
             <div className="min-h-screen bg-(--bg) flex items-center justify-center">
             <Loader className="animate-spin text-blue-600" />
             </div>
-        );
-    }
 
-    const teamCount = tournament.teams?.length ?? 0;
-    const isFull = !!tournament.max_teams && teamCount >= tournament.max_teams;
-    const isAdmin = user?.role === "admin" || user?.role === "superadmin";
-    const isRegistrationOpen = tournament.status === "registration";
-    const isFinished = tournament.status === "finished";
-    const myTeamInTournament = tournament.teams?.find(
-        t => t.captain_id === user?.id || (t.members_ids as string[] | undefined)?.includes(user?.id ?? "")
-    );
+            {isMobileSidebarOpen && (
+                <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => closeMobileSidebar()} />
+            )}
+            <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+            <Sidebar />
+            </div>
 
-    const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
-        { key: "info", label: "Огляд", icon: <LayoutList size={14} /> },
-        { key: "leaderboard", label: "Лідербоард", icon: <Trophy size={14} /> },
-    ];
-
-    const handleTabClick = (tab: Tab) => {
-        setActiveTab(tab);
-        if (tab === "leaderboard") setLeaderboardTouched(true);
-    };
-
-    return (
-        <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1)">
-        <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
-        <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] blur-sm ${dark ? "invert" : ""}`} />
-        </div>
-
-        {isMobileSidebarOpen && (
-            <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
-        )}
-        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
-        <Sidebar />
-        </div>
-
-        <main className="flex-1 flex flex-col overflow-y-auto">
-        <MobileHeader
-        onOpenSidebar={() => setIsMobileSidebarOpen(true)}
-        title={tournament.name}
-        icon={<Trophy size={18} className="text-blue-600" />}
-        />
-
-        <div className="p-6 max-w-3xl w-full mx-auto">
-        <button
-        onClick={() => router.push("/tournaments")}
-        className="mb-5 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors"
-        >
-        <ArrowLeft size={16} /> Назад до турнірів
-        </button>
-
-        {/* Banner */}
-        {tournament.banner_url && (
-            <div className="mb-5 rounded-2xl overflow-hidden border border-(--brd)">
-            <img
-            src={tournament.banner_url}
-            alt={tournament.name}
-            className="w-full max-h-72 object-cover"
+            <main className="flex-1 flex flex-col overflow-y-auto">
+            <MobileHeader
+            onOpenSidebar={openMobile}
+            title={tournament.name}
+            icon={<Trophy size={18} className="text-blue-600" />}
             />
             </div>
         )}

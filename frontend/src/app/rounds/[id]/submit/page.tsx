@@ -4,6 +4,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/hooks/useTheme";
 import Sidebar from "@/components/Sidebar";
@@ -158,7 +159,8 @@ interface ExistingSubmission {
 
 export default function SubmitPage() {
     const params = useParams();
-    const router = useRouter();
+    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
+  const router = useRouter();
     const { user, token, isLoading: authLoading } = useAuth();
     const { dark } = useTheme();
     const id = params?.id as string;
@@ -170,7 +172,6 @@ export default function SubmitPage() {
     const [deletingFile, setDeletingFile] = useState<string | null>(null);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
-    const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [existingSubmission, setExistingSubmission] = useState<ExistingSubmission | null>(null);
 
     // form state
@@ -440,12 +441,12 @@ export default function SubmitPage() {
 
                 {isMobileSidebarOpen && (
                     <div className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-                    onClick={() => setIsMobileSidebarOpen(false)} />
+                    onClick={() => closeMobileSidebar()} />
                 )}
 
                 <main className="flex-1 flex flex-col overflow-y-auto relative z-10">
                 <MobileHeader
-                onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+                onOpenSidebar={openMobile}
                 title="Здати роботу"
                 icon={<Flag size={18} className="text-blue-600" />}
                 />

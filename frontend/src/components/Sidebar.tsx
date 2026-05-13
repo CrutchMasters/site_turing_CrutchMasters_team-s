@@ -1,12 +1,13 @@
 //frontend/scr/components/sidebar.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { LayoutDashboard, UserCircle, Settings, LogOut, Search, ChevronDown, Menu, Users, Bell, Trophy } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useLanguage, LOCALES } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
+import { useSidebar } from "@/context/SidebarContext";
 
 const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -31,15 +32,18 @@ function parseSidebarMeta(raw: string | Record<string, any> | null): Record<stri
 
 interface SidebarProps {}
 
-function getInitialCollapsed(): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem("sidebar_collapsed") === "true";
-}
-
 export default function Sidebar({}: SidebarProps) {
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(getInitialCollapsed);
+  const { collapsed, toggle: toggleCollapsedCtx, closeMobile } = useSidebar();
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 1024);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
@@ -53,17 +57,19 @@ export default function Sidebar({}: SidebarProps) {
   const { locale, setLocale, t } = useLanguage();
   const { user, logout } = useAuth();
 
-  const toggleCollapse = () => {
-    setCollapsed(prev => {
-      const next = !prev;
-      localStorage.setItem("sidebar_collapsed", String(next));
-      if (next) {
+  const toggleCollapse = useCallback(() => {
+    if (isMobile) {
+      // На мобильном — закрываем drawer
+      closeMobile();
+    } else {
+      // На десктопе — сворачиваем/разворачиваем
+      toggleCollapsedCtx();
+      if (!collapsed) {
         setIsSettingsPanelOpen(false);
         setIsNotificationsPanelOpen(false);
       }
-      return next;
-    });
-  };
+    }
+  }, [isMobile, collapsed, closeMobile, toggleCollapsedCtx]);
 
   const go = (path: string) => router.push(path);
   const avatarLetter = user?.username?.charAt(0).toUpperCase() ?? "?";
@@ -127,13 +133,19 @@ export default function Sidebar({}: SidebarProps) {
   };
 
   const handleNotificationsClick = () => {
-    if (!collapsed) {
-      const opening = !isNotificationsPanelOpen;
-      setIsNotificationsPanelOpen(opening);
-      if (isSettingsPanelOpen) setIsSettingsPanelOpen(false);
-      if (opening && unreadCount > 0) {
-        markAllNotificationsRead();
-      }
+    if (collapsed) {
+      // Разворачиваем сайдбар, затем открываем панель
+      toggleCollapsedCtx();
+      setIsNotificationsPanelOpen(true);
+      setIsSettingsPanelOpen(false);
+      if (unreadCount > 0) markAllNotificationsRead();
+      return;
+    }
+    const opening = !isNotificationsPanelOpen;
+    setIsNotificationsPanelOpen(opening);
+    if (isSettingsPanelOpen) setIsSettingsPanelOpen(false);
+    if (opening && unreadCount > 0) {
+      markAllNotificationsRead();
     }
   };
 
@@ -396,7 +408,16 @@ export default function Sidebar({}: SidebarProps) {
           label={t.sidebar.settings}
           active={isSettingsPanelOpen}
           collapsed={collapsed}
-          onClick={() => { if (!collapsed) { setIsSettingsPanelOpen(p => !p); setIsNotificationsPanelOpen(false); } }}
+          onClick={() => {
+            if (collapsed) {
+              toggleCollapsedCtx();
+              setIsSettingsPanelOpen(true);
+              setIsNotificationsPanelOpen(false);
+            } else {
+              setIsSettingsPanelOpen(p => !p);
+              setIsNotificationsPanelOpen(false);
+            }
+          }}
           suffix={!collapsed ? <ChevronDown size={13} className={`transition-transform flex-shrink-0 ${isSettingsPanelOpen ? "rotate-180" : ""}`} /> : undefined}
           />
 
