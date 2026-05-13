@@ -9,12 +9,11 @@ import {
   Users, Crown, ExternalLink, Lock, Eye, EyeOff, KeyRound,
   CheckCircle, AlertCircle, RefreshCw, Pencil, X, Save,
   Bell, Check, CheckCheck, UserPlus, Trophy, Star, Flag, FileText,
-  MapPin, MessageCircle, Hash,
 } from "lucide-react";
 import AvatarEditorModal from "@/components/AvatarEditorModal";
 import { useTheme } from "@/hooks/useTheme";
-import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
+import { useT } from "@/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
@@ -109,11 +108,6 @@ const tourStatusStyle: Record<string, string> = {
   ongoing:  "text-green-500 bg-green-500/10 border-green-500/20",
   upcoming: "text-blue-500 bg-blue-500/10 border-blue-500/20",
   finished: "text-(--t2) bg-(--bg) border-(--brd)",
-};
-
-const tourStatusLabel: Record<string, string> = {
-  registration: "Registration", active: "Active", ongoing: "Active",
-  upcoming: "Upcoming", finished: "Finished",
 };
 
 // ── Teams hook ────────────────────────────────────────────────────────────────
@@ -268,15 +262,12 @@ function CodeInput({ value, onChange, disabled }: { value: string; onChange: (v:
 // ── Edit Profile Section ──────────────────────────────────────────────────────
 type PwStep = "idle" | "sending" | "code" | "verifying" | "newpw" | "done";
 
-function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
-  profileUser: any; onSave: (updated: { username: string; login: string; full_name: string; city_school: string; telegram: string; discord: string }) => void; onCancel: () => void; onModalChange?: (open: boolean) => void;
+function EditProfileSection({ profileUser, onSave, onCancel, onModalChange, t }: {
+  profileUser: any; onSave: (updated: { username: string; login: string }) => void; onCancel: () => void; onModalChange?: (open: boolean) => void;
+  t: any;
 }) {
   const [username, setUsername] = useState(profileUser.username ?? "");
   const [login, setLogin]       = useState(profileUser.login ?? "");
-  const [fullName, setFullName]   = useState(profileUser.full_name ?? "");
-  const [citySchool, setCitySchool] = useState(profileUser.city_school ?? "");
-  const [telegram, setTelegram]   = useState(profileUser.telegram ?? "");
-  const [discord, setDiscord]     = useState(profileUser.discord ?? "");
   const [saving, setSaving]     = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pwStep, setPwStep]     = useState<PwStep>("idle");
@@ -305,9 +296,9 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
   async function handleSave() {
     setSaving(true); setSaveError(null);
     try {
-      const { error } = await supabase.from("account").update({ username, login, full_name: fullName, city_school: citySchool, telegram, discord }).eq("id", profileUser.id);
+      const { error } = await supabase.from("account").update({ username, login }).eq("id", profileUser.id);
       if (error) throw error;
-      onSave({ username, login, full_name: fullName, city_school: citySchool, telegram, discord });
+      onSave({ username, login });
     } catch (e: any) { setSaveError(e?.message ?? "Save error"); }
     finally { setSaving(false); }
   }
@@ -348,43 +339,27 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
   return (
     <div className="space-y-5">
     <div className="space-y-3">
-    <h3 className="text-xs font-black uppercase tracking-widest text-(--t2) flex items-center gap-2"><Pencil size={12} /> Edit Profile</h3>
+    <h3 className="text-xs font-black uppercase tracking-widest text-(--t2) flex items-center gap-2"><Pencil size={12} /> {t.profile.editProfile}</h3>
     <div className="flex flex-col gap-1.5">
-    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Name</label>
-    <input type="text" value={username} onChange={e => setUsername(e.target.value)} className={inputClass} placeholder="Your name" />
+    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">{t.profile.nameLabel}</label>
+    <input type="text" value={username} onChange={e => setUsername(e.target.value)} className={inputClass} placeholder={t.profile.nameLabel} />
     </div>
     <div className="flex flex-col gap-1.5">
-    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Login</label>
-    <input type="text" value={login} onChange={e => setLogin(e.target.value)} className={inputClass} placeholder="Your login" />
+    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">{t.profile.loginLabel}</label>
+    <input type="text" value={login} onChange={e => setLogin(e.target.value)} className={inputClass} placeholder={t.profile.loginLabel} />
     </div>
     <div className="flex flex-col gap-1.5">
-    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">ПІБ</label>
-    <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} className={inputClass} placeholder="Прізвище Ім'я По-батькові" />
-    </div>
-    <div className="flex flex-col gap-1.5">
-    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Місто / Школа / Організація</label>
-    <input type="text" value={citySchool} onChange={e => setCitySchool(e.target.value)} className={inputClass} placeholder="Київ, Школа №1" />
-    </div>
-    <div className="flex flex-col gap-1.5">
-    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Telegram</label>
-    <input type="text" value={telegram} onChange={e => setTelegram(e.target.value)} className={inputClass} placeholder="@username" />
-    </div>
-    <div className="flex flex-col gap-1.5">
-    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Discord</label>
-    <input type="text" value={discord} onChange={e => setDiscord(e.target.value)} className={inputClass} placeholder="username#0000" />
-    </div>
-    <div className="flex flex-col gap-1.5">
-    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">Email</label>
+    <label className="text-[10px] font-black text-(--t2) uppercase tracking-widest ml-1">{t.profile.emailLabel}</label>
     <input type="text" value={profileUser.email} disabled className={`${inputClass} opacity-50 cursor-not-allowed`} />
     </div>
     {saveError && <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-bold"><AlertCircle size={14} className="flex-shrink-0" /> {saveError}</div>}
     <div className="flex gap-2">
     <button onClick={handleSave} disabled={saving || !username.trim() || !login.trim()}
     className="flex items-center gap-2 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-xl px-5 py-3 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-40 shadow-lg shadow-blue-600/20">
-    {saving ? <Loader size={13} className="animate-spin" /> : <Save size={13} />} {saving ? "Saving..." : "Save"}
+    {saving ? <Loader size={13} className="animate-spin" /> : <Save size={13} />} {saving ? t.profile.saving : t.profile.save}
     </button>
     <button onClick={onCancel} className="flex items-center gap-2 border border-(--brd) text-(--t2) font-black text-xs uppercase tracking-widest rounded-xl px-4 py-3 hover:border-red-500/40 hover:text-red-500 active:scale-95 transition-all">
-    <X size={13} /> Cancel
+    <X size={13} /> {t.profile.cancel}
     </button>
     </div>
     </div>
@@ -396,11 +371,10 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
     <div className="w-7 h-7 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center flex-shrink-0">
     <KeyRound size={13} className="text-blue-600" />
     </div>
-    <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Change Password</p>
-    </div>
-    <div className="p-5 space-y-3">
+    <p className="text-xs font-black uppercase tracking-widest text-(--t1)">{t.profile.changePassword}</p>
+    </div>\n    <div className="p-5 space-y-3">
     <p className="text-xs font-medium text-(--t2)">
-    A verification code will be sent to{" "}
+    {t.profile.pwSendHint}{" "}
     <span className="font-black text-(--t1)">{profileUser.email}</span>
     </p>
     <button
@@ -408,11 +382,10 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
     className="group w-full relative flex items-center justify-center gap-2.5 overflow-hidden rounded-2xl px-4 py-3.5 font-black text-xs uppercase tracking-widest transition-all duration-300 active:scale-95 shadow-lg shadow-blue-600/20 border border-blue-500/30"
     style={{ background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #3b82f6 100%)", color: "white" }}
     >
-    {/* shimmer effect */}
     <span className="absolute inset-0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12" />
     <span className="relative flex items-center gap-2 drop-shadow">
     <KeyRound size={14} />
-    <span className="tracking-[0.15em]">Change password</span>
+    <span className="tracking-[0.15em]">{t.profile.changePassword}</span>
     </span>
     </button>
     </div>
@@ -445,7 +418,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
         <div className="w-full flex items-center justify-between px-7 py-4 border-b border-(--brd)">
         <div className="flex items-center gap-2.5">
         <KeyRound size={14} className="text-blue-500" />
-        <span className="text-xs font-black uppercase tracking-widest text-(--t1)">Change Password</span>
+        <span className="text-xs font-black uppercase tracking-widest text-(--t1)">{t.profile.changePassword}</span>
         </div>
         <button onClick={resetPw} className="w-7 h-7 rounded-xl border border-(--brd) bg-(--bg) flex items-center justify-center text-(--t2) hover:text-red-500 hover:border-red-500/40 transition-all active:scale-95">
         <X size={13} />
@@ -460,7 +433,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600">
           <Loader size={32} className="animate-spin" />
           </div>
-          <p className="text-xs font-black uppercase tracking-widest text-(--t2)">Sending code...</p>
+          <p className="text-xs font-black uppercase tracking-widest text-(--t2)">{t.profile.pwSending}</p>
           </div>
         )}
 
@@ -470,9 +443,9 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600 mb-6">
           <Mail size={32} />
           </div>
-          <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">Verify</h2>
+          <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">{t.profile.pwVerify}</h2>
           <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-8 leading-relaxed">
-          Enter the 6-digit code sent to<br />
+          {t.profile.pwEnterCode}<br />
           <span className="text-(--t1) font-black">{profileUser.email}</span>
           </p>
 
@@ -499,8 +472,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
             ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20"
             : "bg-(--brd) text-(--t2) cursor-not-allowed"
           }`}
-          >
-          Confirm
+          >{t.profile.pwConfirm}
           </button>
 
           <div className="flex items-center justify-between w-full">
@@ -510,10 +482,10 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-(--t2) hover:text-blue-600 transition-colors disabled:opacity-40"
           >
           <RefreshCw size={10} />
-          {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend"}
+          {resendCooldown > 0 ? `${t.profile.pwResendIn} ${resendCooldown}s` : t.profile.pwResend}
           </button>
           <button onClick={resetPw} className="text-[10px] font-black text-(--t2) hover:text-red-500 uppercase tracking-[0.2em] transition-all flex items-center gap-1.5">
-          <span>←</span> Back
+          <span>←</span> {t.profile.pwBack}
           </button>
           </div>
           </>
@@ -525,7 +497,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600">
           <Loader size={32} className="animate-spin" />
           </div>
-          <p className="text-xs font-black uppercase tracking-widest text-(--t2)">Verifying...</p>
+          <p className="text-xs font-black uppercase tracking-widest text-(--t2)">{t.profile.pwVerifying}</p>
           </div>
         )}
 
@@ -535,8 +507,8 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center text-green-500 mb-6">
           <Lock size={28} />
           </div>
-          <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">New Password</h2>
-          <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-6">Set a new password for your account</p>
+          <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">{t.profile.pwNewPassword}</h2>
+          <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-6">{t.profile.pwSetNewHint}</p>
 
           <div className="w-full space-y-3">
           <div className="relative">
@@ -544,7 +516,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           type={showPw ? "text" : "password"}
           value={newPw}
           onChange={e => setNewPw(e.target.value)}
-          placeholder="Minimum 8 characters..."
+          placeholder={t.profile.pwMinChars}
           className="w-full px-5 py-4 pr-12 rounded-2xl border border-(--brd) bg-(--bg)/50 focus:ring-2 focus:ring-blue-500 focus:bg-(--card) outline-none text-sm text-(--t1) transition-all"
           />
           <button type="button" onClick={() => setShowPw(p => !p)} className="absolute right-4 top-1/2 -translate-y-1/2 text-(--t2) hover:text-blue-600 transition-colors">
@@ -563,7 +535,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
             ))}
             </div>
             <p className="text-[10px] font-bold text-(--t2)">
-            {pwStrength <= 1 ? "Weak" : pwStrength === 2 ? "Medium" : pwStrength === 3 ? "Good" : "Strong"}
+            {pwStrength <= 1 ? t.profile.pwWeak : pwStrength === 2 ? t.profile.pwMedium : pwStrength === 3 ? t.profile.pwGood : t.profile.pwStrong}
             </p>
             </div>
           )}
@@ -572,7 +544,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           type={showConfirm ? "text" : "password"}
           value={confirmPw}
           onChange={e => setConfirmPw(e.target.value)}
-          placeholder="Repeat password..."
+          placeholder={t.profile.pwRepeat}
           className={`w-full px-5 py-4 pr-12 rounded-2xl border bg-(--bg)/50 focus:ring-2 focus:bg-(--card) outline-none text-sm text-(--t1) transition-all ${
             confirmPw && confirmPw !== newPw
             ? "border-red-500 focus:ring-red-500/30"
@@ -603,11 +575,10 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
             ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20"
             : "bg-(--brd) text-(--t2) cursor-not-allowed"
           }`}
-          >
-          Set Password
+          >{t.profile.pwSetBtn}
           </button>
           <button onClick={resetPw} className="w-full text-[10px] font-black text-(--t2) hover:text-red-500 uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-1.5">
-          <span>←</span> Cancel
+          <span>←</span> {t.profile.cancel}
           </button>
           </div>
           </>
@@ -619,10 +590,10 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
           <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center mb-6">
           <CheckCircle size={32} className="text-green-500" />
           </div>
-          <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">Done!</h2>
-          <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-8">Password changed successfully</p>
+          <h2 className="text-2xl font-black text-(--t1) uppercase mb-2 tracking-tight">{t.profile.pwDone}</h2>
+          <p className="text-center text-(--t2) text-[10px] font-bold uppercase mb-8">{t.profile.pwDoneMsg}</p>
           <button onClick={resetPw} className="w-full py-5 rounded-[1.8rem] bg-blue-600 text-white font-black uppercase shadow-lg hover:bg-blue-700 active:scale-95 transition-all text-sm tracking-wider shadow-blue-500/20">
-          Close
+          {t.profile.pwClose}
           </button>
           </>
         )}
@@ -640,7 +611,7 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange }: {
 
 // ── Notification card (compact for profile) ───────────────────────────────────
 function NotificationCard({
-  notif, idx, responded, responding, inactive, onAccept, onDecline, onJuryAccept, onJuryDecline, onMarkRead, onGoTeam,
+  notif, idx, responded, responding, inactive, onAccept, onDecline, onJuryAccept, onJuryDecline, onMarkRead, onGoTeam, t,
 }: {
   notif: Notification; idx: number; responded: "accepted" | "declined" | undefined;
   responding: "accept" | "decline" | null;
@@ -648,6 +619,7 @@ function NotificationCard({
   onAccept: () => void; onDecline: () => void;
   onJuryAccept: () => void; onJuryDecline: () => void;
   onMarkRead: () => void; onGoTeam: (id: string) => void;
+  t: any;
 }) {
   const meta      = parseMeta(notif.meta);
   const isInvite  = notif.type === "team_invitation";
@@ -672,15 +644,15 @@ function NotificationCard({
     {isInvite && !responded && (
       inactive === "already_member" ? (
         <div className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border bg-gray-500/10 text-gray-500 border-gray-500/20">
-        <Check size={9} /> Вже в команді
+        <Check size={9} /> {t.profile.alreadyMember}
         </div>
       ) : (
         <div className="flex items-center gap-1.5 mt-2.5">
         <button onClick={onAccept} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-60">
-        {responding === "accept" ? <Loader size={10} className="animate-spin" /> : <Check size={10} />} Accept
+        {responding === "accept" ? <Loader size={10} className="animate-spin" /> : <Check size={10} />} {t.profile.accept}
         </button>
         <button onClick={onDecline} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-(--card) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 active:scale-95 transition-all disabled:opacity-60">
-        {responding === "decline" ? <Loader size={10} className="animate-spin" /> : <X size={10} />} Decline
+        {responding === "decline" ? <Loader size={10} className="animate-spin" /> : <X size={10} />} {t.profile.decline}
         </button>
         </div>
       )
@@ -690,15 +662,15 @@ function NotificationCard({
     {isJury && !responded && (
       inactive === "already_jury" ? (
         <div className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border bg-amber-500/10 text-amber-500 border-amber-500/20">
-        <Star size={9} /> Вже суддя
+        <Star size={9} /> {t.profile.alreadyJury}
         </div>
       ) : (
         <div className="flex items-center gap-1.5 mt-2.5">
         <button onClick={onJuryAccept} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 text-white font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 active:scale-95 transition-all disabled:opacity-60">
-        {responding === "accept" ? <Loader size={10} className="animate-spin" /> : <Star size={10} />} Accept
+        {responding === "accept" ? <Loader size={10} className="animate-spin" /> : <Star size={10} />} {t.profile.accept}
         </button>
         <button onClick={onJuryDecline} disabled={!!responding} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-(--card) border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-red-500/40 hover:text-red-500 active:scale-95 transition-all disabled:opacity-60">
-        {responding === "decline" ? <Loader size={10} className="animate-spin" /> : <X size={10} />} Decline
+        {responding === "decline" ? <Loader size={10} className="animate-spin" /> : <X size={10} />} {t.profile.decline}
         </button>
         </div>
       )
@@ -706,7 +678,7 @@ function NotificationCard({
 
     {(isInvite || isJury) && responded && (
       <div className={`mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border ${responded==="accepted"?"bg-green-500/10 text-green-500 border-green-500/20":"bg-red-500/10 text-red-500 border-red-500/20"}`}>
-      {responded === "accepted" ? <><Check size={9} /> Accepted</> : <><X size={9} /> Declined</>}
+      {responded === "accepted" ? <><Check size={9} /> {t.profile.accepted}</> : <><X size={9} /> {t.profile.declined}</>}
       </div>
     )}
     </div>
@@ -716,12 +688,13 @@ function NotificationCard({
 }
 
 // ── Jury Panel ─────────────────────────────────────────────────────────────────
-function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loading, router }: {
+function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loading, router, t }: {
   juryTournaments: JuryTournament[];
   juryRounds: JuryRound[];
   jurySubmissions: JurySubmission[];
   loading: boolean;
   router: ReturnType<typeof useRouter>;
+  t: any;
 }) {
   const invStatusStyle: Record<string, string> = {
     accepted: "text-green-500 bg-green-500/10 border-green-500/20",
@@ -729,7 +702,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
     declined: "text-(--t2) bg-(--bg) border-(--brd)",
   };
   const invStatusLabel: Record<string, string> = {
-    accepted: "Engaged", pending: "Pending", declined: "Declined",
+    accepted: t.profile.juryEngaged, pending: t.profile.juryPending, declined: t.profile.juryDeclined,
   };
   const roundStatusStyle: Record<string, string> = {
     active:   "text-green-500 bg-green-500/10 border-green-500/20",
@@ -751,30 +724,30 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
     <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-amber-500/5">
     <div className="w-7 h-7 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0"><Trophy size={14} /></div>
     <div>
-    <p className="text-xs font-black uppercase tracking-widest text-amber-500">Tournaments (Jury)</p>
-    {juryTournaments.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{juryTournaments.length} tournaments</p>}
+    <p className="text-xs font-black uppercase tracking-widest text-amber-500">{t.profile.juryTournamentsTitle}</p>
+    {juryTournaments.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{juryTournaments.length} {t.profile.tournamentsCount}</p>}
     </div>
     </div>
     <div className="p-5 sm:p-7">
     {juryTournaments.length === 0 ? (
       <div className="text-center py-5">
       <Trophy className="w-10 h-10 text-(--t2) opacity-30 mx-auto mb-2" />
-      <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Not assigned to any tournament yet</p>
+      <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">{t.profile.juryNoTournaments}</p>
       </div>
     ) : (
       <div className="space-y-2">
-      {juryTournaments.map(t => (
-        <button key={t.id} onClick={() => router.push(`/tournaments/${t.id}`)}
+      {juryTournaments.map(tour => (
+        <button key={tour.id} onClick={() => router.push(`/tournaments/${tour.id}`)}
         className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group text-left">
         <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 flex-shrink-0"><Trophy size={15} /></div>
         <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-        <span className="font-black text-(--t1) text-sm truncate group-hover:text-amber-500 transition-colors">{t.name}</span>
-        <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${invStatusStyle[t.invitation_status] ?? invStatusStyle.pending}`}>
-        {invStatusLabel[t.invitation_status] ?? t.invitation_status}
+        <span className="font-black text-(--t1) text-sm truncate group-hover:text-amber-500 transition-colors">{tour.name}</span>
+        <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${invStatusStyle[tour.invitation_status] ?? invStatusStyle.pending}`}>
+        {invStatusLabel[tour.invitation_status] ?? tour.invitation_status}
         </span>
         </div>
-        {t.start_at && <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">Start: {new Date(t.start_at).toLocaleString("en-US", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>}
+        {tour.start_at && <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">{t.profile.tourStart} {new Date(tour.start_at).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>}
         </div>
         <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
@@ -789,7 +762,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
       <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
       <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/40">
       <div className="w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0"><Flag size={14} /></div>
-      <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Rounds ({juryRounds.length})</p>
+      <p className="text-xs font-black uppercase tracking-widest text-(--t1)">{t.profile.juryRoundsTitle} ({juryRounds.length})</p>
       </div>
       <div className="p-5 sm:p-7 space-y-2">
       {juryRounds.map(r => (
@@ -797,10 +770,10 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
         className="w-full flex items-center gap-3 p-3 rounded-xl border border-(--brd) bg-(--bg) hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group text-left">
         <div className="w-7 h-7 rounded-lg bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-black text-xs flex-shrink-0">{r.number}</div>
         <div className="flex-1 min-w-0">
-        <p className="text-xs font-black text-(--t1) truncate group-hover:text-blue-600 transition-colors">{r.name || `Round ${r.number}`}</p>
+        <p className="text-xs font-black text-(--t1) truncate group-hover:text-blue-600 transition-colors">{r.name || `${t.profile.juryRound} ${r.number}`}</p>
         <p className="text-[10px] font-bold text-(--t2) truncate">{r.tournament_name}</p>
         </div>
-        {r.status && <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${roundStatusStyle[r.status] ?? roundStatusStyle.pending}`}>{r.status === "active" ? "Active" : r.status === "finished" ? "Finished" : "Pending"}</span>}
+        {r.status && <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${roundStatusStyle[r.status] ?? roundStatusStyle.pending}`}>{r.status === "active" ? t.profile.juryRoundActive : r.status === "finished" ? t.profile.juryRoundFinished : t.profile.juryRoundPending}</span>}
         <ExternalLink size={12} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       ))}
@@ -813,7 +786,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
       <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden">
       <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/40">
       <div className="w-7 h-7 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center flex-shrink-0"><FileText size={14} /></div>
-      <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Submissions for review ({jurySubmissions.length})</p>
+      <p className="text-xs font-black uppercase tracking-widest text-(--t1)">{t.profile.jurySubmissionsTitle} ({jurySubmissions.length})</p>
       </div>
       <div className="p-5 sm:p-7 space-y-2">
       {jurySubmissions.map(s => (
@@ -822,10 +795,10 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
         <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-500 flex-shrink-0"><FileText size={12} /></div>
         <div className="flex-1 min-w-0">
         <p className="text-xs font-black text-(--t1) truncate group-hover:text-purple-500 transition-colors">{s.team_name}</p>
-        <p className="text-[10px] font-bold text-(--t2)">{new Date(s.submitted_at).toLocaleString("en-US", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+        <p className="text-[10px] font-bold text-(--t2)">{new Date(s.submitted_at).toLocaleString("uk-UA", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
         </div>
         <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${s.status === "submitted" ? "text-green-500 bg-green-500/10 border-green-500/20" : "text-(--t2) bg-(--bg) border-(--brd)"}`}>
-        {s.status === "submitted" ? "Submitted" : s.status}
+        {s.status === "submitted" ? t.profile.jurySubSubmitted : s.status}
         </span>
         <ExternalLink size={12} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
@@ -839,10 +812,11 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const { dark } = useTheme();
-  const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
   const router = useRouter();
   const { user: currentUser, token, isLoading: authLoading } = useAuth();
+  const { t, locale } = useT();
 
   const [profileUser, setProfileUser]   = useState<any>(null);
   const [isLoading, setIsLoading]       = useState(true);
@@ -852,7 +826,6 @@ export default function ProfilePage() {
   const [isPwModalOpen, setIsPwModalOpen] = useState(false);
 
   const isJury = currentUser?.role === "jury";
-  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "superadmin";
   const { teams: userTeams, loading: teamsLoading } = useUserTeams(isJury ? undefined : currentUser?.id);
   const { juryTournaments, juryRounds, jurySubmissions, loading: juryLoading } = useJuryData(currentUser?.id, isJury);
 
@@ -934,7 +907,7 @@ export default function ProfilePage() {
     const fetchUser = async () => {
       setIsLoading(true);
       try {
-        const { data, error } = await supabase.from("account").select("id, username, login, email, role, status, avatar_url, full_name, city_school, telegram, discord").eq("id", currentUser.id).single();
+        const { data, error } = await supabase.from("account").select("id, username, login, email, role, status, avatar_url").eq("id", currentUser.id).single();
         if (error) throw error;
         setProfileUser(data);
       } catch { setError("User not found"); }
@@ -1038,28 +1011,28 @@ export default function ProfilePage() {
       <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
 
-      {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => closeMobileSidebar()} />}
+      {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />}
       <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
       <Sidebar />
       </div>
 
       <main className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isPwModalOpen ? "blur-sm brightness-75" : ""}`}>
-      <MobileHeader onOpenSidebar={openMobile} title="Profile" icon={<UserCircle size={18} className="text-blue-600" />} />
+      <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title={t.profile.title} icon={<UserCircle size={18} className="text-blue-600" />} />
       <div className={`flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10 ${allReady ? "page-ready" : ""}`}>
 
       <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2)">
-      <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">Home</button>
-      <ChevronRight size={10} /><span className="text-(--t1)">Profile</span>
+      <button onClick={() => router.push("/")} className="hover:text-blue-600 transition-colors">{t.profile.home}</button>
+      <ChevronRight size={10} /><span className="text-(--t1)">{t.profile.title}</span>
       </nav>
       <button onClick={() => router.back()} className="mb-5 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors">
-      <ArrowLeft size={14} /> Back
+      <ArrowLeft size={14} /> {t.profile.back}
       </button>
 
       {!allReady && !error && (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
         <div className="flex flex-col items-center gap-3">
         <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 opacity-70">Loading...</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 opacity-70">{t.profile.loading}</p>
         </div>
         </div>
       )}
@@ -1102,37 +1075,21 @@ export default function ProfilePage() {
           <h1 className="text-xl font-black text-(--t1) uppercase tracking-tight">{profileUser?.username}</h1>
           {!isEditing && (
             <button onClick={() => setIsEditing(true)} className="flex items-center gap-1.5 border border-(--brd) text-(--t2) font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2 hover:border-blue-600/40 hover:text-blue-600 active:scale-95 transition-all">
-            <Pencil size={11} /> Edit
+            <Pencil size={11} /> {t.profile.editBtn}
             </button>
           )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[9px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg">Your Profile</span>
+          <span className="text-[9px] font-black uppercase bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg">{t.profile.yourProfile}</span>
           <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-lg border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>{profileUser?.role ?? "user"}</span>
           {isJury && <span className="text-[9px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1"><Star size={9} className="fill-amber-500" /> Jury</span>}
           </div>
           <div className="space-y-2 text-sm">
-          <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Name:</span><span className="font-bold text-sm">{profileUser?.username}</span></p>
-          <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Login:</span><span className="font-bold text-sm">{profileUser?.login}</span></p>
-          {/* Email — видно тільки власнику і admin/superadmin */}
-          <p className="flex items-center gap-2.5 font-medium"><Mail size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Email:</span><span className="font-bold text-sm break-all">{profileUser?.email}</span></p>
-          <p className="flex items-center gap-2.5 font-medium"><Shield size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">Role:</span><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>{profileUser?.role ?? "user"}</span></p>
-          {profileUser?.full_name && (
-            <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs flex-shrink-0">ПІБ:</span><span className="font-bold text-sm ml-1">{profileUser.full_name}</span></p>
-          )}
-          {profileUser?.city_school && (
-            <p className="flex items-center gap-2.5 font-medium"><MapPin size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs flex-shrink-0">Місто:</span><span className="font-bold text-sm ml-1">{profileUser.city_school}</span></p>
-          )}
-          {/* Telegram — тільки власнику і admin */}
-          {profileUser?.telegram && (
-            <p className="flex items-center gap-2.5 font-medium"><MessageCircle size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs flex-shrink-0">Telegram:</span><span className="font-bold text-sm ml-1">{profileUser.telegram}</span></p>
-          )}
-          {/* Discord — тільки власнику і admin */}
-          {profileUser?.discord && (
-            <p className="flex items-center gap-2.5 font-medium"><Hash size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs flex-shrink-0">Discord:</span><span className="font-bold text-sm ml-1">{profileUser.discord}</span></p>
-          )}
+          <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">{t.profile.nameLabel}:</span><span className="font-bold text-sm">{profileUser?.username}</span></p>
+          <p className="flex items-center gap-2.5 font-medium"><User size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">{t.profile.loginLabel}:</span><span className="font-bold text-sm">{profileUser?.login}</span></p>
+          <p className="flex items-center gap-2.5 font-medium"><Mail size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">{t.profile.emailLabel}:</span><span className="font-bold text-sm break-all">{profileUser?.email}</span></p>
+          <p className="flex items-center gap-2.5 font-medium"><Shield size={14} className="text-blue-600 flex-shrink-0" /><span className="text-(--t2) text-xs w-10 flex-shrink-0">{t.profile.roleLabel}:</span><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${roleBadgeColor[profileUser?.role as Role] ?? roleBadgeColor.user}`}>{profileUser?.role ?? "user"}</span></p>
           </div>
-          {/* ID — тільки власнику і admin */}
           <div className="pt-2.5 border-t border-(--brd) text-[9px] font-bold uppercase tracking-widest text-(--t2)">ID: {profileUser?.id}</div>
           </div>
           </div>
@@ -1141,9 +1098,10 @@ export default function ProfilePage() {
           <div className="mt-5 pt-5 border-t border-(--brd)">
           <EditProfileSection
           profileUser={profileUser}
-          onSave={({ username, login, full_name, city_school, telegram, discord }) => { setProfileUser((prev: any) => ({ ...prev, username, login, full_name, city_school, telegram, discord })); setIsEditing(false); }}
+          onSave={({ username, login }) => { setProfileUser((prev: any) => ({ ...prev, username, login })); setIsEditing(false); }}
           onCancel={() => setIsEditing(false)}
           onModalChange={setIsPwModalOpen}
+          t={t}
           />
           </div>
         )}
@@ -1158,6 +1116,7 @@ export default function ProfilePage() {
           jurySubmissions={jurySubmissions}
           loading={juryLoading}
           router={router}
+          t={t}
           />
           </div>
         ) : (
@@ -1167,8 +1126,8 @@ export default function ProfilePage() {
           <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
           <div className="w-7 h-7 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center flex-shrink-0"><Users size={14} /></div>
           <div>
-          <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Teams</p>
-          {!teamsLoading && userTeams.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{userTeams.length} teams</p>}
+          <p className="text-xs font-black uppercase tracking-widest text-(--t1)">{t.profile.teamsTitle}</p>
+          {!teamsLoading && userTeams.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{userTeams.length} {t.profile.teamsCount}</p>}
           </div>
           </div>
           <div className="p-5 sm:p-7">
@@ -1177,8 +1136,8 @@ export default function ProfilePage() {
           ) : userTeams.length === 0 ? (
             <div className="text-center py-5">
             <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2"><Users className="w-5 h-5 text-(--t2) opacity-40" /></div>
-            <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Not a member of any team</p>
-            <button onClick={() => router.push("/register_team")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">Create a team →</button>
+            <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">{t.profile.noTeam}</p>
+            <button onClick={() => router.push("/register_team")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">{t.profile.createTeam}</button>
             </div>
           ) : (
             <div className="space-y-2">
@@ -1192,11 +1151,11 @@ export default function ProfilePage() {
                 <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-black text-(--t1) text-sm truncate group-hover:text-blue-600 transition-colors">{team.name}</span>
-                {isCaptain && <span className="text-[8px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1"><Crown size={7} /> Captain</span>}
+                {isCaptain && <span className="text-[8px] font-black uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1"><Crown size={7} /> {t.profile.captain}</span>}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
                 {team.city_school_org && <span className="text-[10px] font-bold text-(--t2) truncate">{team.city_school_org}</span>}
-                <span className="text-[10px] font-bold text-(--t2) flex items-center gap-1 flex-shrink-0"><Users size={8} /> {memberCount} members</span>
+                <span className="text-[10px] font-bold text-(--t2) flex items-center gap-1 flex-shrink-0"><Users size={8} /> {memberCount} {t.profile.members}</span>
                 </div>
                 </div>
                 <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1213,8 +1172,8 @@ export default function ProfilePage() {
           <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5 border-b border-(--brd) bg-(--bg)/[40]">
           <div className="w-7 h-7 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0"><Trophy size={14} /></div>
           <div>
-          <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Tournaments</p>
-          {!tourLoading && tournaments.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{tournaments.length} tournaments</p>}
+          <p className="text-xs font-black uppercase tracking-widest text-(--t1)">{t.profile.tournamentsTitle}</p>
+          {!tourLoading && tournaments.length > 0 && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{tournaments.length} {t.profile.tournamentsCount}</p>}
           </div>
           </div>
           <div className="p-5 sm:p-7">
@@ -1223,23 +1182,30 @@ export default function ProfilePage() {
           ) : tournaments.length === 0 ? (
             <div className="text-center py-5">
             <div className="w-10 h-10 rounded-2xl bg-(--bg) border border-(--brd) flex items-center justify-center mx-auto mb-2"><Trophy className="w-5 h-5 text-(--t2) opacity-40" /></div>
-            <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">Not participating in any tournaments</p>
-            <button onClick={() => router.push("/tournaments")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-amber-500 hover:underline">View tournaments →</button>
+            <p className="text-[11px] font-bold text-(--t2) uppercase tracking-wider">{t.profile.noTournament}</p>
+            <button onClick={() => router.push("/tournaments")} className="mt-3 text-[10px] font-black uppercase tracking-widest text-amber-500 hover:underline">{t.profile.viewTournaments}</button>
             </div>
           ) : (
             <div className="space-y-2">
-            {tournaments.map((t, i) => {
-              const st = t.status ?? "upcoming";
+            {tournaments.map((tour, i) => {
+              const st = tour.status ?? "upcoming";
+              const tourStatusLabel: Record<string, string> = {
+                registration: t.profile.tourStatus_registration,
+                active: t.profile.tourStatus_active,
+                ongoing: t.profile.tourStatus_ongoing,
+                upcoming: t.profile.tourStatus_upcoming,
+                finished: t.profile.tourStatus_finished,
+              };
               return (
-                <button key={t.id} onClick={() => router.push("/tournaments/" + t.id)}
+                <button key={tour.id} onClick={() => router.push("/tournaments/" + tour.id)}
                 className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-(--brd) bg-(--bg) hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group text-left" style={{ animationDelay: `${i * 40}ms` }}>
                 <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 flex-shrink-0"><Trophy size={15} /></div>
                 <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-black text-(--t1) text-sm truncate group-hover:text-amber-500 transition-colors">{t.name}</span>
+                <span className="font-black text-(--t1) text-sm truncate group-hover:text-amber-500 transition-colors">{tour.name}</span>
                 <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border flex-shrink-0 ${tourStatusStyle[st] ?? tourStatusStyle.upcoming}`}>{tourStatusLabel[st] ?? st}</span>
                 </div>
-                {t.start_at && <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">Start: {new Date(t.start_at).toLocaleString("en-US", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>}
+                {tour.start_at && <p className="text-[9px] font-bold text-(--t2) mt-0.5 opacity-60">{t.profile.tourStart} {new Date(tour.start_at).toLocaleString(locale === "ua" ? "uk-UA" : "en-US", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>}
                 </div>
                 <ExternalLink size={13} className="text-(--t2) flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </button>
@@ -1263,13 +1229,13 @@ export default function ProfilePage() {
         {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black flex items-center justify-center">{unreadCount > 9 ? "9+" : unreadCount}</span>}
         </div>
         <div>
-        <p className="text-xs font-black uppercase tracking-widest text-(--t1)">Notifications</p>
-        {!notifLoading && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{unreadCount > 0 ? `${unreadCount} unread` : "All read"}</p>}
+        <p className="text-xs font-black uppercase tracking-widest text-(--t1)">{t.profile.notificationsTitle}</p>
+        {!notifLoading && <p className="text-[10px] font-bold text-(--t2) mt-0.5">{unreadCount > 0 ? `${unreadCount} ${t.profile.unread}` : t.profile.allRead}</p>}
         </div>
         </div>
         {unreadCount > 0 && (
           <button onClick={markAllRead} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 border border-(--brd) bg-(--bg) rounded-xl px-3 py-1.5 transition-all hover:border-blue-600/40 active:scale-95">
-          <CheckCheck size={12} /> All
+          <CheckCheck size={12} /> {t.profile.markAll}
           </button>
         )}
         </div>
@@ -1279,7 +1245,7 @@ export default function ProfilePage() {
         ) : notifications.length === 0 ? (
           <div className="flex flex-col items-center py-12 text-center">
           <Bell className="w-10 h-10 text-(--t2) mb-3 opacity-25" />
-          <p className="text-sm font-black text-(--t1) mb-1">No notifications</p>
+          <p className="text-sm font-black text-(--t1) mb-1">{t.profile.noNotifications}</p>
           </div>
         ) : (
           <div className="space-y-2.5">
@@ -1295,6 +1261,7 @@ export default function ProfilePage() {
             onJuryDecline={() => respondJuryInvitation(notif, false)}
             onMarkRead={() => markRead(notif.id)}
             onGoTeam={(teamId) => router.push("/teams/" + teamId)}
+            t={t}
             />
           ))}
           </div>
