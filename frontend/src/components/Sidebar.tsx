@@ -36,14 +36,6 @@ export default function Sidebar({}: SidebarProps) {
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
   const { collapsed, toggle: toggleCollapsedCtx, closeMobile } = useSidebar();
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 1024);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
@@ -58,7 +50,7 @@ export default function Sidebar({}: SidebarProps) {
   const { user, logout } = useAuth();
 
   const toggleCollapse = useCallback(() => {
-    if (isMobile) {
+    if (window.innerWidth < 1024) {
       // На мобильном — закрываем drawer
       closeMobile();
     } else {
@@ -69,7 +61,7 @@ export default function Sidebar({}: SidebarProps) {
         setIsNotificationsPanelOpen(false);
       }
     }
-  }, [isMobile, collapsed, closeMobile, toggleCollapsedCtx]);
+  }, [collapsed, closeMobile, toggleCollapsedCtx]);
 
   const go = (path: string) => router.push(path);
   const avatarLetter = user?.username?.charAt(0).toUpperCase() ?? "?";

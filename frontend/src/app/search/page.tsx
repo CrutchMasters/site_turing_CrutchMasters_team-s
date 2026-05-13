@@ -17,6 +17,7 @@ export default function SearchPage() {
   const router = useRouter();
   const { dark } = useTheme();
   const { user, isLoading } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
   const { t } = useT();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -185,10 +186,14 @@ export default function SearchPage() {
             <p className="text-[10px] font-bold text-(--t2) uppercase tracking-wider mb-1">
             {t.search.loginLabel}: {person.login || t.common.na}
             </p>
-            <p className="text-[9px] font-bold text-(--t2) uppercase tracking-wider mb-2 break-all">
-            {t.search.idLabel}: {person.id || t.common.na}
-            </p>
-            <p className="text-[10px] text-(--t2) break-all">{person.email || ""}</p>
+            {isAdmin && (
+              <p className="text-[9px] font-bold text-(--t2) uppercase tracking-wider mb-2 break-all">
+              {t.search.idLabel}: {person.id || t.common.na}
+              </p>
+            )}
+            {isAdmin && (
+              <p className="text-[10px] text-(--t2) break-all">{person.email || ""}</p>
+            )}
             </div>
             </div>
             {selectedUserIdx === idx && (
