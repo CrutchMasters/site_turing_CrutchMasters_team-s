@@ -16,7 +16,7 @@ import JuryInvitePanel from "@/components/JuryInvitePanel";
 import { DatePicker, TimePicker } from "@/components/DateTimePicker";
 import {
     Trophy, ChevronRight, Save, AlertCircle,
-    CheckCircle, Clock, Layers, Zap, Users, ArrowLeft, Trash2, ImageIcon, Upload, X,
+    CheckCircle, Clock, Layers, Zap, Users, ArrowLeft, Trash2, ImageIcon, Upload, X, Lock,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import BannerEditorModal from "@/components/BannerEditorModal";
@@ -46,6 +46,7 @@ interface RoundRow {
     technologies?: string[];
     start_at?: string;
     end_at?: string;
+    status?: string;
     attachments?: { id: string; name: string; url: string; type: string }[];
 }
 
@@ -153,6 +154,9 @@ export default function TournamentEditPage() {
     const [selectedRoundTab, setSelectedRoundTab]   = useState<number>(1);
     const [roundsData, setRoundsData]               = useState<Record<number, RoundData>>({});
     const [initialRoundsData, setInitialRoundsData] = useState<Record<number, Partial<RoundData>>>({});
+    // round number → { id, status } for admin status control
+    const [roundMeta, setRoundMeta] = useState<Record<number, { id: string; status: string }>>({});
+    const [statusChanging, setStatusChanging] = useState(false);
 
     // Хелпер для таймлайну — оновлює окремий раунд в roundsData
     const handleRoundTimelineChange = useCallback((num: number, patch: Partial<RoundSlice>) => {
@@ -331,6 +335,12 @@ export default function TournamentEditPage() {
                         };
                     }
                     setInitialRoundsData(initial);
+                    // Save round id+status for admin status control
+                    const meta: Record<number, { id: string; status: string }> = {};
+                    for (const r of roundRows as RoundRow[]) {
+                        if (r.id) meta[r.number] = { id: r.id, status: r.status ?? "pending" };
+                    }
+                    setRoundMeta(meta);
                 }
             } catch (e: any) {
                 setFieldErrors({ general: e?.message ?? "Помилка завантаження" });
@@ -1052,7 +1062,110 @@ export default function TournamentEditPage() {
                     {/* end LEFT COLUMN */}
 
                     {/* ── RIGHT COLUMN ── */}
-                    <div className="w-full xl:sticky xl:top-6 xl:flex-1 xl:min-w-0">
+                    <div className="w-full xl:sticky xl:top-6 xl:flex-1 xl:min-w-0 flex flex-col gap-4">
+
+                    {/* ── Round Status Control (admin only) ── */}
+                    {roundMeta[selectedRoundTab] && (() => {
+                        const meta = roundMeta[selectedRoundTab];
+                        const status = meta.status;
+                        const isJudged   = status === "judged";
+                        const isJudging  = status === "judging";
+                        const isActive   = status === "active";
+                        const isPending  = status === "pending";
+
+                        const statusLabel: Record<string, string> = {
+                            pending:  "Очікується",
+                            active:   "Проводиться",
+                            judging:  "Оцінювання",
+                            judged:   "Оцінено",
+                        };
+                        const statusColor: Record<string, string> = {
+                            pending:  "text-(--t2)",
+                            active:   "text-blue-500",
+                            judging:  "text-amber-500",
+                            judged:   "text-green-500",
+                        };
+
+                        const handleSetStatus = async (newStatus: string) => {
+                            if (statusChanging) return;
+                            setStatusChanging(true);
+                            try {
+                                const token = typeof window !== "undefined" ? localStorage.getItem("access_token") ?? "" : "";
+                                const res = await fetch(`${API_URL}/api/rounds/${meta.id}/status`, {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                                    body: JSON.stringify({ status: newStatus }),
+                                });
+                                if (!res.ok) {
+                                    const err = await res.json().catch(() => ({}));
+                                    throw new Error(err?.detail ?? `HTTP ${res.status}`);
+                                }
+                                setRoundMeta(prev => ({
+                                    ...prev,
+                                    [selectedRoundTab]: { ...meta, status: newStatus },
+                                }));
+                            } catch (e: any) {
+                                alert(e?.message ?? "Помилка зміни статусу");
+                            } finally {
+                                setStatusChanging(false);
+                            }
+                        };
+
+                        return (
+                            <div className="rounded-2xl border border-(--brd) bg-(--card) p-4 flex flex-col gap-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">Статус раунду</span>
+                                    <span className={`text-[11px] font-black uppercase tracking-widest ${statusColor[status] ?? "text-(--t2)"}`}>
+                                        {statusLabel[status] ?? status}
+                                    </span>
+                                </div>
+
+                                <div className="flex flex-wrap gap-2">
+                                    {/* judging → judged: закрити оцінювання */}
+                                    {isJudging && (
+                                        <button type="button"
+                                            onClick={() => handleSetStatus("judged")}
+                                            disabled={statusChanging}
+                                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-green-700 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-md shadow-green-600/20">
+                                            <Lock size={12} />
+                                            Закрити оцінювання
+                                        </button>
+                                    )}
+                                    {/* judged → judging: відкрити знову */}
+                                    {isJudged && (
+                                        <button type="button"
+                                            onClick={() => handleSetStatus("judging")}
+                                            disabled={statusChanging}
+                                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-white font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-md shadow-amber-500/20">
+                                            <Lock size={12} />
+                                            Відкрити оцінювання
+                                        </button>
+                                    )}
+                                    {/* active/pending → judging: примусово відкрити оцінювання */}
+                                    {(isActive || isPending) && (
+                                        <button type="button"
+                                            onClick={() => handleSetStatus("judging")}
+                                            disabled={statusChanging}
+                                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-500 font-black text-[10px] uppercase tracking-widest hover:bg-amber-500/20 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
+                                            Перевести в оцінювання
+                                        </button>
+                                    )}
+                                </div>
+
+                                {isJudged && (
+                                    <p className="text-[10px] text-(--t2) leading-relaxed">
+                                        Оцінювання закрито — журі не може редагувати оцінки.
+                                    </p>
+                                )}
+                                {isJudging && (
+                                    <p className="text-[10px] text-(--t2) leading-relaxed">
+                                        Журі зараз виставляє оцінки. Натисніть «Закрити оцінювання» коли всі оцінки виставлено.
+                                    </p>
+                                )}
+                            </div>
+                        );
+                    })()}
+
                     <RoundSettingsPanel
                     roundCount={roundCount}
                     selectedRound={selectedRoundTab}
