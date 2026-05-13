@@ -12,7 +12,7 @@ import MobileHeader from "@/components/MobileHeader";
 import {
     ChevronLeft, ChevronRight, Loader2, AlertCircle,
     CheckCircle2, Shuffle, Users, FileText, RefreshCw,
-    UserCheck, UserX, Shield,
+    UserCheck, UserX, Shield, GitMerge,
 } from "lucide-react";
 
 const API_URL =
@@ -48,13 +48,17 @@ interface RoundInfo {
 
 function AssignCell({
     assigned,
+    savedAssigned,
     pending,
     onToggle,
 }: {
     assigned: boolean;
+    savedAssigned: boolean;
     pending: boolean;
     onToggle: () => void;
 }) {
+    const isDraftChange = assigned !== savedAssigned;
+
     return (
         <button
             onClick={onToggle}
@@ -64,8 +68,12 @@ function AssignCell({
                 w-8 h-8 rounded-lg border flex items-center justify-center transition-all
                 ${pending ? "opacity-40 cursor-wait" : "cursor-pointer active:scale-90"}
                 ${assigned
-                    ? "bg-blue-600 border-blue-500 text-white hover:bg-blue-700"
-                    : "bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-500/60 hover:text-blue-500"
+                    ? isDraftChange
+                        ? "bg-blue-500/70 border-blue-400 text-white ring-2 ring-blue-400/50 ring-offset-1"
+                        : "bg-blue-600 border-blue-500 text-white hover:bg-blue-700"
+                    : isDraftChange
+                        ? "bg-red-500/10 border-red-400/60 text-red-400 ring-2 ring-red-400/30 ring-offset-1"
+                        : "bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-500/60 hover:text-blue-500"
                 }
             `}
         >
@@ -73,7 +81,9 @@ function AssignCell({
                 ? <Loader2 size={12} className="animate-spin" />
                 : assigned
                     ? <UserCheck size={12} />
-                    : <span className="text-[10px] font-black">+</span>
+                    : isDraftChange
+                        ? <UserX size={12} />
+                        : <span className="text-[10px] font-black">+</span>
             }
         </button>
     );
@@ -84,7 +94,7 @@ function AssignCell({
 export default function DistributePage() {
     const params = useParams();
     const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
-  const router = useRouter();
+    const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
     const { dark } = useTheme();
     const roundId = params?.id as string;
@@ -92,13 +102,16 @@ export default function DistributePage() {
     const [round, setRound] = useState<RoundInfo | null>(null);
     const [jury, setJury] = useState<JuryMember[]>([]);
     const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
-    // Set of "jury_id|submission_id" strings
+    const [savedAssignments, setSavedAssignments] = useState<Set<string>>(new Set());
     const [assignments, setAssignments] = useState<Set<string>>(new Set());
-    // Set of "jury_id|submission_id" pending operations
+    const [isDirty, setIsDirty] = useState(false);
     const [pending, setPending] = useState<Set<string>>(new Set());
+    const [saving, setSaving] = useState(false);
 
+    const [juryPerSubmission, setJuryPerSubmission] = useState(1);
     const [pageLoading, setPageLoading] = useState(true);
     const [redistributing, setRedistributing] = useState(false);
+    const [partialRedistributing, setPartialRedistributing] = useState(false);
     const [toast, setToast] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
     const isAdmin = user?.role === "admin" || user?.role === "superadmin";
@@ -144,10 +157,13 @@ export default function DistributePage() {
 
             setJury(data.jury ?? []);
             setSubmissions(data.submissions ?? []);
+            setJuryPerSubmission(data.jury_per_submission ?? 1);
             const aSet = new Set<string>(
                 (data.assignments ?? []).map((a: any) => `${a.jury_id}|${a.submission_id}`)
             );
-            setAssignments(aSet);
+            setSavedAssignments(aSet);
+            setAssignments(new Set(aSet));
+            setIsDirty(false);
         } catch (e: any) {
             showToast("err", e?.message ?? "Помилка завантаження");
         } finally {
@@ -159,40 +175,76 @@ export default function DistributePage() {
         if (!authLoading && user && isAdmin) fetchData();
     }, [authLoading, user, isAdmin]);
 
-    // ── Toggle single assignment ──────────────────────────────────────────────
-    const toggleAssignment = async (juryId: string, subId: string) => {
+    // ── Toggle single assignment (local draft only) ───────────────────────────
+    const toggleAssignment = (juryId: string, subId: string) => {
         const key = `${juryId}|${subId}`;
-        const isAssigned = assignments.has(key);
-        const action = isAssigned ? "remove" : "add";
+        setAssignments(prev => {
+            const next = new Set(prev);
+            next.has(key) ? next.delete(key) : next.add(key);
+            return next;
+        });
+        setIsDirty(true);
+    };
 
-        setPending(prev => new Set(prev).add(key));
+    // ── Save changes to server ────────────────────────────────────────────────
+    const handleSave = async () => {
+        if (!isAdmin || !roundId) return;
+        setSaving(true);
         try {
             const freshToken = (typeof window !== "undefined" ? localStorage.getItem("access_token") : null) ?? "";
-            const res = await fetch(`${API_URL}/api/rounds/${roundId}/assign`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${freshToken}`,
-                },
-                body: JSON.stringify({ jury_id: juryId, submission_id: subId, action }),
-            });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.detail ?? `HTTP ${res.status}`);
+
+            const toAdd: string[] = [];
+            const toRemove: string[] = [];
+
+            assignments.forEach(key => { if (!savedAssignments.has(key)) toAdd.push(key); });
+            savedAssignments.forEach(key => { if (!assignments.has(key)) toRemove.push(key); });
+
+            const allKeys = [...toAdd, ...toRemove];
+            setPending(new Set(allKeys));
+
+            const requests = [
+                ...toAdd.map(key => {
+                    const [jury_id, submission_id] = key.split("|");
+                    return fetch(`${API_URL}/api/rounds/${roundId}/assign`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${freshToken}` },
+                        body: JSON.stringify({ jury_id, submission_id, action: "add" }),
+                    });
+                }),
+                ...toRemove.map(key => {
+                    const [jury_id, submission_id] = key.split("|");
+                    return fetch(`${API_URL}/api/rounds/${roundId}/assign`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${freshToken}` },
+                        body: JSON.stringify({ jury_id, submission_id, action: "remove" }),
+                    });
+                }),
+            ];
+
+            const results = await Promise.all(requests);
+            const failed = results.filter(r => !r.ok);
+            if (failed.length > 0) {
+                throw new Error(`${failed.length} запит(ів) завершились з помилкою`);
             }
-            setAssignments(prev => {
-                const next = new Set(prev);
-                action === "add" ? next.add(key) : next.delete(key);
-                return next;
-            });
+
+            setSavedAssignments(new Set(assignments));
+            setIsDirty(false);
+            showToast("ok", `Збережено: +${toAdd.length} / -${toRemove.length} призначень`);
         } catch (e: any) {
-            showToast("err", e?.message ?? "Помилка оновлення");
+            showToast("err", e?.message ?? "Помилка збереження");
         } finally {
-            setPending(prev => { const n = new Set(prev); n.delete(key); return n; });
+            setSaving(false);
+            setPending(new Set());
         }
     };
 
-    // ── Auto redistribute ─────────────────────────────────────────────────────
+    // ── Cancel changes ────────────────────────────────────────────────────────
+    const handleCancel = () => {
+        setAssignments(new Set(savedAssignments));
+        setIsDirty(false);
+    };
+
+    // ── Full auto redistribute ────────────────────────────────────────────────
     const handleRedistribute = async () => {
         if (!isAdmin || !roundId) return;
         setRedistributing(true);
@@ -213,6 +265,49 @@ export default function DistributePage() {
         }
     };
 
+    // ── Partial redistribute — зберегти поточний draft і дорозподілити решту ─
+    const handlePartialRedistribute = async () => {
+        if (!isAdmin || !roundId) return;
+
+        // Якщо є незбережені зміни — спочатку попереджаємо:
+        // поточний draft assignments передається як "locked" до бекенду,
+        // тому незбережені зміни фактично враховуються без явного save.
+        setPartialRedistributing(true);
+        try {
+            const freshToken = (typeof window !== "undefined" ? localStorage.getItem("access_token") : null) ?? "";
+
+            // Передаємо поточний draft (assignments) як зафіксовані вручну
+            const lockedAssignments = Array.from(assignments).map(key => {
+                const [jury_id, submission_id] = key.split("|");
+                return { jury_id, submission_id };
+            });
+
+            const res = await fetch(`${API_URL}/api/rounds/${roundId}/partial_redistribute`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${freshToken}`,
+                },
+                body: JSON.stringify({ locked_assignments: lockedAssignments }),
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json.detail ?? `HTTP ${res.status}`);
+
+            const { new_assignments, submissions_filled, jury_per_submission, still_under_k } = json;
+
+            let msg = `Дорозподілено: +${new_assignments} призначень для ${submissions_filled} робіт (K=${jury_per_submission})`;
+            if (still_under_k > 0) {
+                msg += ` · ${still_under_k} роб. досі мають < ${jury_per_submission} журі`;
+            }
+            showToast("ok", msg);
+            await fetchData();
+        } catch (e: any) {
+            showToast("err", e?.message ?? "Помилка дорозподілу");
+        } finally {
+            setPartialRedistributing(false);
+        }
+    };
+
     // ── Toast helper ──────────────────────────────────────────────────────────
     const toastTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const showToast = (type: "ok" | "err", text: string) => {
@@ -221,11 +316,10 @@ export default function DistributePage() {
         toastTimer.current = setTimeout(() => setToast(null), 4000);
     };
 
-    // ── Stats ─────────────────────────────────────────────────────────────────
+    // ── Stats (based on current draft) ───────────────────────────────────────
     const totalPossible = jury.length * submissions.length;
     const assignedCount = assignments.size;
 
-    // Per-submission: count how many jury assigned
     const subAssignCounts = Object.fromEntries(
         submissions.map(s => [
             s.id,
@@ -233,6 +327,13 @@ export default function DistributePage() {
         ])
     );
     const unassignedSubs = submissions.filter(s => subAssignCounts[s.id] === 0).length;
+
+    // Кількість робіт, які мають хоч якесь призначення але менше ніж потрібно
+    // (корисно для підказки до кнопки "Дорозподілити")
+    const underAssignedSubs = submissions.filter(
+        s => subAssignCounts[s.id] > 0 && subAssignCounts[s.id] < juryPerSubmission
+    ).length;
+    const hasUnfilled = unassignedSubs > 0 || underAssignedSubs > 0;
 
     // ── Render guards ─────────────────────────────────────────────────────────
     if (authLoading || (!user && !authLoading)) {
@@ -296,23 +397,85 @@ export default function DistributePage() {
                                 </p>
                             )}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
+                            {/* Оновити */}
                             <button
                                 onClick={fetchData}
-                                disabled={pageLoading}
+                                disabled={pageLoading || saving}
                                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-(--brd) bg-(--bg) text-(--t2) font-black text-[10px] uppercase tracking-widest hover:border-blue-500/40 hover:text-blue-500 transition-all disabled:opacity-40"
                             >
                                 <RefreshCw size={11} className={pageLoading ? "animate-spin" : ""} />
                                 Оновити
                             </button>
+
+                            {/* Авто-розподіл (повний) */}
                             <button
                                 onClick={handleRedistribute}
-                                disabled={redistributing || pageLoading}
+                                disabled={redistributing || partialRedistributing || pageLoading || saving}
                                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-orange-500/40 bg-orange-500/10 text-orange-600 font-black text-[10px] uppercase tracking-widest hover:bg-orange-500/20 transition-all disabled:opacity-40"
                             >
                                 {redistributing
                                     ? <><Loader2 size={11} className="animate-spin" /> Розподіл...</>
                                     : <><Shuffle size={11} /> Авто-розподіл</>
+                                }
+                            </button>
+
+                            {/* ── НОВА КНОПКА: Дорозподілити решту ── */}
+                            <button
+                                onClick={handlePartialRedistribute}
+                                disabled={partialRedistributing || redistributing || pageLoading || saving}
+                                title={
+                                    hasUnfilled
+                                        ? `${unassignedSubs + underAssignedSubs} роб. без повного покриття — дорозподілити їх автоматично`
+                                        : "Всі роботи мають призначення"
+                                }
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border font-black text-[10px] uppercase tracking-widest transition-all disabled:opacity-40 ${
+                                    hasUnfilled
+                                        ? "border-violet-500/40 bg-violet-500/10 text-violet-600 hover:bg-violet-500/20"
+                                        : "border-(--brd) bg-(--bg) text-(--t2) hover:border-violet-500/40 hover:text-violet-600"
+                                }`}
+                            >
+                                {partialRedistributing
+                                    ? <><Loader2 size={11} className="animate-spin" /> Дорозподіл...</>
+                                    : <>
+                                        <GitMerge size={11} />
+                                        Дорозподілити решту
+                                        {hasUnfilled && (
+                                            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-violet-600 text-white text-[8px] font-black">
+                                                {unassignedSubs + underAssignedSubs}
+                                            </span>
+                                        )}
+                                      </>
+                                }
+                            </button>
+
+                            {/* Скасувати */}
+                            <button
+                                onClick={handleCancel}
+                                disabled={saving || !isDirty}
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border font-black text-[10px] uppercase tracking-widest transition-all disabled:opacity-40 ${
+                                    isDirty
+                                        ? "border-red-500/40 bg-red-500/10 text-red-500 hover:bg-red-500/20"
+                                        : "border-(--brd) bg-(--bg) text-(--t2)"
+                                }`}
+                            >
+                                <UserX size={11} />
+                                Скасувати
+                            </button>
+
+                            {/* Зберегти */}
+                            <button
+                                onClick={handleSave}
+                                disabled={saving || !isDirty}
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border font-black text-[10px] uppercase tracking-widest transition-all disabled:opacity-40 ${
+                                    isDirty
+                                        ? "border-green-500/40 bg-green-500/10 text-green-600 hover:bg-green-500/20"
+                                        : "border-(--brd) bg-(--bg) text-(--t2)"
+                                }`}
+                            >
+                                {saving
+                                    ? <><Loader2 size={11} className="animate-spin" /> Збереження...</>
+                                    : <><CheckCircle2 size={11} /> Зберегти</>
                                 }
                             </button>
                         </div>
@@ -327,6 +490,14 @@ export default function DistributePage() {
                         }`}>
                             {toast.type === "ok" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
                             {toast.text}
+                        </div>
+                    )}
+
+                    {/* Підказка про незбережені зміни при дорозподілі */}
+                    {isDirty && (
+                        <div className="mb-4 flex items-center gap-3 px-4 py-3 rounded-xl border border-violet-500/30 bg-violet-500/5 text-[11px] font-bold text-violet-600">
+                            <GitMerge size={13} className="flex-shrink-0" />
+                            «Дорозподілити решту» врахує ваші поточні незбережені зміни як зафіксовані — вони будуть збережені автоматично.
                         </div>
                     )}
 
@@ -410,7 +581,6 @@ export default function DistributePage() {
                                                                     <span className="text-[10px] font-black text-(--t1) leading-tight truncate max-w-[80px]" title={juryMember.username ?? juryMember.login}>
                                                                         {juryMember.username ?? juryMember.login}
                                                                     </span>
-                                                                    {/* Per-jury count badge */}
                                                                     <span className={`mt-1 px-1.5 py-0.5 rounded-full text-[8px] font-black ${
                                                                         assignedForJury === 0
                                                                             ? "bg-red-500/15 text-red-500"
@@ -441,7 +611,7 @@ export default function DistributePage() {
                                                                 <div className={`text-[9px] font-bold mt-0.5 ${
                                                                     subAssignCounts[sub.id] === 0 ? "text-red-500" : "text-(--t2)"
                                                                 }`}>
-                                                                    {subAssignCounts[sub.id]} / {jury.length} журі
+                                                                    {subAssignCounts[sub.id]} / {juryPerSubmission} журі
                                                                 </div>
                                                             </div>
                                                         </td>
@@ -452,6 +622,7 @@ export default function DistributePage() {
                                                                 <td key={juryMember.id} className="border-r border-b border-(--brd) px-3 py-3 text-center">
                                                                     <AssignCell
                                                                         assigned={assignments.has(key)}
+                                                                        savedAssigned={savedAssignments.has(key)}
                                                                         pending={pending.has(key)}
                                                                         onToggle={() => toggleAssignment(juryMember.id, sub.id)}
                                                                     />
@@ -467,7 +638,10 @@ export default function DistributePage() {
                                     {/* Footer hint */}
                                     <div className="px-4 py-3 border-t border-(--brd) bg-(--bg)/40 flex items-center justify-between flex-wrap gap-2">
                                         <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">
-                                            Натисніть клітинку для призначення / зняття призначення
+                                            {isDirty
+                                                ? "⚠️ Є незбережені зміни — натисніть «Зберегти» або «Дорозподілити решту»"
+                                                : "Натисніть клітинку для призначення / зняття призначення"
+                                            }
                                         </p>
                                         <p className="text-[9px] font-bold text-(--t2)">
                                             {assignedCount} з {totalPossible} можливих призначень
