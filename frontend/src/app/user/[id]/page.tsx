@@ -424,13 +424,7 @@ export default function PublicUserProfile() {
           </section>
       )}
 
-      {!isSuperAdmin && !isOwnProfile && (
-        <section className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) p-6 sm:p-8">
-        <p className="text-[10px] font-bold text-(--t2) uppercase tracking-wider">
-        Only superadmin users can change roles
-        </p>
-        </section>
-      )}
+
       </div>
     ) : null}
     </div>

@@ -10,7 +10,7 @@ import { useTheme } from "@/hooks/useTheme";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import { LeaderboardSection } from "@/components/LeaderboardSection";
-import { Trophy, Users, ArrowLeft, Loader, Edit, ChevronRight, Clock, Flag, Lock, LayoutList } from "lucide-react";
+import { Trophy, Users, ArrowLeft, Loader, Edit, ChevronRight, Clock, Flag, Lock, LayoutList, Star } from "lucide-react";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 const API_URL =
@@ -35,6 +35,12 @@ interface Team {
     city_school_org?: string;
     captain_id?: string;
     members_ids?: string[];
+    avatar_url?: string;
+}
+
+interface JuryMember {
+    jury_id: string;
+    username: string;
     avatar_url?: string;
 }
 
@@ -72,6 +78,7 @@ export default function TournamentPage() {
 
     const [tournament, setTournament] = useState<Tournament | null>(null);
     const [rounds, setRounds] = useState<Round[]>([]);
+    const [jury, setJury] = useState<JuryMember[]>([]);
     const [loading, setLoading] = useState(true);
     const [registering, setRegistering] = useState(false);
     const [unregistering, setUnregistering] = useState(false);
@@ -105,6 +112,30 @@ export default function TournamentPage() {
             .eq("tournament_id", id)
             .order("number", { ascending: true });
             setRounds(roundsData ?? []);
+
+            // Fetch accepted jury members for this tournament
+            const { data: juryInvites } = await supabase
+            .from("jury_tournament_invitations")
+            .select("jury_id")
+            .eq("tournament_id", id)
+            .eq("status", "accepted");
+
+            if (juryInvites && juryInvites.length > 0) {
+                const juryIds = [...new Set(juryInvites.map((j: any) => j.jury_id))];
+                const { data: juryAccounts } = await supabase
+                .from("account")
+                .select("id, username, avatar_url")
+                .in("id", juryIds);
+                const accountMap: Record<string, any> = {};
+                (juryAccounts ?? []).forEach((a: any) => { accountMap[a.id] = a; });
+                setJury(juryIds.map(jid => ({
+                    jury_id: jid,
+                    username: accountMap[jid]?.username ?? "—",
+                    avatar_url: accountMap[jid]?.avatar_url ?? null,
+                })));
+            } else {
+                setJury([]);
+            }
         } catch (e) {
             console.error(e);
         } finally {
@@ -536,6 +567,36 @@ export default function TournamentPage() {
                 </div>
             )}
             </div>
+
+            {/* Jury list */}
+            {jury.length > 0 && (
+                <div className="mt-6">
+                <h2 className="font-black text-lg mb-3 text-(--t1) flex items-center gap-2">
+                <Star size={18} className="text-amber-500" />
+                Журі
+                </h2>
+                <div className="grid gap-2">
+                {jury.map((member) => (
+                    <div
+                    key={member.jury_id}
+                    onClick={() => router.push(`/user/${member.jury_id}`)}
+                    className="flex items-center gap-3 p-4 border border-(--brd) rounded-2xl bg-(--card) hover:border-amber-500/40 cursor-pointer transition-all group"
+                    >
+                    <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                    {member.avatar_url
+                        ? <img src={member.avatar_url} alt={member.username} className="w-full h-full object-cover" />
+                        : <Star size={14} className="text-amber-500" />
+                    }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                    <p className="font-black text-sm text-(--t1) group-hover:text-amber-500 transition-colors truncate">{member.username}</p>
+                    <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest">Суддя</p>
+                    </div>
+                    </div>
+                ))}
+                </div>
+                </div>
+            )}
             </>
         )}
 
