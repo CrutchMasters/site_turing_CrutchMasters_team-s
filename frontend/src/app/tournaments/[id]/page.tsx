@@ -76,7 +76,6 @@ export default function TournamentPage() {
     const [registering, setRegistering] = useState(false);
     const [unregistering, setUnregistering] = useState(false);
     const [registerError, setRegisterError] = useState<string | null>(null);
-    const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<Tab>("info");
     const [leaderboardTouched, setLeaderboardTouched] = useState(false);
 
