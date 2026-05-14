@@ -31,6 +31,8 @@ interface Tournament {
     registration_from?: string;
     registration_to?: string;
     max_teams?: number;
+    min_team_size?: number;
+    max_team_size?: number;
     rounds?: number;
     jury_per_submission?: number;
     created_by?: string;
@@ -188,6 +190,8 @@ export default function TournamentEditPage() {
     const [regToDate, setRegToDate]     = useState("");
     const [regToTime, setRegToTime]     = useState("");
     const [maxTeams, setMaxTeams]             = useState(0);
+    const [minTeamSize, setMinTeamSize]       = useState(2);
+    const [maxTeamSize, setMaxTeamSize]       = useState(5);
     const [juryPerSubmission, setJuryPerSubmission] = useState(1);
     const [roundCount, setRoundCount]   = useState<number>(1);
 
@@ -338,6 +342,8 @@ export default function TournamentEditPage() {
             setRegToDate(toDateStr(data.registration_to));
             setRegToTime(toTimeStr(data.registration_to));
             setMaxTeams(data.max_teams ?? 0);
+            setMinTeamSize(data.min_team_size ?? 2);
+            setMaxTeamSize(data.max_team_size ?? 5);
             setJuryPerSubmission(data.jury_per_submission ?? 1);
             setRoundCount(data.rounds ?? 1);
             setBannerUrl(data.banner_url ?? "");
@@ -555,6 +561,8 @@ export default function TournamentEditPage() {
                 registration_from: toIso(regFromDate, regFromTime),
                 registration_to:   toIso(regToDate, regToTime),
                 max_teams:              maxTeams > 0 ? maxTeams : null,
+                min_team_size:          minTeamSize > 0 ? minTeamSize : null,
+                max_team_size:          maxTeamSize > 0 ? maxTeamSize : null,
                 jury_per_submission:    juryPerSubmission >= 1 ? juryPerSubmission : 1,
                 rounds:            roundCount,
             };
@@ -792,7 +800,7 @@ export default function TournamentEditPage() {
             {t.editTourney?.pageTitle ?? "Редагування турніру"}
             </h1>
 
-            <form className="space-y-5" onSubmit={handleSave}>
+            <form className="space-y-5" onSubmit={handleSave} onKeyDown={e => { if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") e.preventDefault(); }}>
             <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
 
             {/* ════════════════════════════════════════
@@ -1030,6 +1038,48 @@ export default function TournamentEditPage() {
                     {n === 0 ? (t.editTourney?.noLimit ?? "Без ліміту") : n}
                     </button>
                 ))}
+                </div>
+                </div>
+                </div>
+                </section>
+
+                {/* Team size block */}
+                <section className="flex flex-col gap-4">
+                <div className="bg-(--card) rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-(--brd) overflow-hidden flex flex-col">
+                <div className="flex items-center gap-3 px-5 py-4 border-b border-(--brd) bg-(--bg)/50">
+                <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-500 flex items-center justify-center text-white flex-shrink-0">
+                <Users size={14} />
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-(--t2) flex-1">Розмір команди</span>
+                <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full">Опціонально</span>
+                </div>
+                <div className="p-5 flex flex-col gap-5">
+                <div className="flex flex-col gap-3">
+                <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Мінімум учасників</p>
+                <div className="flex items-center justify-center gap-3">
+                <button type="button" onClick={() => setMinTeamSize(Math.max(1, minTeamSize - 1))} className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">−</button>
+                <input type="number" min={1} value={minTeamSize} onChange={e => { const v = parseInt(e.target.value, 10); setMinTeamSize(isNaN(v) || v < 1 ? 1 : v); }} className="w-16 text-center text-2xl font-black bg-transparent outline-none text-(--t1) border-b-2 border-(--brd) focus:border-blue-500 transition-colors tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                <button type="button" onClick={() => setMinTeamSize(minTeamSize + 1)} className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">+</button>
+                </div>
+                <div className="flex gap-1.5 flex-wrap justify-center">
+                {[1, 2, 3, 4, 5].map(n => (
+                    <button key={n} type="button" onClick={() => setMinTeamSize(n)} className={`text-[10px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest transition-all active:scale-95 ${minTeamSize === n ? "bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/30" : "bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600"}`}>{n}</button>
+                ))}
+                </div>
+                </div>
+                <div className="h-px bg-(--brd)" />
+                <div className="flex flex-col gap-3">
+                <p className="text-[9px] font-black uppercase tracking-widest text-(--t2)">Максимум учасників</p>
+                <div className="flex items-center justify-center gap-3">
+                <button type="button" onClick={() => setMaxTeamSize(Math.max(1, maxTeamSize - 1))} className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">−</button>
+                <input type="number" min={1} value={maxTeamSize} onChange={e => { const v = parseInt(e.target.value, 10); setMaxTeamSize(isNaN(v) || v < 1 ? 1 : v); }} className="w-16 text-center text-2xl font-black bg-transparent outline-none text-(--t1) border-b-2 border-(--brd) focus:border-blue-500 transition-colors tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                <button type="button" onClick={() => setMaxTeamSize(maxTeamSize + 1)} className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center text-(--t2) hover:text-blue-600 hover:border-blue-600/40 transition-all active:scale-90 font-black text-lg flex-shrink-0">+</button>
+                </div>
+                <div className="flex gap-1.5 flex-wrap justify-center">
+                {[2, 3, 4, 5, 10].map(n => (
+                    <button key={n} type="button" onClick={() => setMaxTeamSize(n)} className={`text-[10px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest transition-all active:scale-95 ${maxTeamSize === n ? "bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/30" : "bg-(--bg) border-(--brd) text-(--t2) hover:border-blue-600/50 hover:text-blue-600"}`}>{n}</button>
+                ))}
+                </div>
                 </div>
                 </div>
                 </div>
