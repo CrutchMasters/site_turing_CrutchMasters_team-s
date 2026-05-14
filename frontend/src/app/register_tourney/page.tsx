@@ -124,7 +124,7 @@ export default function RegisterTourney() {
 
   // Зовнішні дати для RoundSettingsPanel (від таймлайну)
   const [externalRoundDates, setExternalRoundDates] = useState<
-  Record<number, Partial<Pick<RoundData, "startDate"|"startTime"|"deadlineDate"|"deadlineTime">>>
+  Record<number, Partial<Pick<RoundData, "startDate"|"startTime"|"deadlineDate"|"deadlineTime"|"judgingDeadlineDate"|"judgingDeadlineTime">>>
   >({});
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -136,7 +136,8 @@ export default function RegisterTourney() {
       [num]: {
         ...(prev[num] ?? {
           name: `Раунд ${num}`, description: "", startDate: "", startTime: "",
-          deadlineDate: "", deadlineTime: "", evalStartDate: "", evalStartTime: "",
+          deadlineDate: "", deadlineTime: "", judgingDeadlineDate: "", judgingDeadlineTime: "",
+          evalStartDate: "", evalStartTime: "",
           evalEndDate: "", evalEndTime: "", requirements: [], criteria: [], links: [], files: [],
         }),
         ...(patch.startDate    !== undefined ? { startDate:    patch.startDate }    : {}),
@@ -188,22 +189,32 @@ export default function RegisterTourney() {
         n,
         start: parseLocalDt(rd?.startDate ?? '', rd?.startTime ?? ''),
         end:   parseLocalDt(rd?.deadlineDate ?? '', rd?.deadlineTime ?? ''),
+        jd:    parseLocalDt(rd?.judgingDeadlineDate ?? '', rd?.judgingDeadlineTime ?? ''),
       };
-    }).filter(r => r.start || r.end);
+    }).filter(r => r.start || r.end || r.jd);
 
     for (const r of roundSlices) {
       if (r.start && r.end && r.start >= r.end)
-        errs.push(`Раунд ${r.n}: початок повинен бути раніше за дедлайн.`);
+        errs.push(`Раунд ${r.n}: початок повинен бути раніше за дедлайн здачі.`);
       if (ts && r.start && r.start < ts)
         errs.push(`Раунд ${r.n}: не може починатися раніше за старт турніру.`);
       if (te && r.end && r.end > te)
-        errs.push(`Раунд ${r.n}: дедлайн виходить за межі турніру.`);
+        errs.push(`Раунд ${r.n}: дедлайн здачі виходить за межі турніру.`);
+      if (r.jd) {
+        if (r.end && r.jd <= r.end)
+          errs.push(`Раунд ${r.n}: дедлайн оцінювання повинен бути пізніше за дедлайн здачі.`);
+        if (te && r.jd > te)
+          errs.push(`Раунд ${r.n}: дедлайн оцінювання виходить за межі турніру.`);
+      }
     }
     for (let i = 0; i < roundSlices.length - 1; i++) {
       const cur = roundSlices[i];
       const nxt = roundSlices[i + 1];
-      if (cur.end && nxt.start && cur.end > nxt.start)
-        errs.push(`Раунд ${nxt.n} починається до завершення раунду ${cur.n}.`);
+      const curEffectiveEnd = cur.jd ?? cur.end;
+      if (curEffectiveEnd && nxt.start && curEffectiveEnd > nxt.start) {
+        const boundary = cur.jd ? 'дедлайн оцінювання' : 'дедлайн здачі';
+        errs.push(`Раунд ${nxt.n} починається до завершення раунду ${cur.n} (${boundary}).`);
+      }
     }
     return errs;
   }, [regStartDate, regStartTime, regEndDate, regEndTime,
@@ -387,8 +398,9 @@ export default function RegisterTourney() {
                    description:  rd?.description?.trim()                 || null,
                    criteria:     rd?.criteria?.filter(Boolean).join('\n')|| null,
                    technologies: rd?.requirements?.filter(Boolean)       ?? [],
-                   start_at:     toTimestamp(rd?.startDate ?? '', rd?.startTime ?? '') ?? null,
-                   end_at:       toTimestamp(rd?.deadlineDate ?? '', rd?.deadlineTime ?? '') ?? null,
+                   start_at:         toTimestamp(rd?.startDate ?? '', rd?.startTime ?? '') ?? null,
+                   end_at:           toTimestamp(rd?.deadlineDate ?? '', rd?.deadlineTime ?? '') ?? null,
+                   judging_deadline: toTimestamp(rd?.judgingDeadlineDate ?? '', rd?.judgingDeadlineTime ?? '') ?? null,
                    // links — зберігаємо для зворотної сумісності
                    links:        linkAttachments,
                    // attachments — єдине поле що читає сторінка раунду
@@ -820,11 +832,13 @@ export default function RegisterTourney() {
           const n  = i + 1;
           const rd = roundsData[n];
           return {
-            number:       n,
-            startDate:    rd?.startDate    ?? "",
-            startTime:    rd?.startTime    ?? "",
-            deadlineDate: rd?.deadlineDate ?? "",
-            deadlineTime: rd?.deadlineTime ?? "",
+            number:              n,
+            startDate:           rd?.startDate           ?? "",
+            startTime:           rd?.startTime           ?? "",
+            deadlineDate:        rd?.deadlineDate        ?? "",
+            deadlineTime:        rd?.deadlineTime        ?? "",
+            judgingDeadlineDate: rd?.judgingDeadlineDate ?? "",
+            judgingDeadlineTime: rd?.judgingDeadlineTime ?? "",
           } satisfies RoundSlice;
         })}
         onRoundChange={handleRoundTimelineChange}

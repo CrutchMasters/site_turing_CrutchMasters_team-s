@@ -22,6 +22,9 @@ export interface RoundData {
     startTime: string;
     deadlineDate: string;
     deadlineTime: string;
+    /** Дедлайн оцінювання журі (необов'язково). Якщо задано — оцінювання закривається автоматично */
+    judgingDeadlineDate: string;
+    judgingDeadlineTime: string;
     requirements: string[];
     /** Критерії оцінювання з вагами — обов'язкові */
     criteria: Criterion[];
@@ -98,6 +101,7 @@ const defaultRound = (): RoundData => ({
     name: '', description: '',
     startDate: '', startTime: '',
     deadlineDate: '', deadlineTime: '',
+    judgingDeadlineDate: '', judgingDeadlineTime: '',
     requirements: [], criteria: [], links: [], files: [],
 });
 
@@ -458,12 +462,29 @@ export default function RoundSettingsPanel({ roundCount, selectedRound, onSelect
         </div>
         <div className="bg-(--bg) border border-(--brd) rounded-2xl p-4">
         <p className="text-[10px] font-black uppercase tracking-widest text-red-500 mb-3 flex items-center gap-1.5">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" /> {labels?.deadline ?? 'Дедлайн'}
+        <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" /> {labels?.deadline ?? 'Дедлайн здачі'}
         </p>
         <DateTimeField label={labels?.deadlineDate ?? 'Дата здачі'}
         dateVal={rd.deadlineDate} onDate={v => update(selectedRound, 'deadlineDate', v)}
         timeVal={rd.deadlineTime} onTime={v => update(selectedRound, 'deadlineTime', v)} />
         </div>
+        </div>
+
+        {/* 3б. Дедлайн оцінювання */}
+        <div className="bg-(--bg) border border-(--brd) rounded-2xl p-4">
+        <div className="flex items-center justify-between mb-3">
+        <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 flex items-center gap-1.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" /> Дедлайн оцінювання
+        </p>
+        <span className="text-[9px] font-bold text-(--t2) bg-(--bg) border border-(--brd) px-2 py-0.5 rounded-full">Опціонально</span>
+        </div>
+        <DateTimeField label="Дата закриття оцінювання"
+        dateVal={rd.judgingDeadlineDate} onDate={v => update(selectedRound, 'judgingDeadlineDate', v)}
+        timeVal={rd.judgingDeadlineTime} onTime={v => update(selectedRound, 'judgingDeadlineTime', v)} />
+        {rd.judgingDeadlineDate
+            ? <p className="mt-2 text-[10px] text-amber-500/80 font-medium">Оцінювання закриється автоматично після цього часу.</p>
+            : <p className="mt-2 text-[10px] text-(--t2)/60 font-medium">Якщо не задано — адмін закриває оцінювання вручну.</p>
+        }
         </div>
 
         {/* 4. Критерії оцінювання — обов'язкові, повна ширина */}
