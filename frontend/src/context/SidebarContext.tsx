@@ -3,11 +3,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 
 const MOBILE_BREAKPOINT = 1024;
+const CLOSE_ANIMATION_DURATION = 300; // ms — должно совпадать с transition в CSS
 
 type SidebarContextType = {
   collapsed: boolean;
   toggle: () => void;
   mobileOpen: boolean;
+  isClosing: boolean;
   openMobile: () => void;
   closeMobile: () => void;
 };
@@ -17,15 +19,15 @@ const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Отслеживаем предыдущий breakpoint чтобы реагировать на переходы
   const wasMobileRef = useRef<boolean | null>(null);
 
   useEffect(() => {
     const isMobileNow = window.innerWidth < MOBILE_BREAKPOINT;
     wasMobileRef.current = isMobileNow;
 
-    // collapsed загружаем из localStorage только на десктопе
     if (!isMobileNow) {
       const saved = localStorage.getItem("sidebar_collapsed");
       if (saved === "true") setCollapsed(true);
@@ -35,17 +37,17 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
       const isMobile = window.innerWidth < MOBILE_BREAKPOINT;
       const wasMobile = wasMobileRef.current;
 
-      if (wasMobile === isMobile) return; // breakpoint не изменился — ничего не делаем
+      if (wasMobile === isMobile) return;
 
       if (wasMobile && !isMobile) {
-        // мобильный → десктоп: закрыть drawer, восстановить collapsed
         setMobileOpen(false);
+        setIsClosing(false);
         const saved = localStorage.getItem("sidebar_collapsed");
         setCollapsed(saved === "true");
       } else if (!wasMobile && isMobile) {
-        // десктоп → мобильный: сбросить collapsed, закрыть drawer
         setCollapsed(false);
         setMobileOpen(false);
+        setIsClosing(false);
       }
 
       wasMobileRef.current = isMobile;
@@ -63,11 +65,30 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const openMobile  = useCallback(() => setMobileOpen(true), []);
-  const closeMobile = useCallback(() => setMobileOpen(false), []);
+  const openMobile = useCallback(() => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setIsClosing(false);
+    setMobileOpen(true);
+  }, []);
+
+  // Плавное закрытие: сначала ставим isClosing=true (запускает анимацию slide-out),
+  // затем через CLOSE_ANIMATION_DURATION ms реально убираем из DOM
+  const closeMobile = useCallback(() => {
+    if (!mobileOpen) return;
+    setIsClosing(true);
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => {
+      setMobileOpen(false);
+      setIsClosing(false);
+      closeTimerRef.current = null;
+    }, CLOSE_ANIMATION_DURATION);
+  }, [mobileOpen]);
 
   return (
-    <SidebarContext.Provider value={{ collapsed, toggle, mobileOpen, openMobile, closeMobile }}>
+    <SidebarContext.Provider value={{ collapsed, toggle, mobileOpen, isClosing, openMobile, closeMobile }}>
       {children}
     </SidebarContext.Provider>
   );

@@ -69,7 +69,7 @@ function fmtDate(iso?: string) {
 }
 
 export default function TournamentPage() {
-    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
+    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar, isClosing: isSidebarClosing } = useSidebar();
   const router = useRouter();
     const params = useParams();
     const { user, isLoading: authLoading } = useAuth();
@@ -272,7 +272,7 @@ export default function TournamentPage() {
         {isMobileSidebarOpen && (
             <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => closeMobileSidebar()} />
         )}
-        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform duration-300 ease-in-out ${isMobileSidebarOpen && !isSidebarClosing ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <Sidebar />
         </div>
 

@@ -16,6 +16,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useT } from "@/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
+import { useSidebar } from "@/context/SidebarContext";
 import MobileHeader from "@/components/MobileHeader";
 
 const API_URL =
@@ -812,7 +813,7 @@ function JuryProfilePanel({ juryTournaments, juryRounds, jurySubmissions, loadin
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar, isClosing: isSidebarClosing } = useSidebar();
   const { dark } = useTheme();
   const router = useRouter();
   const { user: currentUser, token, isLoading: authLoading } = useAuth();
@@ -1011,13 +1012,18 @@ export default function ProfilePage() {
       <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
 
-      {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />}
-      <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+      {(isMobileSidebarOpen || isSidebarClosing) && (
+        <div
+          className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300 ${isSidebarClosing ? "opacity-0" : "opacity-100"}`}
+          onClick={() => closeMobileSidebar()}
+        />
+      )}
+      <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen && !isSidebarClosing ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
       <Sidebar />
       </div>
 
       <main className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isPwModalOpen ? "blur-sm brightness-75" : ""}`}>
-      <MobileHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} title={t.profile.title} icon={<UserCircle size={18} className="text-blue-600" />} />
+      <MobileHeader onOpenSidebar={openMobile} title={t.profile.title} icon={<UserCircle size={18} className="text-blue-600" />} />
       <div className={`flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative z-10 ${allReady ? "page-ready" : ""}`}>
 
       <nav className="flex items-center gap-2 text-[10px] font-black mb-5 uppercase tracking-widest text-(--t2)">

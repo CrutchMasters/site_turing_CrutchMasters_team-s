@@ -412,7 +412,7 @@ function SubmissionCard({
 
 export default function JuryEvaluationPage() {
     const params = useParams();
-    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
+    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar, isClosing: isSidebarClosing } = useSidebar();
   const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
     const { dark } = useTheme();
@@ -766,7 +766,7 @@ export default function JuryEvaluationPage() {
                 {isMobileSidebarOpen && (
                     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => closeMobileSidebar()} />
                 )}
-                <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+                <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen && !isSidebarClosing ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
                 <Sidebar />
                 </div>
 
