@@ -201,6 +201,19 @@ export default function TournamentEditPage() {
     const [roundMeta, setRoundMeta] = useState<Record<number, { id: string; status: string }>>({});
     const [statusChanging, setStatusChanging] = useState(false);
 
+    const handleRemoveJury = useCallback(async (juryId: string): Promise<void> => {
+        const token = await getToken();
+        if (!token) throw new Error("Не вдалося отримати токен авторизації");
+        const res = await fetch(
+            `${API_URL}/api/tournaments/${id}/jury/${juryId}`,
+            { method: "DELETE", headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail ?? `Помилка видалення журі (${res.status})`);
+        }
+    }, [id]);
+
     const handleRoundTimelineChange = useCallback((num: number, patch: Partial<RoundSlice>) => {
         setRoundsData(prev => ({
             ...prev,
@@ -1067,6 +1080,11 @@ export default function TournamentEditPage() {
                 </div>
                 </section>
 
+                {/* JuryInvitePanel on xl+ — above save buttons */}
+                <div className="hidden xl:block cdIn" style={{ animationDelay: "160ms" }}>
+                <JuryInvitePanel tournamentId={id as string} tournamentName={name} onRemoveJury={handleRemoveJury} />
+                </div>
+
                 {/* Зведена плашка помилок */}
                 {Object.entries(fieldErrors).filter(([k]) => k !== "general").length > 0 && (
                     <div className="flex flex-col gap-2 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl">
@@ -1115,6 +1133,39 @@ export default function TournamentEditPage() {
                  *  - mobile: shown when tab === 'rounds'
                  * ════════════════════════════════════════ */}
                 <div className={`w-full xl:sticky xl:top-6 xl:flex-1 xl:min-w-0 flex flex-col gap-4 ${mobileTab !== 'rounds' ? 'hidden xl:flex' : ''}`}>
+
+                {/* ── Timeline (mobile/tablet only — on desktop it lives in left column) ── */}
+                <div className="xl:hidden bg-(--card) rounded-2xl shadow-sm border border-(--brd) overflow-hidden p-5">
+                <div className="overflow-x-auto -mx-1 px-1">
+                <div style={{ minWidth: 480 }}>
+                <TournamentTimeline
+                regFromDate={regFromDate} setRegFromDate={setRegFromDate}
+                regFromTime={regFromTime} setRegFromTime={setRegFromTime}
+                regToDate={regToDate}     setRegToDate={setRegToDate}
+                regToTime={regToTime}     setRegToTime={setRegToTime}
+                startDate={startDate}     setStartDate={setStartDate}
+                startTime={startTime}     setStartTime={setStartTime}
+                endDate={endDate}         setEndDate={setEndDate}
+                endTime={endTime}         setEndTime={setEndTime}
+                rounds={Array.from({ length: roundCount }, (_, i) => {
+                    const n  = i + 1;
+                    const rd = roundsData[n];
+                    return {
+                        number:              n,
+                        startDate:           rd?.startDate             ?? "",
+                        startTime:           rd?.startTime             ?? "",
+                        deadlineDate:        rd?.deadlineDate          ?? "",
+                        deadlineTime:        rd?.deadlineTime          ?? "",
+                        judgingDeadlineDate: rd?.judgingDeadlineDate   ?? "",
+                        judgingDeadlineTime: rd?.judgingDeadlineTime   ?? "",
+                    } satisfies RoundSlice;
+                })}
+                onRoundChange={handleRoundTimelineChange}
+                errors={timelineErrors}
+                />
+                </div>
+                </div>
+                </div>
 
                 {/* ── Round Status Control (admin only) ── */}
                 {roundMeta[selectedRoundTab] && (() => {
@@ -1232,18 +1283,11 @@ export default function TournamentEditPage() {
                  *  - mobile: shown when tab === 'jury'
                  * ════════════════════════════════════════ */}
                 <div className={`w-full xl:hidden flex flex-col gap-4 ${mobileTab !== 'jury' ? 'hidden' : ''}`}>
-                <JuryInvitePanel tournamentId={id as string} tournamentName={name} />
+                <JuryInvitePanel tournamentId={id as string} tournamentName={name} onRemoveJury={handleRemoveJury} />
                 </div>
 
             </div>
             {/* end two-column layout */}
-
-            {/* JuryInvitePanel on xl+ — lives outside the two-column flex to span full width */}
-            <div className="hidden xl:block mt-6">
-            <div className="cdIn" style={{ animationDelay: "160ms" }}>
-            <JuryInvitePanel tournamentId={id as string} tournamentName={name} />
-            </div>
-            </div>
 
             </form>
             </div>
