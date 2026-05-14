@@ -501,11 +501,138 @@ def update_tournament_statuses():
                 try:
                     supabase.table("tournaments").update({"status": new_status}).eq("id", t["id"]).execute()
                     print(f"[SCHEDULER] Турнір {t['id']}: {current} → {new_status}", flush=True)
+
+                    # Сповіщення про старт турніру (upcoming/registration → ongoing)
+                    if new_status == "ongoing":
+                        _notify_tournament_start(t["id"], t.get("name", "Турнір"))
+
                 except Exception as upd_err:
                     print(f"[SCHEDULER] Не вдалося оновити {t['id']} ({current} → {new_status}): {upd_err}", flush=True)
 
     except Exception as e:
         print(f"[SCHEDULER] Помилка оновлення статусів: {e}", flush=True)
+
+
+def _notify_tournament_start(tournament_id: str, tournament_name: str):
+    """Надсилає email усім учасникам команд турніру про його старт."""
+    if not supabase:
+        return
+    try:
+        teams_res = supabase.table("teams") \
+            .select("id, name, captain_id, members_ids") \
+            .eq("tournament_id", tournament_id) \
+            .execute()
+        teams = teams_res.data or []
+
+        notified = set()
+        title   = f"Турнір «{tournament_name}» розпочався!"
+        message = f"Турнір «{tournament_name}» офіційно стартував. Бажаємо вашій команді успіху!"
+
+        for team in teams:
+            all_members = list({team["captain_id"]} | set(team.get("members_ids") or []))
+            for uid in all_members:
+                if uid in notified:
+                    continue
+                notified.add(uid)
+                try:
+                    supabase.table("notifications").insert({
+                        "user_id": uid,
+                        "type":    "tournament_start",
+                        "title":   title,
+                        "message": message,
+                        "meta":    {"tournament_id": tournament_id, "tournament_name": tournament_name},
+                        "read":    False,
+                    }).execute()
+                    email = _get_user_email(uid)
+                    if email:
+                        send_notification_email(email, title, message, "tournament_start")
+                except Exception as e:
+                    print(f"[NOTIFY] Помилка старт-сповіщення для {uid}: {e}", flush=True)
+
+        print(f"[NOTIFY] Старт турніру {tournament_id}: сповіщено {len(notified)} учасників", flush=True)
+    except Exception as e:
+        print(f"[NOTIFY] _notify_tournament_start помилка: {e}", flush=True)
+
+
+def _notify_deadline_24h():
+    """Надсилає email учасникам команд, у яких через < 24 год дедлайн здачі раунду.
+    Відправляє лише одного разу (перевіряє notifications з type='deadline_24h')."""
+    if not supabase:
+        return
+    try:
+        now    = datetime.now(timezone.utc)
+        in_24h = datetime.fromtimestamp(now.timestamp() + 86400, tz=timezone.utc)
+
+        rounds_res = supabase.table("rounds") \
+            .select("id, name, number, end_at, tournament_id") \
+            .eq("status", "active") \
+            .execute()
+        rounds = rounds_res.data or []
+
+        for r in rounds:
+            end_at = _parse_dt(r.get("end_at"))
+            if not end_at:
+                continue
+            if not (now < end_at <= in_24h):
+                continue
+
+            # Отримуємо назву турніру
+            tour = fetch_one(supabase.table("tournaments").select("name").eq("id", r["tournament_id"]))
+            tour_name = tour["name"] if tour else "Турнір"
+            round_label = f"Раунд {r.get('number', r.get('name', ''))}"
+
+            teams_res = supabase.table("teams") \
+                .select("id, name, captain_id, members_ids") \
+                .eq("tournament_id", r["tournament_id"]) \
+                .execute()
+            teams = teams_res.data or []
+
+            title   = f"До дедлайну {round_label} залишилось менше 24 годин"
+            message = (
+                f"Нагадуємо: дедлайн здачі роботи в «{tour_name}» — {round_label} "
+                f"настане {end_at.strftime('%d.%m.%Y о %H:%M')} UTC. "
+                f"Не забудьте завантажити роботу вчасно!"
+            )
+
+            for team in teams:
+                all_members = list({team["captain_id"]} | set(team.get("members_ids") or []))
+                for uid in all_members:
+                    # Перевіряємо чи вже надсилали для цього раунду
+                    try:
+                        already = supabase.table("notifications") \
+                            .select("id") \
+                            .eq("user_id", uid) \
+                            .eq("type", "deadline_24h") \
+                            .execute()
+                        meta_check = [
+                            n for n in (already.data or [])
+                            if (n.get("meta") or {}).get("round_id") == r["id"]
+                        ]
+                        if meta_check:
+                            continue
+
+                        supabase.table("notifications").insert({
+                            "user_id": uid,
+                            "type":    "deadline_24h",
+                            "title":   title,
+                            "message": message,
+                            "meta":    {
+                                "tournament_id":   r["tournament_id"],
+                                "tournament_name": tour_name,
+                                "round_id":        r["id"],
+                            },
+                            "read": False,
+                        }).execute()
+
+                        email = _get_user_email(uid)
+                        if email:
+                            send_notification_email(email, title, message, "deadline_24h")
+                    except Exception as e:
+                        print(f"[NOTIFY] Помилка deadline_24h для {uid}: {e}", flush=True)
+
+        print(f"[NOTIFY] deadline_24h перевірку завершено", flush=True)
+    except Exception as e:
+        print(f"[NOTIFY] _notify_deadline_24h помилка: {e}", flush=True)
 
 
 def update_round_statuses():
@@ -561,8 +688,9 @@ def update_round_statuses():
 
 
 _scheduler = BackgroundScheduler(timezone="UTC")
-_scheduler.add_job(update_tournament_statuses, "interval", seconds=15, id="tournament_status_updater")
-_scheduler.add_job(update_round_statuses,      "interval", seconds=15, id="round_status_updater")
+_scheduler.add_job(update_tournament_statuses, "interval", seconds=15,  id="tournament_status_updater")
+_scheduler.add_job(update_round_statuses,      "interval", seconds=15,  id="round_status_updater")
+_scheduler.add_job(_notify_deadline_24h,       "interval", minutes=30,  id="deadline_24h_notifier")
 
 @app.on_event("startup")
 def start_scheduler():
@@ -698,23 +826,49 @@ def get_caller(token: str) -> dict:
 def send_notification_email(to_email: str, title: str, message: str, notif_type: str = "notification", accept_url: str = ""):
     """
     Відправляє email через Gmail SMTP.
-    Потребує GMAIL_USER і GMAIL_APP_PASSWORD у .env
+    Потребує GMAIL_USER і GMAIL_APP_PASSWORD у .env (App Password, не звичайний пароль!).
     """
     import smtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
     from datetime import datetime, timezone as _tz
 
-    print(f"[EMAIL DEBUG] send_notification_email викликано: to={to_email}, type={notif_type}", flush=True)
-
-    gmail_user     = os.getenv("GMAIL_USER", "")
-    gmail_password = os.getenv("GMAIL_APP_PASSWORD", "")
-
-    print(f"[EMAIL DEBUG] GMAIL_USER={gmail_user!r}, PASSWORD_SET={bool(gmail_password)}", flush=True)
+    gmail_user     = os.getenv("GMAIL_USER", "").strip()
+    gmail_password = os.getenv("GMAIL_APP_PASSWORD", "").strip()
 
     if not gmail_user or not gmail_password:
-        print(f"[EMAIL] GMAIL_USER або GMAIL_APP_PASSWORD не задано — лист не відправлено ({to_email})", flush=True)
+        print(
+            f"[EMAIL] ⚠️  GMAIL_USER або GMAIL_APP_PASSWORD не задано в env — "
+            f"лист НЕ відправлено ({to_email}). "
+            f"Задай ці змінні на Render: Settings → Environment.",
+            flush=True,
+        )
         return
+
+    # Читабельні назви типів для badge
+    _badge_labels: dict[str, str] = {
+        "team_invitation":         "Запрошення до команди",
+        "invitation_accepted":     "Запрошення прийнято",
+        "invitation_declined":     "Запрошення відхилено",
+        "kicked_from_team":        "Виключено з команди",
+        "tournament_registered":   "Реєстрація на турнір",
+        "tournament_unregistered": "Знято з турніру",
+        "tournament_start":        "Старт турніру",
+        "deadline_24h":            "Дедлайн через 24 год",
+        "evaluation_received":     "Нова оцінка",
+        "jury_invitation":         "Запрошення журі",
+        "jury_invitation_accepted":"Журі прийняв запрошення",
+        "jury_invitation_declined":"Журі відхилив запрошення",
+        "score_updated":           "Оцінку оновлено",
+        "notification":            "Сповіщення",
+    }
+    badge_label = _badge_labels.get(notif_type, notif_type.replace("_", " ").title())
+
+    # Текст та стиль кнопки залежно від типу
+    if "invitation" in notif_type and accept_url:
+        btn_text = "✓ Прийняти запрошення"
+    else:
+        btn_text = "Перейти на платформу"
 
     date_str = datetime.now(_tz.utc).strftime("%d.%m.%Y %H:%M")
 
@@ -722,21 +876,22 @@ def send_notification_email(to_email: str, title: str, message: str, notif_type:
 <html lang="uk">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #eef2f7; margin: 0; padding: 40px 20px; }}
+    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #eef2f7; margin: 0; padding: 40px 20px; }}
     .container {{ max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 24px rgba(37,99,235,0.10); border: 1px solid #dbeafe; }}
     .header {{ background: linear-gradient(135deg, #1d4ed8, #2563eb); padding: 32px 40px; }}
     .header h1 {{ color: #fff; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }}
     .header p {{ color: rgba(255,255,255,0.75); margin: 5px 0 0; font-size: 13px; }}
-    .body {{ padding: 36px 40px; }}
+    .body {{ padding: 36px 40px 28px; }}
     .badge {{ display: inline-block; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 20px; padding: 4px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 18px; }}
-    .title {{ color: #1e293b; font-size: 20px; font-weight: 700; margin: 0 0 12px; }}
+    .title {{ color: #1e293b; font-size: 20px; font-weight: 700; margin: 0 0 12px; line-height: 1.3; }}
     .message {{ color: #475569; font-size: 15px; line-height: 1.7; margin: 0; }}
     .divider {{ height: 1px; background: #e2e8f0; margin: 28px 0 0; }}
-    .footer {{ padding: 18px 40px 24px; background: #f8fafc; }}
-    .footer p {{ color: #94a3b8; font-size: 12px; margin: 0; }}
-    .btn-wrap {{ padding: 0 36px 28px; }}
-    .btn {{ display: inline-block; background: #1d4ed8; color: #ffffff !important; text-decoration: none; font-size: 14px; font-weight: 700; padding: 12px 28px; border-radius: 8px; }}
+    .btn-wrap {{ padding: 24px 40px 28px; }}
+    .btn {{ display: inline-block; background: #1d4ed8; color: #ffffff !important; text-decoration: none; font-size: 14px; font-weight: 700; padding: 13px 30px; border-radius: 8px; letter-spacing: 0.2px; }}
+    .footer {{ padding: 14px 40px 22px; background: #f8fafc; border-top: 1px solid #e2e8f0; }}
+    .footer p {{ color: #94a3b8; font-size: 12px; margin: 0; line-height: 1.5; }}
   </style>
 </head>
 <body>
@@ -746,14 +901,14 @@ def send_notification_email(to_email: str, title: str, message: str, notif_type:
       <p>Сповіщення платформи</p>
     </div>
     <div class="body">
-      <span class="badge">{notif_type}</span>
+      <span class="badge">{badge_label}</span>
       <p class="title">{title}</p>
       <p class="message">{message}</p>
       <div class="divider"></div>
     </div>
-    {f'<div class="btn-wrap"><a href="{accept_url}" class="btn">✓ Прийняти запрошення</a></div>' if accept_url else ''}
+    {f'<div class="btn-wrap"><a href="{accept_url}" class="btn">{btn_text}</a></div>' if accept_url else ''}
     <div class="footer">
-      <p>{date_str} &bull; Це автоматичне повідомлення, не відповідайте на нього.</p>
+      <p>{date_str} UTC &bull; Це автоматичне повідомлення, не відповідайте на нього.</p>
     </div>
   </div>
 </body>
@@ -770,19 +925,32 @@ def send_notification_email(to_email: str, title: str, message: str, notif_type:
             server.login(gmail_user, gmail_password)
             server.sendmail(gmail_user, to_email, msg.as_string())
 
-        print(f"[EMAIL] Відправлено на {to_email} | тема: {title}", flush=True)
+        print(f"[EMAIL] ✅ Відправлено → {to_email} | {notif_type} | {title}", flush=True)
+    except smtplib.SMTPAuthenticationError:
+        print(
+            f"[EMAIL] ❌ SMTPAuthenticationError — перевір GMAIL_APP_PASSWORD. "
+            f"Потрібен 'App Password' (myaccount.google.com/apppasswords), "
+            f"не звичайний пароль від Gmail. Також увімкни 2FA на акаунті.",
+            flush=True,
+        )
     except Exception as e:
-        print(f"[EMAIL] Помилка відправки на {to_email}: {e}", flush=True)
+        print(f"[EMAIL] ❌ Помилка відправки → {to_email}: {e}", flush=True)
 
 
 def _get_user_email(user_id: str) -> str | None:
-    """Отримує email користувача з таблиці account."""
+    """Отримує email користувача якщо email_notifications увімкнено."""
     if not supabase or not user_id:
         return None
     try:
-        res = supabase.table("account").select("email").eq("id", user_id).limit(1).execute()
+        res = supabase.table("account").select("email, email_notifications").eq("id", user_id).limit(1).execute()
         if res.data:
-            return res.data[0].get("email")
+            row = res.data[0]
+            enabled = row.get("email_notifications")
+            print(f"[EMAIL_NOTIF] user={user_id} email_notifications={enabled!r} type={type(enabled).__name__}", flush=True)
+            if enabled is False or enabled == False or str(enabled).lower() == "false":
+                print(f"[EMAIL_NOTIF] Пропускаємо — користувач вимкнув email", flush=True)
+                return None
+            return row.get("email")
     except Exception as e:
         print(f"[EMAIL] Не вдалося отримати email для {user_id}: {e}", flush=True)
     return None
@@ -791,6 +959,41 @@ def _get_user_email(user_id: str) -> str | None:
 # Залишаємо стару функцію для сумісності
 def send_invitation_email(to_email, to_username, team_name, captain_username, invitation_id):
     pass
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EMAIL NOTIFICATIONS SETTINGS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/users/me/email-notifications-status")
+async def get_email_notifications_status(authorization: str = Header(...)):
+    """Повертає поточний стан email-сповіщень користувача."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+    res = supabase.table("account").select("email_notifications").eq("id", caller["id"]).limit(1).execute()
+    enabled = (res.data or [{}])[0].get("email_notifications", True)
+    return {"email_notifications": enabled}
+
+
+@app.patch("/api/users/me/email-notifications")
+async def set_email_notifications(body: dict, authorization: str = Header(...)):
+    """Вмикає або вимикає email-розсилку для поточного користувача."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    enabled = body.get("enabled")
+    if not isinstance(enabled, bool):
+        raise HTTPException(status_code=400, detail="'enabled' must be a boolean")
+
+    supabase.table("account")         .update({"email_notifications": enabled})         .eq("id", caller["id"])         .execute()
+
+    print(f"[SETTINGS] {caller['username']} email_notifications={enabled}", flush=True)
+    return {"success": True, "email_notifications": enabled}
 
 
 def _create_invitation_token(invitation_id: str, inv_type: str) -> str:
@@ -1177,6 +1380,58 @@ async def update_team(team_id: str, payload: UpdateTeam, authorization: str = He
     return {"success": True, "team": result.data[0] if result.data else None}
 
 
+@app.post("/api/teams/{team_id}/kick")
+async def kick_member(team_id: str, body: dict, authorization: str = Header(...)):
+    """Капітан кікає учасника з команди. body: {"user_id": "..."}"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    team = fetch_one(
+        supabase.table("teams").select("id, name, captain_id, members_ids").eq("id", team_id)
+    )
+    if not team:
+        raise HTTPException(status_code=404, detail="Команду не знайдено")
+    if team["captain_id"] != caller["id"]:
+        raise HTTPException(status_code=403, detail="Тільки капітан може виключати учасників")
+
+    target_id = body.get("target_id") or body.get("user_id")
+    if not target_id:
+        raise HTTPException(status_code=400, detail="target_id обов'язковий")
+    if target_id == caller["id"]:
+        raise HTTPException(status_code=400, detail="Капітан не може кікнути сам себе")
+
+    members = team.get("members_ids") or []
+    if target_id not in members:
+        raise HTTPException(status_code=400, detail="Цей користувач не є членом команди")
+
+    members.remove(target_id)
+    supabase.table("teams").update({"members_ids": members}).eq("id", team_id).execute()
+
+    # Сповіщення викинутому учаснику
+    _notif_title   = f"Вас виключили з команди «{team['name']}»"
+    _notif_message = f"Капітан команди «{team['name']}» виключив вас зі складу."
+    try:
+        supabase.table("notifications").insert({
+            "user_id": target_id,
+            "type":    "kicked_from_team",
+            "title":   _notif_title,
+            "message": _notif_message,
+            "meta":    {"team_id": team_id, "team_name": team["name"]},
+            "read":    False,
+        }).execute()
+        _email = _get_user_email(target_id)
+        if _email:
+            send_notification_email(_email, _notif_title, _notif_message, "kicked_from_team")
+    except Exception as _e:
+        print(f"[NOTIFY] kick_member для {target_id}: {_e}", flush=True)
+
+    print(f"[TEAM] {caller['username']} кікнув {target_id} з команди {team_id}", flush=True)
+    return {"success": True, "members_ids": members}
+
+
 @app.delete("/api/teams/{team_id}")
 async def delete_team(team_id: str, authorization: str = Header(...)):
     if not supabase:
@@ -1224,7 +1479,7 @@ async def register_team_for_tournament(payload: RegisterTeamForTournament, autho
 
     team = fetch_one(
         supabase.table("teams")
-            .select("id, name, captain_id, tournament_id")
+            .select("id, name, captain_id, tournament_id, members_ids")
             .eq("id", payload.team_id)
     )
     if not team:
@@ -1266,6 +1521,31 @@ async def register_team_for_tournament(payload: RegisterTeamForTournament, autho
         raise HTTPException(status_code=500, detail="Не вдалося зареєструвати команду")
 
     print(f"[TOURNAMENT] Команда {team['name']} зареєстрована на турнір {tournament['name']}", flush=True)
+
+    # Сповіщення всіх членів команди про реєстрацію
+    _notif_title   = f"Команда «{team['name']}» зареєстрована на турнір"
+    _notif_message = (
+        f"Капітан команди «{team['name']}» зареєстрував вас на турнір «{tournament['name']}». "
+        f"Слідкуйте за оголошеннями та будьте готові!"
+    )
+    # Надсилаємо лише учасникам (не капітану — він сам реєстрував)
+    _all_members = list(set(team.get("members_ids") or []))
+    for _uid in _all_members:
+        try:
+            supabase.table("notifications").insert({
+                "user_id": _uid,
+                "type":    "tournament_registered",
+                "title":   _notif_title,
+                "message": _notif_message,
+                "meta":    {"tournament_id": payload.tournament_id, "team_id": payload.team_id},
+                "read":    False,
+            }).execute()
+            _email = _get_user_email(_uid)
+            if _email:
+                send_notification_email(_email, _notif_title, _notif_message, "tournament_registered")
+        except Exception as _e:
+            print(f"[NOTIFY] register_tournament для {_uid}: {_e}", flush=True)
+
     return {"success": True, "team": result.data[0]}
 
 
@@ -1289,7 +1569,7 @@ async def unregister_team_from_tournament(payload: RegisterTeamForTournament, au
 
     team = fetch_one(
         supabase.table("teams")
-            .select("id, name, captain_id, tournament_id")
+            .select("id, name, captain_id, tournament_id, members_ids")
             .eq("id", payload.team_id)
     )
     if not team:
@@ -1300,6 +1580,29 @@ async def unregister_team_from_tournament(payload: RegisterTeamForTournament, au
         raise HTTPException(status_code=400, detail="Команда не зареєстрована в цьому турнірі")
 
     supabase.table("teams").update({"tournament_id": None}).eq("id", payload.team_id).execute()
+
+    # Сповіщення всіх членів команди про знаття з турніру
+    _notif_title   = f"Команда «{team['name']}» знята з турніру"
+    _notif_message = (
+        f"Капітан команди «{team['name']}» скасував реєстрацію на турнір «{tournament['name']}»."
+    )
+    # Надсилаємо лише учасникам (не капітану — він сам знімав)
+    _all_members = list(set(team.get("members_ids") or []))
+    for _uid in _all_members:
+        try:
+            supabase.table("notifications").insert({
+                "user_id": _uid,
+                "type":    "tournament_unregistered",
+                "title":   _notif_title,
+                "message": _notif_message,
+                "meta":    {"tournament_id": payload.tournament_id, "team_id": payload.team_id},
+                "read":    False,
+            }).execute()
+            _email = _get_user_email(_uid)
+            if _email:
+                send_notification_email(_email, _notif_title, _notif_message, "tournament_unregistered")
+        except Exception as _e:
+            print(f"[NOTIFY] unregister_tournament для {_uid}: {_e}", flush=True)
 
     print(f"[TOURNAMENT] Команда {team['name']} знята з турніру {tournament['name']}", flush=True)
     return {"success": True}
@@ -1711,7 +2014,9 @@ async def send_invitation(payload: SendInvitation, authorization: str = Header(.
     _token = _create_invitation_token(invitation_id, "team_invitation")
     _api_url = os.getenv("API_URL", "http://localhost:8000")
     _accept_url = f"{_api_url}/api/invitations/accept-by-token?token={_token}" if _token else ""
-    send_notification_email(invitee["email"], _notif_title, _notif_message, "team_invitation", _accept_url)
+    _invitee_email = _get_user_email(payload.invitee_id)  # перевіряє email_notifications
+    if _invitee_email:
+        send_notification_email(_invitee_email, _notif_title, _notif_message, "team_invitation", _accept_url)
 
     print(f"[INVITE] {caller['username']} → {invitee['username']} для команды {team['name']}", flush=True)
     return {"success": True, "invitation_id": invitation_id}
@@ -1819,7 +2124,9 @@ async def send_jury_invitation(payload: SendJuryInvitation, authorization: str =
         _token = _create_invitation_token(invitation_id, "jury_invitation")
         _api_url = os.getenv("API_URL", "http://localhost:8000")
         _accept_url = f"{_api_url}/api/invitations/accept-by-token?token={_token}" if _token else ""
-        send_notification_email(_jury_email, _notif_title, _notif_message, "jury_invitation", _accept_url)
+        _jury_email_checked = _get_user_email(payload.jury_id)  # перевіряє email_notifications
+        if _jury_email_checked:
+            send_notification_email(_jury_email_checked, _notif_title, _notif_message, "jury_invitation", _accept_url)
 
     print(f"[JURY-INVITE] {caller['username']} → {jury_user['username']} для турніру {tournament['name']}", flush=True)
     return {"success": True, "invitation_id": invitation_id}
@@ -2767,6 +3074,49 @@ async def save_jury_evaluation(
         raise HTTPException(status_code=500, detail="Не вдалося зберегти оцінку")
 
     print(f"[EVAL] {caller['username']} зберіг оцінку для submission {payload.submission_id}", flush=True)
+
+    # Сповіщення команди про виставлену оцінку
+    try:
+        sub_info = fetch_one(
+            supabase.table("submissions").select("team_id").eq("id", payload.submission_id)
+        )
+        if sub_info:
+            team_info = fetch_one(
+                supabase.table("teams").select("id, name, captain_id, members_ids").eq("id", sub_info["team_id"])
+            )
+            if team_info:
+                tour_info = fetch_one(
+                    supabase.table("tournaments").select("name").eq("id", round_["tournament_id"])
+                )
+                tour_name = tour_info["name"] if tour_info else "Турнір"
+                _notif_title   = f"Вашу роботу оцінено"
+                _notif_message = (
+                    f"Журі виставило оцінку {payload.total_score} для роботи вашої команди "
+                    f"«{team_info['name']}» в турнірі «{tour_name}»."
+                )
+                _all_members = list({team_info["captain_id"]} | set(team_info.get("members_ids") or []))
+                for _uid in _all_members:
+                    try:
+                        supabase.table("notifications").insert({
+                            "user_id": _uid,
+                            "type":    "evaluation_received",
+                            "title":   _notif_title,
+                            "message": _notif_message,
+                            "meta":    {
+                                "submission_id": payload.submission_id,
+                                "round_id":      round_id,
+                                "total_score":   payload.total_score,
+                            },
+                            "read": False,
+                        }).execute()
+                        _email = _get_user_email(_uid)
+                        if _email:
+                            send_notification_email(_email, _notif_title, _notif_message, "evaluation_received")
+                    except Exception as _e:
+                        print(f"[NOTIFY] evaluation_received для {_uid}: {_e}", flush=True)
+    except Exception as _e:
+        print(f"[NOTIFY] evaluation notification помилка: {_e}", flush=True)
+
     return {"success": True, "evaluation": result.data[0]}
 
 

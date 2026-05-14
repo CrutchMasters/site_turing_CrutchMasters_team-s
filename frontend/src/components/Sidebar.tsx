@@ -1,13 +1,12 @@
 //frontend/scr/components/sidebar.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { LayoutDashboard, UserCircle, Settings, LogOut, Search, ChevronDown, Menu, Users, Bell, Trophy } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useLanguage, LOCALES } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
-import { useSidebar } from "@/context/SidebarContext";
 
 const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -32,10 +31,15 @@ function parseSidebarMeta(raw: string | Record<string, any> | null): Record<stri
 
 interface SidebarProps {}
 
+function getInitialCollapsed(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem("sidebar_collapsed") === "true";
+}
+
 export default function Sidebar({}: SidebarProps) {
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
-  const { collapsed, toggle: toggleCollapsedCtx, closeMobile, mobileOpen } = useSidebar();
+  const [collapsed, setCollapsed] = useState(getInitialCollapsed);
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
@@ -47,34 +51,54 @@ export default function Sidebar({}: SidebarProps) {
   const pathname = usePathname();
   const { dark, toggle } = useTheme();
   const { locale, setLocale, t } = useLanguage();
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
+  const [emailNotif, setEmailNotif]             = useState<boolean>(true);
+  const [emailNotifSaving, setEmailNotifSaving] = useState(false);
 
-  const toggleCollapse = useCallback(() => {
-    if (window.innerWidth < 1024) {
-      // На мобильном — закрываем drawer
-      closeMobile();
-    } else {
-      // На десктопе — сворачиваем/разворачиваем
-      toggleCollapsedCtx();
-      if (!collapsed) {
+  const toggleCollapse = () => {
+    setCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem("sidebar_collapsed", String(next));
+      if (next) {
         setIsSettingsPanelOpen(false);
         setIsNotificationsPanelOpen(false);
       }
-    }
-  }, [collapsed, closeMobile, toggleCollapsedCtx]);
-
-  const go = (path: string) => {
-    if (typeof window !== "undefined" && window.innerWidth < 1024 && mobileOpen) {
-      closeMobile();
-      setTimeout(() => router.push(path), 80);
-    } else {
-      router.push(path);
-    }
+      return next;
+    });
   };
+
+  const go = (path: string) => router.push(path);
   const avatarLetter = user?.username?.charAt(0).toUpperCase() ?? "?";
   const avatarUrl = user?.avatar_url;
 
 
+
+  // Load email_notifications setting
+  useEffect(() => {
+    if (!user) return;
+    const t = (typeof window !== "undefined" && localStorage.getItem("access_token")) || token || "";
+    fetch(`${API_URL}/api/users/me/email-notifications-status`, {
+      headers: { Authorization: `Bearer ${t}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setEmailNotif(d.email_notifications !== false); })
+      .catch(() => {});
+  }, [user]);
+
+  const toggleEmailNotif = async (val: boolean) => {
+    setEmailNotifSaving(true);
+    try {
+      const t = (typeof window !== "undefined" && localStorage.getItem("access_token")) || token || "";
+      await fetch(`${API_URL}/api/users/me/email-notifications`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
+        body: JSON.stringify({ enabled: val }),
+      });
+      setEmailNotif(val);
+    } finally {
+      setEmailNotifSaving(false);
+    }
+  };
 
   // Fetch notifications when panel opens, then mark all as read
   useEffect(() => {
@@ -132,19 +156,13 @@ export default function Sidebar({}: SidebarProps) {
   };
 
   const handleNotificationsClick = () => {
-    if (collapsed) {
-      // Разворачиваем сайдбар, затем открываем панель
-      toggleCollapsedCtx();
-      setIsNotificationsPanelOpen(true);
-      setIsSettingsPanelOpen(false);
-      if (unreadCount > 0) markAllNotificationsRead();
-      return;
-    }
-    const opening = !isNotificationsPanelOpen;
-    setIsNotificationsPanelOpen(opening);
-    if (isSettingsPanelOpen) setIsSettingsPanelOpen(false);
-    if (opening && unreadCount > 0) {
-      markAllNotificationsRead();
+    if (!collapsed) {
+      const opening = !isNotificationsPanelOpen;
+      setIsNotificationsPanelOpen(opening);
+      if (isSettingsPanelOpen) setIsSettingsPanelOpen(false);
+      if (opening && unreadCount > 0) {
+        markAllNotificationsRead();
+      }
     }
   };
 
@@ -184,7 +202,7 @@ export default function Sidebar({}: SidebarProps) {
       const date = new Date(iso);
       const now = new Date();
       const diff = Math.floor((now.getTime() - date.getTime()) / 1000);
-      const localeMap: Record<string, string> = { ua: "uk-UA", en: "en-US" };
+      const localeMap: Record<string, string> = { ua: "uk-UA", ru: "ru-RU", en: "en-US" };
       const loc = localeMap[locale] ?? "uk-UA";
       if (diff < 60) return locale === "en" ? `${diff}s ago` : `${diff}с тому`;
       if (diff < 3600) return locale === "en" ? `${Math.floor(diff/60)}m ago` : `${Math.floor(diff/60)}хв тому`;
@@ -407,16 +425,7 @@ export default function Sidebar({}: SidebarProps) {
           label={t.sidebar.settings}
           active={isSettingsPanelOpen}
           collapsed={collapsed}
-          onClick={() => {
-            if (collapsed) {
-              toggleCollapsedCtx();
-              setIsSettingsPanelOpen(true);
-              setIsNotificationsPanelOpen(false);
-            } else {
-              setIsSettingsPanelOpen(p => !p);
-              setIsNotificationsPanelOpen(false);
-            }
-          }}
+          onClick={() => { if (!collapsed) { setIsSettingsPanelOpen(p => !p); setIsNotificationsPanelOpen(false); } }}
           suffix={!collapsed ? <ChevronDown size={13} className={`transition-transform flex-shrink-0 ${isSettingsPanelOpen ? "rotate-180" : ""}`} /> : undefined}
           />
 
@@ -441,6 +450,22 @@ export default function Sidebar({}: SidebarProps) {
               </button>
             ))}
             </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">Email</span>
+            <button
+              onClick={() => toggleEmailNotif(!emailNotif)}
+              disabled={emailNotifSaving}
+              className="flex items-center justify-between px-3 py-2 rounded-xl bg-(--card) hover:bg-(--brd) transition border border-(--brd)"
+            >
+              <span className="text-xs font-black uppercase tracking-wide text-(--t1)">
+                {emailNotif ? "✉️ Сповіщення вкл." : "✉️ Сповіщення викл."}
+              </span>
+              <div className={`w-10 h-5 rounded-full transition-all relative flex-shrink-0 ${emailNotif ? "bg-blue-600" : "bg-gray-400"} ${emailNotifSaving ? "opacity-50" : ""}`}>
+                <div className={`absolute top-0 left-0 w-5 h-5 bg-white rounded-full shadow transition-all ${emailNotif ? "translate-x-5" : "translate-x-0"}`} />
+              </div>
+            </button>
             </div>
 
             </div>
