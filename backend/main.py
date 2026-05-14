@@ -230,17 +230,28 @@ def _recalc_round_status(round_id: str) -> str | None:
     try:
         r = fetch_one(
             supabase.table("rounds")
-                .select("id, status, start_at, end_at")
+                .select("id, status, start_at, end_at, judging_deadline")
                 .eq("id", round_id)
         )
         if not r:
             return None
         current  = r.get("status") or "pending"
-        if current in ("judging", "judged"):
-            return current  # не чіпаємо ручні статуси
         now      = datetime.now(timezone.utc)
         start_at = _parse_dt(r.get("start_at"))
         end_at   = _parse_dt(r.get("end_at"))
+        judging_deadline = _parse_dt(r.get("judging_deadline"))
+
+        if current == "judged":
+            return current  # фінальний стан
+
+        # Автозакриття оцінювання
+        if current == "judging" and judging_deadline and now >= judging_deadline:
+            supabase.table("rounds").update({"status": "judged"}).eq("id", round_id).execute()
+            print(f"[RECALC] Раунд {round_id}: judging → judged (judging_deadline минув)", flush=True)
+            return "judged"
+
+        if current == "judging":
+            return current  # ручний статус, не чіпаємо
         if start_at and now >= start_at and (not end_at or now < end_at):
             new_status = "active"
         elif end_at and now >= end_at:
@@ -343,24 +354,39 @@ def _validate_tournament_timeline(
                 key=lambda r: r.get("number", 0)
             )
             for r in sorted_rounds:
-                rs = p(r.get("start_at"))
-                re = p(r.get("end_at"))
-                n  = r.get("number", "?")
+                rs  = p(r.get("start_at"))
+                re  = p(r.get("end_at"))
+                n   = r.get("number", "?")
                 if rs and re and rs >= re:
-                    return f"Раунд {n}: початок повинен бути раніше за дедлайн."
+                    return f"Раунд {n}: початок повинен бути раніше за дедлайн здачі."
                 if ts and rs and rs < ts:
                     return f"Раунд {n}: початок раунду не може бути раніше за старт турніру."
                 if te and re and re > te:
-                    return f"Раунд {n}: дедлайн раунду не може виходити за межі турніру."
+                    return f"Раунд {n}: дедлайн здачі не може виходити за межі турніру."
+            for r in sorted_rounds:
+                rs  = p(r.get("start_at"))
+                re  = p(r.get("end_at"))
+                rjd = p(r.get("judging_deadline"))
+                n   = r.get("number", "?")
+                if rjd:
+                    if re and rjd <= re:
+                        return f"Раунд {n}: дедлайн оцінювання повинен бути пізніше за дедлайн здачі робіт."
+                    if te and rjd > te:
+                        return f"Раунд {n}: дедлайн оцінювання не може виходити за межі турніру."
+
             for i in range(len(sorted_rounds) - 1):
                 cur       = sorted_rounds[i]
                 nxt       = sorted_rounds[i + 1]
                 cur_end   = p(cur.get("end_at"))
+                cur_jd    = p(cur.get("judging_deadline"))
                 nxt_start = p(nxt.get("start_at"))
-                if cur_end and nxt_start and cur_end > nxt_start:
+                # Наступний раунд не може починатися раніше ніж закінчиться оцінювання поточного
+                effective_cur_end = cur_jd if cur_jd else cur_end
+                if effective_cur_end and nxt_start and effective_cur_end > nxt_start:
+                    boundary = "дедлайн оцінювання" if cur_jd else "дедлайн здачі"
                     return (
                         f"Раунд {nxt.get('number','?')} починається до завершення "
-                        f"раунду {cur.get('number','?')}. Раунди не можуть перекриватися."
+                        f"раунду {cur.get('number','?')} ({boundary}). Раунди не можуть перекриватися."
                     )
         except Exception as e:
             print(f"[TIMELINE VALIDATION] Помилка: {e}", flush=True)
@@ -489,7 +515,7 @@ def update_round_statuses():
         now = datetime.now(timezone.utc)
 
         res = supabase.table("rounds").select(
-            "id, status, start_at, end_at"
+            "id, status, start_at, end_at, judging_deadline"
         ).execute()
         rounds = res.data or []
 
@@ -497,10 +523,23 @@ def update_round_statuses():
             current  = r.get("status") or "pending"
             start_at = _parse_dt(r.get("start_at"))
             end_at   = _parse_dt(r.get("end_at"))
+            judging_deadline = _parse_dt(r.get("judging_deadline"))
 
-            # НЕ пропускаємо active — адмін міг змінити дати.
-            # Єдиний виняток — статуси що встановлюються вручну: judging, judged.
-            if current in ("judging", "judged"):
+            # judged — фінальний стан, не чіпаємо
+            if current == "judged":
+                continue
+
+            # Автозакриття оцінювання: judging → judged якщо judging_deadline минув
+            if current == "judging" and judging_deadline and now >= judging_deadline:
+                try:
+                    supabase.table("rounds").update({"status": "judged"}).eq("id", r["id"]).execute()
+                    print(f"[SCHEDULER] Раунд {r['id']}: judging → judged (judging_deadline минув)", flush=True)
+                except Exception as upd_err:
+                    print(f"[SCHEDULER] Не вдалося закрити оцінювання раунду {r['id']}: {upd_err}", flush=True)
+                continue
+
+            # judging — ручний статус, не перезаписуємо (якщо deadline ще не минув)
+            if current == "judging":
                 continue
 
             if start_at and now >= start_at and (not end_at or now < end_at):
@@ -1513,15 +1552,16 @@ async def create_tournament_rounds(
         if not num:
             continue
         update_data = {
-            "name":          r.get("name"),
-            "description":   r.get("description"),
-            "criteria":      r.get("criteria"),
-            "technologies":  r.get("technologies"),
-            "start_at":      r.get("start_at"),
-            "end_at":        r.get("end_at"),
-            "links":         r.get("links"),
-            "attachments":   r.get("attachments"),
-            "template_path": r.get("template_path"),
+            "name":              r.get("name"),
+            "description":       r.get("description"),
+            "criteria":          r.get("criteria"),
+            "technologies":      r.get("technologies"),
+            "start_at":          r.get("start_at"),
+            "end_at":            r.get("end_at"),
+            "judging_deadline":  r.get("judging_deadline"),
+            "links":             r.get("links"),
+            "attachments":       r.get("attachments"),
+            "template_path":     r.get("template_path"),
         }
         incoming_status = r.get("status", "pending")
         if incoming_status and incoming_status != "pending":

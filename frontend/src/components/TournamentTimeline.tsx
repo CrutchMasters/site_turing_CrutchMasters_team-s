@@ -44,11 +44,13 @@ function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min
 // ─── types ───────────────────────────────────────────────────────────────────
 
 export interface RoundSlice {
-    number:       number;
-    startDate:    string;
-    startTime:    string;
-    deadlineDate: string;
-    deadlineTime: string;
+    number:              number;
+    startDate:           string;
+    startTime:           string;
+    deadlineDate:        string;
+    deadlineTime:        string;
+    judgingDeadlineDate?: string;
+    judgingDeadlineTime?: string;
 }
 
 export interface TimelineProps {
@@ -119,13 +121,16 @@ export default function TournamentTimeline({
         num:   r.number,
         start: parseLocal(r.startDate,    r.startTime).getTime(),
         end:   parseLocal(r.deadlineDate, r.deadlineTime).getTime(),
+        jd:    r.judgingDeadlineDate
+            ? parseLocal(r.judgingDeadlineDate, r.judgingDeadlineTime ?? "").getTime()
+            : 0,
     })), [rounds]);
 
     // ── compute view window ─────────────────────────────────────────────────
 
     const allTimes = [
         regStart, regEnd, tourStart, tourEnd,
-        ...roundMs.flatMap(r => [r.start, r.end]),
+        ...roundMs.flatMap(r => [r.start, r.end, r.jd]),
     ].filter(t => t > 0);
 
     const hasData = allTimes.length >= 2;
@@ -281,6 +286,7 @@ export default function TournamentTimeline({
         label: string;
         start: number;
         end:   number;
+        jd:    number; // judging deadline (0 = не задано)
         color: typeof REG_COLOR;
         valid: boolean;
     };
@@ -288,13 +294,13 @@ export default function TournamentTimeline({
     const rows: RowDef[] = [
         {
             id: "reg", label: "Реєстрація",
-            start: regStart, end: regEnd,
+            start: regStart, end: regEnd, jd: 0,
             color: REG_COLOR,
             valid: regStart > 0 && regEnd > regStart,
         },
         {
             id: "tour", label: "Турнір",
-            start: tourStart, end: tourEnd,
+            start: tourStart, end: tourEnd, jd: 0,
             color: TOUR_COLOR,
             valid: tourStart > 0 && tourEnd > tourStart,
         },
@@ -303,6 +309,7 @@ export default function TournamentTimeline({
             label: `Раунд ${r.num}`,
             start: r.start,
             end:   r.end,
+            jd:    r.jd,
             color: SEGMENT_COLORS[i % SEGMENT_COLORS.length],
             valid: r.start > 0 && r.end > r.start,
         })),
@@ -393,6 +400,15 @@ export default function TournamentTimeline({
                                 const endPct   = toPct(row.end);
                                 const widthPct = Math.max(endPct - startPct, 0.5);
 
+                                // judging deadline hatch bar (тільки для раундів, якщо jd задано)
+                                const hasJd = row.jd > 0 && row.end > 0 && row.jd > row.end;
+                                const jdStartPct = hasJd ? toPct(row.end)  : 0;
+                                const jdEndPct   = hasJd ? toPct(row.jd)   : 0;
+                                const jdWidthPct = hasJd ? Math.max(jdEndPct - jdStartPct, 0.3) : 0;
+
+                                // Унікальний patternId для SVG штрихування
+                                const patternId = `hatch-${row.id}`;
+
                                 return (
                                     <div key={row.id}
                                          style={{ height: ROW_H }}
@@ -439,6 +455,47 @@ export default function TournamentTimeline({
                                             // placeholder bar for missing dates
                                             <div className="w-full h-[calc(100%-6px)] rounded-xl border border-dashed border-(--brd)/50 opacity-30" />
                                         )}
+
+                                        {/* ── Judging deadline hatch bar ── */}
+                                        {hasJd && (
+                                            <div
+                                                className={`absolute rounded-r-xl border ${row.color.border} overflow-hidden`}
+                                                style={{
+                                                    left:     `${jdStartPct}%`,
+                                                    width:    `${jdWidthPct}%`,
+                                                    height:   ROW_H - 6,
+                                                    minWidth: 10,
+                                                    opacity:  0.75,
+                                                }}
+                                                title="Оцінювання журі"
+                                            >
+                                                {/* SVG hatching */}
+                                                <svg
+                                                    className="absolute inset-0 w-full h-full"
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    style={{ borderRadius: "inherit" }}
+                                                >
+                                                    <defs>
+                                                        <pattern
+                                                            id={patternId}
+                                                            patternUnits="userSpaceOnUse"
+                                                            width="8" height="8"
+                                                            patternTransform="rotate(45)"
+                                                        >
+                                                            <rect width="8" height="8" fill="transparent" />
+                                                            <line x1="0" y1="0" x2="0" y2="8"
+                                                                stroke="currentColor" strokeWidth="2.5"
+                                                                className={row.color.text}
+                                                                style={{ opacity: 0.35 }}
+                                                            />
+                                                        </pattern>
+                                                    </defs>
+                                                    <rect width="100%" height="100%" fill={`url(#${patternId})`} />
+                                                </svg>
+                                                {/* тонка ліва межа — роздільник між раундом і оцінюванням */}
+                                                <div className={`absolute left-0 top-1 bottom-1 w-[2px] ${row.color.handle} opacity-60`} />
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -475,6 +532,13 @@ export default function TournamentTimeline({
                         <span>{fmtLabel(new Date(row.start))}</span>
                         <span className="text-(--t2)/30">→</span>
                         <span>{fmtLabel(new Date(row.end))}</span>
+                        {row.jd > 0 && (
+                            <>
+                                <span className="text-(--t2)/30 mx-1">·</span>
+                                <span className={`text-[9px] uppercase tracking-wider ${row.color.text} opacity-70`}>оцінювання до</span>
+                                <span>{fmtLabel(new Date(row.jd))}</span>
+                            </>
+                        )}
                     </div>
                 );
             })()}
