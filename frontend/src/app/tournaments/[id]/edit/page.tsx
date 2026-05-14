@@ -53,11 +53,7 @@ interface RoundRow {
 
 import { isoToLocalDate as toDateStr, isoToLocalTime as toTimeStr, localToIso as toIso } from "@/lib/datetime";
 
-async function getToken(): Promise<string> {
-    const stored = typeof window !== "undefined" ? localStorage.getItem("access_token") ?? "" : "";
-    await authedSupabase(stored || null);
-    return typeof window !== "undefined" ? (localStorage.getItem("access_token") ?? "") : "";
-}
+// getToken тепер не використовується — токен береться з useAuth() → authToken
 
 const inp = "w-full px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) text-(--t1) text-sm font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 focus:bg-(--card) outline-none transition-all";
 const label10 = "text-[10px] font-black uppercase tracking-widest text-(--t2)";
@@ -152,7 +148,7 @@ export default function TournamentEditPage() {
     const params = useParams();
     const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
     const router = useRouter();
-    const { user, isLoading: authLoading } = useAuth();
+    const { user, token: authToken, isLoading: authLoading } = useAuth();
     const { t } = useT();
     const { dark } = useTheme();
     const id = params?.id as string;
@@ -202,7 +198,7 @@ export default function TournamentEditPage() {
     const [statusChanging, setStatusChanging] = useState(false);
 
     const handleRemoveJury = useCallback(async (juryId: string): Promise<void> => {
-        const token = await getToken();
+        const token = authToken;
         if (!token) throw new Error("Не вдалося отримати токен авторизації");
         const res = await fetch(
             `${API_URL}/api/tournaments/${id}/jury/${juryId}`,
@@ -212,7 +208,7 @@ export default function TournamentEditPage() {
             const err = await res.json().catch(() => ({}));
             throw new Error(err.detail ?? `Помилка видалення журі (${res.status})`);
         }
-    }, [id]);
+    }, [id, authToken]);
 
     const handleRoundTimelineChange = useCallback((num: number, patch: Partial<RoundSlice>) => {
         setRoundsData(prev => ({
@@ -414,7 +410,7 @@ export default function TournamentEditPage() {
     useEffect(() => { fetchTourney(); }, [fetchTourney]);
 
     const uploadFile = async (file: File, roundNumber: number): Promise<string> => {
-        const token = await getToken();
+        const token = authToken ?? "";
         if (!token) throw new Error("Не вдалося отримати токен авторизації. Спробуйте увійти знову.");
         const form = new FormData();
         form.append("round_number", String(roundNumber));
@@ -433,7 +429,7 @@ export default function TournamentEditPage() {
     };
 
     const apiBannerUpload = async (blob: Blob): Promise<string> => {
-        const token = await getToken();
+        const token = authToken ?? "";
         if (!token) throw new Error("Не вдалося отримати токен авторизації");
         const form = new FormData();
         form.append("file", new File([blob], "banner.webp", { type: "image/webp" }));
@@ -453,7 +449,7 @@ export default function TournamentEditPage() {
     const handleBannerDelete = async () => {
         if (!id) return;
         try {
-            const token = await getToken();
+            const token = authToken ?? "";
             if (!token) throw new Error("Не вдалося отримати токен авторизації");
             const res = await fetch(`${API_URL}/api/tournaments/${id}/banner`, {
                 method: "DELETE",
@@ -548,7 +544,7 @@ export default function TournamentEditPage() {
 
         setSaving(true);
         try {
-            const token = await getToken();
+            const token = authToken ?? "";
             if (!token) throw new Error("Не вдалося отримати токен авторизації. Спробуйте увійти знову.");
 
             const payload: Record<string, any> = {
@@ -671,7 +667,7 @@ export default function TournamentEditPage() {
         if (!id) return;
         setDeleting(true);
         try {
-            const token = await getToken();
+            const token = authToken ?? "";
             if (!token) throw new Error("Не вдалося отримати токен авторизації");
             const res = await fetch(`${API_URL}/api/tournaments/${id}`, {
                 method: "DELETE",
@@ -1193,7 +1189,7 @@ export default function TournamentEditPage() {
                         if (statusChanging) return;
                         setStatusChanging(true);
                         try {
-                            const token = typeof window !== "undefined" ? localStorage.getItem("access_token") ?? "" : "";
+                            const token = authToken ?? "";
                             const res = await fetch(`${API_URL}/api/rounds/${meta.id}/status`, {
                                 method: "PATCH",
                                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },

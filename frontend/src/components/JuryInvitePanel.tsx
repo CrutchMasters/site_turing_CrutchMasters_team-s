@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Star, Search, Check, X, Loader, UserPlus, Shield, Trash2 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -32,6 +33,7 @@ interface Props {
 }
 
 export default function JuryInvitePanel({ tournamentId, tournamentName, onRemoveJury }: Props) {
+    const { token: authToken } = useAuth();
     const [candidates, setCandidates]   = useState<JuryUser[]>([]);
     const [activeJury, setActiveJury]   = useState<ActiveJury[]>([]);
     const [loading, setLoading]         = useState(false);
@@ -50,9 +52,9 @@ export default function JuryInvitePanel({ tournamentId, tournamentName, onRemove
     };
 
     const authHeader = useCallback((): Record<string, string> => {
-        const t = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+        const t = authToken ?? "";
         return { "Content-Type": "application/json", Authorization: `Bearer ${t}` };
-    }, []);
+    }, [authToken]);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
