@@ -767,7 +767,7 @@ export default function DashboardPage() {
   const [myRoundIds,           setMyRoundIds]           = useState<string[]>([]);
 
   const revealRefs = useRef<(HTMLElement | null)[]>([]);
-  const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
+  const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar, isClosing: isSidebarClosing } = useSidebar();
   const router = useRouter();
   const { dark }        = useTheme();
   const { user, token, isLoading } = useAuth();
@@ -1082,11 +1082,14 @@ export default function DashboardPage() {
       <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] h-[min(800px,90vw)] object-contain blur-sm ${dark ? "invert" : ""}`} />
       </div>
 
-      {isMobileSidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => closeMobileSidebar()} />
+      {(isMobileSidebarOpen || isSidebarClosing) && (
+        <div
+          className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300 ${isSidebarClosing ? "opacity-0" : "opacity-100"}`}
+          onClick={() => closeMobileSidebar()}
+        />
       )}
 
-      <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+      <div className={`fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out ${isMobileSidebarOpen && !isSidebarClosing ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
       <Sidebar />
       </div>
 
@@ -1173,6 +1176,31 @@ export default function DashboardPage() {
       badge={announcements.length > 0 ? announcements.length : null}
       accentColor="amber"
       >
+      {/* Filter tabs: Всі події / Мої події */}
+      <div className="flex items-center rounded-xl border border-(--brd) overflow-hidden bg-(--bg)">
+        <button
+          onClick={() => setAnnouncementsFilter("all")}
+          className={`flex items-center justify-center gap-1.5 px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-all ${
+            announcementsFilter === "all"
+            ? "bg-blue-600 text-white shadow-inner"
+            : "text-(--t2) hover:text-(--t1)"
+          }`}
+        >
+          <Globe size={10} />
+          {locale === "ua" ? "Всі події" : locale === "en" ? "All events" : "Все события"}
+        </button>
+        <button
+          onClick={() => setAnnouncementsFilter("mine")}
+          className={`flex items-center justify-center gap-1.5 px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-all ${
+            announcementsFilter === "mine"
+            ? "bg-blue-600 text-white shadow-inner"
+            : "text-(--t2) hover:text-(--t1)"
+          }`}
+        >
+          <UserIcon size={10} />
+          {locale === "ua" ? "Мої події" : locale === "en" ? "My events" : "Мои события"}
+        </button>
+      </div>
       {isAdmin && (
         <button
         onClick={() => { setEditAnnouncement(undefined); setModalOpen(true); }}
@@ -1326,8 +1354,8 @@ export default function DashboardPage() {
         <table className="w-full text-left border-collapse min-w-[500px]">
         <thead>
         <tr className="bg-(--bg)/50 border-b border-(--brd)">
-        {[t.mainPage.colTournament, t.mainPage.colStatus, t.mainPage.colStart, t.mainPage.colTeams, t.mainPage.colActions].map(h => (
-          <th key={h} className="px-4 sm:px-6 py-4 text-[10px] font-black uppercase tracking-widest text-(--t2) last:text-right">{h}</th>
+        {[t.mainPage.colTournament, t.mainPage.colStatus, t.mainPage.colStart, t.mainPage.colTeams, t.mainPage.colActions].map((h, i) => (
+          <th key={i} className="px-4 sm:px-6 py-4 text-[10px] font-black uppercase tracking-widest text-(--t2) last:text-right">{h}</th>
         ))}
         </tr>
         </thead>

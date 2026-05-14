@@ -35,7 +35,7 @@ interface SidebarProps {}
 export default function Sidebar({}: SidebarProps) {
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
-  const { collapsed, toggle: toggleCollapsedCtx, closeMobile } = useSidebar();
+  const { collapsed, toggle: toggleCollapsedCtx, closeMobile, mobileOpen } = useSidebar();
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
@@ -63,7 +63,14 @@ export default function Sidebar({}: SidebarProps) {
     }
   }, [collapsed, closeMobile, toggleCollapsedCtx]);
 
-  const go = (path: string) => router.push(path);
+  const go = (path: string) => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024 && mobileOpen) {
+      closeMobile();
+      setTimeout(() => router.push(path), 80);
+    } else {
+      router.push(path);
+    }
+  };
   const avatarLetter = user?.username?.charAt(0).toUpperCase() ?? "?";
   const avatarUrl = user?.avatar_url;
 

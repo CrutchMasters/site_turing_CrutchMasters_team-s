@@ -1762,34 +1762,38 @@ async def send_jury_invitation(payload: SendJuryInvitation, authorization: str =
         raise HTTPException(status_code=400, detail="Користувач не має ролі журі")
 
     existing = supabase.table("jury_tournament_invitations") \
-        .select("id") \
+        .select("id, status") \
         .eq("tournament_id", payload.tournament_id) \
         .eq("jury_id", payload.jury_id) \
-        .eq("status", "pending") \
         .execute()
+
     if existing.data:
-        raise HTTPException(status_code=400, detail="Запрошення вже відправлено і очікує відповіді")
-
-    already = supabase.table("jury_tournament_invitations") \
-        .select("id") \
-        .eq("tournament_id", payload.tournament_id) \
-        .eq("jury_id", payload.jury_id) \
-        .eq("status", "accepted") \
-        .execute()
-    if already.data:
-        raise HTTPException(status_code=400, detail="Це журі вже є учасником оцінювання даного турніру")
-
-    inv_res = supabase.table("jury_tournament_invitations").insert({
-        "tournament_id": payload.tournament_id,
-        "jury_id":       payload.jury_id,
-        "inviter_id":    caller["id"],
-        "status":        "pending",
-    }).execute()
-
-    if not inv_res.data:
-        raise HTTPException(status_code=500, detail="Не вдалося створити запрошення")
-
-    invitation_id = inv_res.data[0]["id"]
+        rec = existing.data[0]
+        if rec["status"] == "pending":
+            raise HTTPException(status_code=400, detail="Запрошення вже відправлено і очікує відповіді")
+        if rec["status"] == "accepted":
+            raise HTTPException(status_code=400, detail="Це журі вже є учасником оцінювання даного турніру")
+        # status is "removed" or "declined" — reuse the existing record
+        inv_res = supabase.table("jury_tournament_invitations") \
+            .update({
+                "status":     "pending",
+                "inviter_id": caller["id"],
+            }) \
+            .eq("id", rec["id"]) \
+            .execute()
+        if not inv_res.data:
+            raise HTTPException(status_code=500, detail="Не вдалося оновити запрошення")
+        invitation_id = rec["id"]
+    else:
+        inv_res = supabase.table("jury_tournament_invitations").insert({
+            "tournament_id": payload.tournament_id,
+            "jury_id":       payload.jury_id,
+            "inviter_id":    caller["id"],
+            "status":        "pending",
+        }).execute()
+        if not inv_res.data:
+            raise HTTPException(status_code=500, detail="Не вдалося створити запрошення")
+        invitation_id = inv_res.data[0]["id"]
 
     _notif_title   = f"Запрошення до журі турніру «{tournament['name']}»"
     _notif_message = (
@@ -2040,6 +2044,116 @@ async def get_jury_candidates(tournament_id: str, authorization: str = Header(..
     candidates = [u for u in (all_jury.data or []) if u["id"] not in already_ids]
 
     return {"candidates": candidates}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JURY REMOVAL
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.delete("/api/tournaments/{tournament_id}/jury/{jury_id}")
+async def remove_jury_from_tournament(
+    tournament_id: str,
+    jury_id: str,
+    authorization: str = Header(...),
+):
+    """
+    Видаляє журі з турніру (тільки admin / superadmin).
+
+    Що відбувається:
+    1. Запис у jury_tournament_invitations отримує status='removed',
+       а також removed_at і removed_by — для аудиту.
+    2. Всі непризначені submissions цього журі в цьому турнірі
+       видаляються з jury_submission_assignments.
+    3. Вже виставлені оцінки (jury_evaluations) НЕ чіпаються —
+       вони залишаються в БД як є.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    if caller.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(
+            status_code=403,
+            detail="Тільки адміністратор може видаляти журі з турніру",
+        )
+
+    # 1. Перевіряємо що турнір існує
+    tournament = fetch_one(
+        supabase.table("tournaments")
+            .select("id, name")
+            .eq("id", tournament_id)
+    )
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Турнір не знайдено")
+
+    # 2. Знаходимо активний запис запрошення
+    invitation = fetch_one(
+        supabase.table("jury_tournament_invitations")
+            .select("id, status")
+            .eq("tournament_id", tournament_id)
+            .eq("jury_id", jury_id)
+            .eq("status", "accepted")
+    )
+    if not invitation:
+        raise HTTPException(
+            status_code=404,
+            detail="Журі не є активним учасником цього турніру",
+        )
+
+    from datetime import datetime, timezone as _tz
+
+    # 3. М'яке видалення — змінюємо статус на 'removed'
+    supabase.table("jury_tournament_invitations") \
+        .update({
+            "status":     "removed",
+            "removed_at": datetime.now(_tz.utc).isoformat(),
+            "removed_by": caller["id"],
+            "updated_at": datetime.now(_tz.utc).isoformat(),
+        }) \
+        .eq("id", invitation["id"]) \
+        .execute()
+
+    # 4. Прибираємо jury_submission_assignments цього журі в цьому турнірі
+    #    (тільки ті, де вже НЕ виставлена оцінка)
+    evaluated_subs_res = supabase.table("jury_evaluations") \
+        .select("submission_id") \
+        .eq("jury_id", jury_id) \
+        .execute()
+    evaluated_sub_ids = {r["submission_id"] for r in (evaluated_subs_res.data or [])}
+
+    assignments_res = supabase.table("jury_submission_assignments") \
+        .select("id, submission_id") \
+        .eq("jury_id", jury_id) \
+        .eq("tournament_id", tournament_id) \
+        .execute()
+
+    ids_to_delete = [
+        r["id"]
+        for r in (assignments_res.data or [])
+        if r["submission_id"] not in evaluated_sub_ids
+    ]
+
+    if ids_to_delete:
+        supabase.table("jury_submission_assignments") \
+            .delete() \
+            .in_("id", ids_to_delete) \
+            .execute()
+
+    print(
+        f"[JURY-REMOVE] jury={jury_id} видалено з tournament={tournament_id} "
+        f"адміном={caller['id']}. Прибрано {len(ids_to_delete)} assignments.",
+        flush=True,
+    )
+
+    return {
+        "ok": True,
+        "removed_jury_id":        jury_id,
+        "tournament_id":          tournament_id,
+        "deleted_assignments":    len(ids_to_delete),
+        "preserved_evaluations":  len(evaluated_sub_ids),
+    }
 
 
 @app.post("/api/invitations/respond")
