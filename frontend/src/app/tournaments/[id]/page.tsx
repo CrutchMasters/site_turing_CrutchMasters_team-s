@@ -295,27 +295,7 @@ export default function TournamentPage() {
             <div className="mb-5 rounded-2xl overflow-hidden border border-(--brd)">
             <img src={tournament.banner_url} alt={tournament.name} className="w-full max-h-72 object-cover" />
             </div>
-
-            <main className="flex-1 flex flex-col overflow-y-auto">
-            <MobileHeader
-            onOpenSidebar={openMobile}
-            title={tournament.name}
-            icon={<Trophy size={18} className="text-blue-600" />}
-            />
-
-            <div className="p-4 sm:p-6 md:p-8 max-w-3xl w-full mx-auto flex flex-col gap-5 relative z-10">
-            <button
-            onClick={() => router.push("/tournaments")}
-            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors w-fit"
-            >
-            <ArrowLeft size={14} /> Назад до турнірів
-            </button>
-
-            {tournament.banner_url && (
-                <div className="rounded-2xl sm:rounded-[2rem] overflow-hidden border border-(--brd) shadow-xl">
-                <img src={tournament.banner_url} alt={tournament.name} className="w-full max-h-72 object-cover" />
-                </div>
-            )}
+        )}
 
             {/* ── Hero header card ── */}
             <div className="rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
