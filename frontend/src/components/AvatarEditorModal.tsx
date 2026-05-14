@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { X, Loader } from "lucide-react";
+import { authedSupabase } from "@/lib/supabase";
 
 interface TableConfig {
     table: string;
@@ -12,6 +13,7 @@ interface Props {
     onSave: (url: string) => void;
     onClose: () => void;
     supabase: any;
+    token?: string | null;
     // Какую таблицу обновлять: по умолчанию "account" / "id"
     // Для команд передавай: tableConfig={{ table: "teams", idColumn: "id" }}
     tableConfig?: TableConfig;
@@ -19,7 +21,7 @@ interface Props {
     skipDbUpdate?: boolean;
 }
 
-export default function AvatarEditorModal({ userId, onSave, onClose, supabase, tableConfig, skipDbUpdate }: Props) {
+export default function AvatarEditorModal({ userId, onSave, onClose, supabase, token, tableConfig, skipDbUpdate }: Props) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [img, setImg] = useState<HTMLImageElement | null>(null);
     const [scale, setScale] = useState(100);
@@ -82,30 +84,33 @@ export default function AvatarEditorModal({ userId, onSave, onClose, supabase, t
         if (!canvas) return;
         setUploading(true);
         try {
-            const blob: Blob = await new Promise(res => canvas.toBlob(b => res(b!), "image/webp", 0.85));
+            const blob: Blob = await new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error("Canvas is empty")), "image/webp", 0.85));
             const timestamp = Date.now();
             const path = `${userId}/avatar_${timestamp}.webp`;
 
+            // Используем authed-клиент чтобы запросы проходили через RLS
+            const client = await authedSupabase(token);
+
             // 1. Загружаем новый файл в bucket
-            const { error: uploadError } = await supabase.storage
+            const { error: uploadError } = await client.storage
             .from("avatars")
             .upload(path, blob, { contentType: "image/webp" });
 
             if (uploadError) throw uploadError;
 
-            const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
+            const { data: urlData } = client.storage.from("avatars").getPublicUrl(path);
             const finalUrl = `${urlData.publicUrl}?v=${timestamp}`;
 
             if (!skipDbUpdate) {
                 // 2. Получаем старый avatar_url из нужной таблицы (account ИЛИ teams)
-                const { data: existingRow } = await supabase
+                const { data: existingRow } = await client
                 .from(dbTable)
                 .select("avatar_url")
                 .eq(dbIdCol, userId)
                 .maybeSingle();
 
                 // 3. Обновляем avatar_url в нужной таблице
-                const { error: updateError } = await supabase
+                const { error: updateError } = await client
                 .from(dbTable)
                 .update({ avatar_url: finalUrl })
                 .eq(dbIdCol, userId);
@@ -119,7 +124,7 @@ export default function AvatarEditorModal({ userId, onSave, onClose, supabase, t
                         const pathParts = url.pathname.split("/object/public/avatars/");
                         if (pathParts[1]) {
                             const oldPath = pathParts[1].split("?")[0];
-                            await supabase.storage.from("avatars").remove([oldPath]);
+                            await client.storage.from("avatars").remove([oldPath]);
                         }
                     } catch { /* игнорируем ошибку удаления старого файла */ }
                 }
