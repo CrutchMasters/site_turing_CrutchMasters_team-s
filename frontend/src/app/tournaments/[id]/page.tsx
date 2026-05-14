@@ -295,318 +295,370 @@ export default function TournamentPage() {
             <div className="mb-5 rounded-2xl overflow-hidden border border-(--brd)">
             <img src={tournament.banner_url} alt={tournament.name} className="w-full max-h-72 object-cover" />
             </div>
-        )}
 
-        <div className="flex items-start justify-between gap-3 mb-4">
-        <h1 className="text-2xl font-black text-(--t1)">{tournament.name}</h1>
-        {isAdmin && (
+            <main className="flex-1 flex flex-col overflow-y-auto">
+            <MobileHeader
+            onOpenSidebar={openMobile}
+            title={tournament.name}
+            icon={<Trophy size={18} className="text-blue-600" />}
+            />
+
+            <div className="p-4 sm:p-6 md:p-8 max-w-3xl w-full mx-auto flex flex-col gap-5 relative z-10">
             <button
-            onClick={() => router.push(`/tournaments/${id}/edit`)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-(--brd) text-(--t2) hover:text-blue-600 hover:border-blue-600/40 text-xs font-bold transition-all"
+            onClick={() => router.push("/tournaments")}
+            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors w-fit"
             >
-            <Edit size={14} /> Редагувати
+            <ArrowLeft size={14} /> Назад до турнірів
             </button>
-        )}
-        </div>
 
-        {/* ── Таби ── */}
-        <div className="flex gap-1 mb-6 p-1 bg-(--card) border border-(--brd) rounded-2xl">
+            {tournament.banner_url && (
+                <div className="rounded-2xl sm:rounded-[2rem] overflow-hidden border border-(--brd) shadow-xl">
+                <img src={tournament.banner_url} alt={tournament.name} className="w-full max-h-72 object-cover" />
+                </div>
+            )}
+
+            {/* ── Hero header card ── */}
+            <div className="rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
+            <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd)">
+            <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center flex-shrink-0">
+            <Trophy size={16} className="text-(--t2)" />
+            </div>
+            <h1 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">{tournament.name}</h1>
+            </div>
+            {isAdmin && (
+                <button
+                onClick={() => router.push(`/tournaments/${id}/edit`)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-blue-600/30 text-blue-600 bg-blue-600/10 hover:bg-blue-600/20 hover:border-blue-600/50 text-[10px] font-black uppercase tracking-widest transition-all flex-shrink-0"
+                >
+                <Edit size={13} /> Редагувати
+                </button>
+            )}
+            </div>
+
+            {/* ── Таби ── */}
+            <div className="flex gap-1 p-1 m-4 sm:m-6 mt-4 sm:mt-4 bg-(--bg) border border-(--brd) rounded-xl overflow-hidden">
             {tabs.map((tab) => (
                 <button
-                    key={tab.key}
-                    onClick={() => handleTabClick(tab.key)}
-                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black transition-all ${
-                        activeTab === tab.key
-                            ? "bg-blue-600 text-white shadow"
-                            : "text-(--t2) hover:text-(--t1) hover:bg-(--bg)"
-                    }`}
+                key={tab.key}
+                onClick={() => handleTabClick(tab.key)}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                    activeTab === tab.key
+                    ? "bg-blue-600 text-white shadow-md"
+                    : "text-(--t2) hover:text-(--t1) hover:bg-(--card)"
+                }`}
                 >
-                    {tab.icon}
-                    {tab.label}
+                {tab.icon}
+                {tab.label}
                 </button>
             ))}
-        </div>
-
-        {/* ── Вкладка: Огляд ── */}
-        {activeTab === "info" && (
-            <>
-            {tournament.rules && (
-                <div className="mb-5 bg-(--card) border border-(--brd) rounded-2xl p-4">
-                <MarkdownRenderer content={tournament.rules} />
-                </div>
-            )}
-
-            {/* Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
-            <div className="bg-(--card) border border-(--brd) rounded-2xl p-4">
-            <div className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1">Команди</div>
-            <div className="text-xl font-black text-(--t1) flex items-end gap-1">
-            {teamCount}
-            {tournament.max_teams && <span className="text-sm font-bold text-(--t2)">/ {tournament.max_teams}</span>}
             </div>
             </div>
-            {tournament.rounds && (
-                <div className="bg-(--card) border border-(--brd) rounded-2xl p-4">
-                <div className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1">Раунди</div>
-                <div className="text-xl font-black text-(--t1)">{tournament.rounds}</div>
-                </div>
-            )}
-            {tournament.start_at && (
-                <div className="bg-(--card) border border-(--brd) rounded-2xl p-4 col-span-2 sm:col-span-1">
-                <div className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1">Старт</div>
-                <div className="text-sm font-black text-(--t1)">{fmtDate(tournament.start_at)}</div>
-                </div>
-            )}
-            </div>
 
-            {/* Registration window */}
-            {(tournament.registration_from || tournament.registration_to) && (
-                <div className="bg-(--card) border border-(--brd) rounded-2xl p-4 mb-6 flex gap-6 flex-wrap">
-                {tournament.registration_from && (
-                    <div>
-                    <div className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-0.5">Реєстрація від</div>
-                    <div className="text-sm font-bold text-(--t1)">{fmtDate(tournament.registration_from)}</div>
+            {/* ── Вкладка: Огляд ── */}
+            {activeTab === "info" && (
+                <>
+                {/* Stats */}
+                <div className="rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
+                <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5 flex items-center gap-3 border-b border-(--brd)">
+                <div className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center flex-shrink-0">
+                <Clock size={16} className="text-(--t2)" />
+                </div>
+                <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">Інформація</h2>
+                </div>
+                <div className="p-4 sm:p-6 md:p-8 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="bg-(--bg) border border-(--brd) rounded-2xl p-4">
+                <div className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1">Команди</div>
+                <div className="text-xl font-black text-(--t1) flex items-end gap-1">
+                {teamCount}
+                {tournament.max_teams && <span className="text-sm font-bold text-(--t2)">/ {tournament.max_teams}</span>}
+                </div>
+                </div>
+                {tournament.rounds && (
+                    <div className="bg-(--bg) border border-(--brd) rounded-2xl p-4">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1">Раунди</div>
+                    <div className="text-xl font-black text-(--t1)">{tournament.rounds}</div>
                     </div>
                 )}
-                {tournament.registration_to && (
-                    <div>
-                    <div className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-0.5">Реєстрація до</div>
-                    <div className="text-sm font-bold text-(--t1)">{fmtDate(tournament.registration_to)}</div>
+                {tournament.start_at && (
+                    <div className="bg-(--bg) border border-(--brd) rounded-2xl p-4 col-span-2 sm:col-span-1">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1">Старт</div>
+                    <div className="text-sm font-black text-(--t1)">{fmtDate(tournament.start_at)}</div>
                     </div>
                 )}
+                {tournament.end_at && (
+                    <div className="bg-(--bg) border border-(--brd) rounded-2xl p-4 col-span-2 sm:col-span-1">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-1">Кінець</div>
+                    <div className="text-sm font-black text-(--t1)">{fmtDate(tournament.end_at)}</div>
+                    </div>
+                )}
+                {(tournament.registration_from || tournament.registration_to) && (
+                    <>
+                    {tournament.registration_from && (
+                        <div className="bg-(--bg) border border-(--brd) rounded-2xl p-4">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-0.5">Реєстрація від</div>
+                        <div className="text-sm font-bold text-(--t1)">{fmtDate(tournament.registration_from)}</div>
+                        </div>
+                    )}
+                    {tournament.registration_to && (
+                        <div className="bg-(--bg) border border-(--brd) rounded-2xl p-4">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-(--t2) mb-0.5">Реєстрація до</div>
+                        <div className="text-sm font-bold text-(--t1)">{fmtDate(tournament.registration_to)}</div>
+                        </div>
+                    )}
+                    </>
+                )}
                 </div>
-            )}
+                </div>
 
-            {/* Team picker modal */}
-            {teamPickerOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-                <div className="bg-(--card) border border-(--brd) rounded-3xl shadow-2xl p-6 w-full max-w-sm">
-                <h3 className="text-sm font-black uppercase tracking-widest text-(--t1) mb-1">Оберіть команду</h3>
-                <p className="text-xs text-(--t2) mb-4">У вас кілька команд без турніру. Оберіть, яку зареєструвати:</p>
-                <div className="flex flex-col gap-2 mb-4">
-                {eligibleTeams.map(t => (
+                {tournament.rules && (
+                    <div className="rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
+                    <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5 flex items-center gap-3 border-b border-(--brd)">
+                    <div className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center flex-shrink-0">
+                    <LayoutList size={16} className="text-(--t2)" />
+                    </div>
+                    <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">Правила</h2>
+                    </div>
+                    <div className="p-4 sm:p-6 md:p-8">
+                    <MarkdownRenderer content={tournament.rules} />
+                    </div>
+                    </div>
+                )}
+
+                {/* Team picker modal */}
+                {teamPickerOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="bg-(--card) border border-(--brd) rounded-[2rem] shadow-2xl p-6 w-full max-w-sm">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-(--t1) mb-1">Оберіть команду</h3>
+                    <p className="text-xs text-(--t2) mb-4">У вас кілька команд без турніру. Оберіть, яку зареєструвати:</p>
+                    <div className="flex flex-col gap-2 mb-4">
+                    {eligibleTeams.map(t => (
+                        <button
+                        key={t.id}
+                        onClick={() => doRegister(t.id)}
+                        className="w-full text-left px-4 py-3 rounded-xl border border-(--brd) bg-(--bg) hover:border-blue-600/50 hover:bg-blue-600/5 text-sm font-bold text-(--t1) transition-all"
+                        >
+                        {t.name}
+                        </button>
+                    ))}
+                    </div>
                     <button
-                    key={t.id}
-                    onClick={() => doRegister(t.id)}
-                    className="w-full text-left px-4 py-3 rounded-2xl border border-(--brd) bg-(--bg) hover:border-blue-500 hover:bg-blue-500/5 text-sm font-bold text-(--t1) transition-all"
+                    onClick={() => setTeamPickerOpen(false)}
+                    className="w-full px-4 py-2 rounded-xl border border-(--brd) text-[10px] font-black uppercase tracking-widest text-(--t2) hover:bg-(--bg) transition-all"
                     >
-                    {t.name}
+                    Скасувати
                     </button>
-                ))}
-                </div>
-                <button
-                onClick={() => setTeamPickerOpen(false)}
-                className="w-full px-4 py-2 rounded-2xl border border-(--brd) text-xs font-black uppercase text-(--t2) hover:bg-(--bg) transition-all"
-                >
-                Скасувати
-                </button>
-                </div>
-                </div>
-            )}
+                    </div>
+                    </div>
+                )}
 
-            {/* Error */}
-            {registerError && (
-                <div className="mb-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-500 text-sm font-bold">
-                ⚠️ {registerError}
-                </div>
-            )}
+                {/* Rounds section */}
+                {rounds.length > 0 && (
+                    <div className="rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
+                    <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5 flex items-center gap-3 border-b border-(--brd)">
+                    <div className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center flex-shrink-0">
+                    <Flag size={16} className="text-(--t2)" />
+                    </div>
+                    <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">Раунди</h2>
+                    </div>
+                    <div className="p-4 sm:p-6 flex flex-col gap-2">
+                    {rounds.map((round) => {
+                        const now = Date.now();
+                        const start = round.start_at ? new Date(round.start_at).getTime() : null;
+                        const end = round.end_at ? new Date(round.end_at).getTime() : null;
 
-            {/* Register button / login prompt */}
-            {isRegistrationOpen && !myTeamInTournament && (
-                user ? (
-                <button
-                onClick={handleRegister}
-                disabled={registering || isFull}
-                className="w-full mb-6 px-6 py-3 bg-blue-600 text-white rounded-2xl font-black text-sm uppercase tracking-wide disabled:opacity-50 hover:bg-blue-700 active:scale-[0.98] transition-all"
-                >
-                {isFull ? "Турнір заповнений" : registering ? "Реєстрація..." : "Зареєструвати мою команду"}
-                </button>
-                ) : (
-                <div className="w-full mb-6 px-5 py-4 bg-(--card) border border-(--brd) rounded-2xl flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                    <Lock size={18} className="text-(--t2) flex-shrink-0 mt-0.5 sm:mt-0" />
-                    <p className="text-sm text-(--t2) flex-1">
+                        const dbStatus = round.status;
+                        const isFinished = dbStatus === "finished" || (!dbStatus && end && now > end);
+                        const isActive   = dbStatus === "active"   || (!dbStatus && start && end && now >= start && now <= end);
+                        const isPending  = dbStatus === "pending"  || (!dbStatus && start && now < start);
+
+                        let statusLabel = "Очікується";
+                        let statusColor = "text-(--t2)";
+                        let statusBadgeBg = "bg-(--bg)";
+                        let statusBadgeBorder = "border-(--brd)";
+                        let dotColor    = "bg-gray-400";
+
+                        if (isFinished) {
+                            statusLabel = "Завершено";
+                        } else if (isActive) {
+                            statusLabel        = "Активний";
+                            statusColor        = "text-green-600";
+                            statusBadgeBg      = "bg-(--bg)";
+                            statusBadgeBorder  = "border-(--brd)";
+                            dotColor           = "bg-green-600";
+                        } else if (isPending) {
+                            statusLabel = "Очікується";
+                        }
+
+                        const isLocked = isFinished;
+                        const isRegistered = !!myTeamInTournament;
+
+                        return (
+                            <div
+                            key={round.id}
+                            onClick={() => router.push(`/rounds/${round.id}`)}
+                            className={`flex items-center gap-4 p-4 border rounded-2xl cursor-pointer transition-all group bg-(--bg) hover:bg-(--bg) border-(--brd) hover:border-blue-600/40`}
+                            >
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0 transition-all ${
+                                isLocked
+                                ? "bg-(--card) border border-(--brd) text-(--t2)"
+                                : "bg-(--card) border border-(--brd) text-(--t1) group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600"
+                            }`}>
+                            {isLocked ? <Lock size={14} /> : round.number}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                            <p className="font-black text-sm text-(--t1) group-hover:text-blue-600 transition-colors truncate">
+                            {round.name || `Раунд ${round.number}`}
+                            </p>
+                            {(round.start_at || round.end_at) && (
+                                <p className="text-[11px] text-(--t2) font-medium mt-0.5 flex items-center gap-1">
+                                <Clock size={10} />
+                                {round.start_at && fmtDate(round.start_at)}
+                                {round.start_at && round.end_at && " — "}
+                                {round.end_at && fmtDate(round.end_at)}
+                                </p>
+                            )}
+                            </div>
+                            <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest flex-shrink-0 ${statusBadgeBg} ${statusBadgeBorder} ${statusColor}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${dotColor} ${isActive ? 'animate-pulse' : ''}`} />
+                            {statusLabel}
+                            </div>
+                            <ChevronRight size={16} className="text-(--t2) group-hover:text-blue-600 transition-colors flex-shrink-0" />
+                            </div>
+                        );
+                    })}
+                    </div>
+                    </div>
+                )}
+
+                {/* Error */}
+                {registerError && (
+                    <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-500 text-sm font-bold">
+                    ⚠️ {registerError}
+                    </div>
+                )}
+
+                {/* Register button / login prompt */}
+                {isRegistrationOpen && !myTeamInTournament && (
+                    user ? (
+                        <button
+                        onClick={handleRegister}
+                        disabled={registering || isFull}
+                        className="w-full px-6 py-3.5 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50 hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all"
+                        >
+                        {isFull ? "Турнір заповнений" : registering ? "Реєстрація..." : "Зареєструвати мою команду"}
+                        </button>
+                    ) : (
+                        <div className="w-full px-5 py-4 bg-(--card) border border-(--brd) rounded-2xl flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                        <Lock size={18} className="text-(--t2) flex-shrink-0 mt-0.5 sm:mt-0" />
+                        <p className="text-sm text-(--t2) flex-1">
                         Щоб взяти участь у турнірі, необхідно{" "}
                         <button onClick={() => router.push("/login")} className="text-blue-600 font-black hover:underline">увійти до акаунту</button>
                         {" "}або{" "}
                         <button onClick={() => router.push("/register")} className="text-blue-600 font-black hover:underline">зареєструватися</button>
-                    </p>
-                </div>
-                )
-            )}
-
-            {myTeamInTournament && (
-                <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                <div className="flex-1 px-4 py-3 bg-green-500/10 border border-green-500/30 rounded-2xl text-green-600 text-sm font-black">
-                ✓ Ваша команда «{myTeamInTournament.name}» вже зареєстрована
-                </div>
-                {isRegistrationOpen && (
-                    <button
-                    onClick={handleUnregister}
-                    disabled={unregistering}
-                    className="flex-shrink-0 px-4 py-3 rounded-2xl border border-red-500/30 text-red-500 bg-red-500/10 hover:bg-red-500/20 hover:border-red-500/50 font-black text-xs uppercase tracking-wide disabled:opacity-50 active:scale-[0.98] transition-all"
-                    >
-                    {unregistering ? "Скасування..." : "Скасувати реєстрацію"}
-                    </button>
-                )}
-                </div>
-            )}
-
-            {/* Rounds section */}
-            {rounds.length > 0 && (
-                <div className="mt-6">
-                <h2 className="font-black text-lg mb-3 text-(--t1) flex items-center gap-2">
-                <Flag size={18} className="text-blue-600" />
-                Раунди
-                </h2>
-                <div className="grid gap-2">
-                {rounds.map((round) => {
-                    const now = Date.now();
-                    const start = round.start_at ? new Date(round.start_at).getTime() : null;
-                    const end = round.end_at ? new Date(round.end_at).getTime() : null;
-
-                    const dbStatus = round.status;
-                    const isFinished = dbStatus === "finished" || (!dbStatus && end && now > end);
-                    const isActive   = dbStatus === "active"   || (!dbStatus && start && end && now >= start && now <= end);
-                    const isPending  = dbStatus === "pending"  || (!dbStatus && start && now < start);
-
-                    let statusLabel = "Очікується";
-                    let statusColor = "text-(--t2)";
-                    let statusBadgeBg = "bg-(--bg)";
-                    let statusBadgeBorder = "border-(--brd)";
-                    let dotColor    = "bg-gray-400";
-
-                    if (isFinished) {
-                        statusLabel = "Завершено";
-                    } else if (isActive) {
-                        statusLabel        = "Активний";
-                        statusColor        = "text-green-600";
-                        statusBadgeBg      = "bg-green-600/15";
-                        statusBadgeBorder  = "border-green-600/50";
-                        dotColor           = "bg-green-600";
-                    } else if (isPending) {
-                        statusLabel = "Очікується";
-                    }
-
-                    const isLocked = isFinished;
-                    const isRegistered = !!myTeamInTournament;
-
-                    return (
-                        <div
-                        key={round.id}
-                        onClick={() => router.push(`/rounds/${round.id}`)}
-                        className={`flex items-center gap-4 p-4 border rounded-2xl cursor-pointer transition-all group bg-(--card) hover:bg-(--card) ${
-                            isActive
-                            ? 'border-green-600/50 hover:border-green-600/70'
-                            : isRegistered
-                            ? 'border-green-600/30 hover:border-green-600/50'
-                            : 'border-(--brd) hover:border-blue-600/40'
-                        }`}
-                        >
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0 transition-all ${
-                            isLocked
-                            ? "bg-(--bg) border border-(--brd) text-(--t2)"
-                            : "bg-blue-600/10 text-blue-600 group-hover:bg-blue-600 group-hover:text-white"
-                        }`}>
-                        {isLocked ? <Lock size={14} /> : round.number}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                        <p className="font-black text-sm text-(--t1) group-hover:text-blue-600 transition-colors truncate">
-                        {round.name || `Раунд ${round.number}`}
                         </p>
-                        {(round.start_at || round.end_at) && (
-                            <p className="text-[11px] text-(--t2) font-medium mt-0.5 flex items-center gap-1">
-                            <Clock size={10} />
-                            {round.start_at && fmtDate(round.start_at)}
-                            {round.start_at && round.end_at && " — "}
-                            {round.end_at && fmtDate(round.end_at)}
-                            </p>
-                        )}
                         </div>
-                        <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-wider flex-shrink-0 ${statusBadgeBg} ${statusBadgeBorder} ${statusColor}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${dotColor} ${isActive ? 'animate-pulse' : ''}`} />
-                        {statusLabel}
-                        </div>
-                        <ChevronRight size={16} className="text-(--t2) group-hover:text-blue-600 transition-colors flex-shrink-0" />
-                        </div>
-                    );
-                })}
-                </div>
-                </div>
-            )}
+                    )
+                )}
 
-            {/* Teams list */}
-            <div className="mt-6">
-            <h2 className="font-black text-lg mb-3 text-(--t1)">Команди-учасники</h2>
-            {teamCount === 0 ? (
-                <div className="text-center py-10 text-(--t2)">
-                <Users size={32} className="mx-auto mb-2 opacity-30" />
-                <p className="text-sm font-bold">Поки немає зареєстрованих команд</p>
-                </div>
-            ) : (
-                <div className="grid gap-2">
-                {tournament.teams.map((team, idx) => (
-                    <div
-                    key={team.id}
-                    onClick={() => router.push(`/teams/${team.id}`)}
-                    className="flex items-center gap-3 p-4 border border-(--brd) rounded-2xl bg-(--card) hover:border-blue-600/40 cursor-pointer transition-all group"
-                    >
-                    <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0">
-                    {team.avatar_url
-                        ? <img src={team.avatar_url} alt={team.name} className="w-full h-full object-cover" />
-                        : <div className="w-full h-full bg-blue-600/10 text-blue-600 flex items-center justify-center text-xs font-black">{idx + 1}</div>
-                    }
+                {myTeamInTournament && (
+                    <div className="rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
+                    <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-(--card) border border-(--brd) flex items-center justify-center flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-green-500"><polyline points="20 6 9 17 4 12"/></svg>
                     </div>
-                    <div className="flex-1 min-w-0">
-                    <p className="font-black text-sm text-(--t1) group-hover:text-blue-600 transition-colors truncate">{team.name}</p>
-                    {team.city_school_org && (
-                        <p className="text-[11px] text-(--t2) font-bold truncate">{team.city_school_org}</p>
+                    <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-(--t2) mb-0.5">Статус реєстрації</p>
+                    <p className="font-black text-sm text-green-600">Ваша команда «{myTeamInTournament.name}» зареєстрована</p>
+                    </div>
+                    </div>
+                    {isRegistrationOpen && (
+                        <button
+                        onClick={handleUnregister}
+                        disabled={unregistering}
+                        className="flex-shrink-0 px-4 py-2.5 rounded-xl border border-red-500/30 text-red-500 bg-(--bg) hover:bg-red-500/10 hover:border-red-500/50 font-black text-[10px] uppercase tracking-widest disabled:opacity-50 active:scale-[0.98] transition-all"
+                        >
+                        {unregistering ? "Скасування..." : "Розреєструвати команду"}
+                        </button>
                     )}
                     </div>
                     </div>
-                ))}
-                </div>
-            )}
-            </div>
+                )}
 
-            {/* Jury list */}
-            {jury.length > 0 && (
+                {/* Teams list */}
                 <div className="mt-6">
-                <h2 className="font-black text-lg mb-3 text-(--t1) flex items-center gap-2">
-                <Star size={18} className="text-amber-500" />
-                Журі
-                </h2>
-                <div className="grid gap-2">
-                {jury.map((member) => (
-                    <div
-                    key={member.jury_id}
-                    onClick={() => router.push(`/user/${member.jury_id}`)}
-                    className="flex items-center gap-3 p-4 border border-(--brd) rounded-2xl bg-(--card) hover:border-amber-500/40 cursor-pointer transition-all group"
-                    >
-                    <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-                    {member.avatar_url
-                        ? <img src={member.avatar_url} alt={member.username} className="w-full h-full object-cover" />
-                        : <Star size={14} className="text-amber-500" />
-                    }
+                <h2 className="font-black text-lg mb-3 text-(--t1)">Команди-учасники</h2>
+                {teamCount === 0 ? (
+                    <div className="text-center py-10 text-(--t2)">
+                    <Users size={32} className="mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-bold">Поки немає зареєстрованих команд</p>
                     </div>
-                    <div className="flex-1 min-w-0">
-                    <p className="font-black text-sm text-(--t1) group-hover:text-amber-500 transition-colors truncate">{member.username}</p>
-                    <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest">Суддя</p>
+                ) : (
+                    <div className="grid gap-2">
+                    {tournament.teams.map((team, idx) => (
+                        <div
+                        key={team.id}
+                        onClick={() => router.push(`/teams/${team.id}`)}
+                        className="flex items-center gap-3 p-4 border border-(--brd) rounded-2xl bg-(--bg) hover:border-blue-600/40 cursor-pointer transition-all group"
+                        >
+                        <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0">
+                        {team.avatar_url
+                            ? <img src={team.avatar_url} alt={team.name} className="w-full h-full object-cover" />
+                            : <div className="w-full h-full bg-(--bg) border border-(--brd) text-(--t2) flex items-center justify-center text-xs font-black">{idx + 1}</div>
+                        }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                        <p className="font-black text-sm text-(--t1) group-hover:text-blue-600 transition-colors truncate">{team.name}</p>
+                        {team.city_school_org && (
+                            <p className="text-[11px] text-(--t2) font-bold truncate">{team.city_school_org}</p>
+                        )}
+                        </div>
+                        </div>
+                    ))}
                     </div>
-                    </div>
-                ))}
+                )}
                 </div>
-                </div>
+
+                {/* Jury list */}
+                {jury.length > 0 && (
+                    <div className="mt-6">
+                    <h2 className="font-black text-lg mb-3 text-(--t1) flex items-center gap-2">
+                    <Star size={18} className="text-(--t2)" />
+                    Журі
+                    </h2>
+                    <div className="grid gap-2">
+                    {jury.map((member) => (
+                        <div
+                        key={member.jury_id}
+                        onClick={() => router.push(`/user/${member.jury_id}`)}
+                        className="flex items-center gap-3 p-4 border border-(--brd) rounded-2xl bg-(--bg) hover:border-blue-600/40 cursor-pointer transition-all group"
+                        >
+                        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 bg-(--bg) border border-(--brd) flex items-center justify-center">
+                        {member.avatar_url
+                            ? <img src={member.avatar_url} alt={member.username} className="w-full h-full object-cover" />
+                            : <Star size={14} className="text-(--t2)" />
+                        }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                        <p className="font-black text-sm text-(--t1) group-hover:text-blue-600 transition-colors truncate">{member.username}</p>
+                        <p className="text-[10px] font-bold text-(--t2) uppercase tracking-widest">Суддя</p>
+                        </div>
+                        </div>
+                    ))}
+                    </div>
+                    </div>
+                )}
+                </>
             )}
-            </>
-        )}
 
-        {/* ── Вкладка: Лідербоард ── */}
-        {activeTab === "leaderboard" && leaderboardTouched && (
-            <LeaderboardSection tournamentId={id} />
-        )}
+            {/* ── Вкладка: Лідербоард ── */}
+            {activeTab === "leaderboard" && leaderboardTouched && (
+                <LeaderboardSection tournamentId={id} />
+            )}
 
-        </div>
-        </main>
-        </div>
-    );
+            </div>
+            </main>
+            </div>
+        );
 }
