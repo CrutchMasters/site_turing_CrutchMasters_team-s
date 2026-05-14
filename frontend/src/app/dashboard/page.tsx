@@ -722,15 +722,15 @@ function SectionHeader({ icon, title, badge, children, accentColor = "blue" }: S
   }[accentColor] ?? { bg: "bg-blue-600/10", border: "border-blue-600/20", icon: "bg-blue-600/15 border-blue-600/30", text: "text-blue-600", badge: "bg-blue-600/10 text-blue-600 border-blue-600/20" };
 
   return (
-    <div className={`px-4 sm:px-6 md:px-8 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd) ${accent.bg}`}>
+    <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-(--brd)">
     <div className="flex items-center gap-3">
-    <div className={`w-9 h-9 rounded-xl border flex items-center justify-center flex-shrink-0 ${accent.icon}`}>
-    <span className={accent.text}>{icon}</span>
+    <div className="w-9 h-9 rounded-xl border border-(--brd) flex items-center justify-center flex-shrink-0">
+    <span className="text-(--t2)">{icon}</span>
     </div>
     <div className="flex items-center gap-2.5">
     <h2 className="font-black text-lg sm:text-xl text-(--t1) uppercase tracking-tight">{title}</h2>
     {badge != null && badge > 0 && (
-      <span className={`text-[9px] font-black border px-2 py-0.5 rounded-full ${accent.badge}`}>
+      <span className="text-[9px] font-black border border-(--brd) text-(--t2) px-2 py-0.5 rounded-full">
       {badge}
       </span>
     )}
@@ -760,6 +760,8 @@ export default function DashboardPage() {
   const [editAnnouncement,     setEditAnnouncement]     = useState<Announcement | undefined>();
   // "all" | "mine" toggle for announcements
   const [announcementsFilter,  setAnnouncementsFilter]  = useState<"all" | "mine">("all");
+  // "all" | "mine" toggle for calendar only
+  const [calendarFilter,       setCalendarFilter]       = useState<"all" | "mine">("all");
   // IDs of tournaments/rounds user is in (for "mine" filter)
   const [myTournamentIds,      setMyTournamentIds]      = useState<string[]>([]);
   const [myRoundIds,           setMyRoundIds]           = useState<string[]>([]);
@@ -780,300 +782,300 @@ export default function DashboardPage() {
 
   // Guests can view dashboard — no redirect needed
 
-    // ── fetch tournaments ──────────────────────────────────────────────────────
-    const fetchTournaments = useCallback(async () => {
-      setTournamentsLoading(true);
-      try {
-        const { data, error } = await supabase
-        .from("tournaments")
-        .select("id, name, status, start_at, end_at, registration_from, registration_to, max_teams")
-        .order("start_at", { ascending: true })
-        .limit(10);
+  // ── fetch tournaments ──────────────────────────────────────────────────────
+  const fetchTournaments = useCallback(async () => {
+    setTournamentsLoading(true);
+    try {
+      const { data, error } = await supabase
+      .from("tournaments")
+      .select("id, name, status, start_at, end_at, registration_from, registration_to, max_teams")
+      .order("start_at", { ascending: true })
+      .limit(10);
 
-        if (error) throw error;
+      if (error) throw error;
 
-        const ids = (data ?? []).map((t: any) => t.id);
-        let counts: Record<string, number> = {};
-        if (ids.length) {
-          const { data: regData } = await supabase
-          .from("tournament_teams")
-          .select("tournament_id")
-          .in("tournament_id", ids);
-          (regData ?? []).forEach((r: any) => {
-            counts[r.tournament_id] = (counts[r.tournament_id] ?? 0) + 1;
-          });
-        }
-
-        setTournaments((data ?? []).map((t: any) => ({
-          ...t,
-          team_count: counts[t.id] ?? 0,
-          status: computeStatus(t),
-        })));
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setTournamentsLoading(false);
+      const ids = (data ?? []).map((t: any) => t.id);
+      let counts: Record<string, number> = {};
+      if (ids.length) {
+        const { data: regData } = await supabase
+        .from("tournament_teams")
+        .select("tournament_id")
+        .in("tournament_id", ids);
+        (regData ?? []).forEach((r: any) => {
+          counts[r.tournament_id] = (counts[r.tournament_id] ?? 0) + 1;
+        });
       }
-    }, []);
 
-    // ── fetch announcements ────────────────────────────────────────────────────
-    const fetchAnnouncements = useCallback(async () => {
-      setAnnouncementsLoading(true);
-      try {
-        const { data, error } = await supabase
-        .from("announcements")
-        .select("*")
-        .order("is_pinned", { ascending: false })
-        .order("created_at",  { ascending: false })
-        .limit(20);
+      setTournaments((data ?? []).map((t: any) => ({
+        ...t,
+        team_count: counts[t.id] ?? 0,
+        status: computeStatus(t),
+      })));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setTournamentsLoading(false);
+    }
+  }, []);
 
-        if (error) throw error;
-        setAnnouncements(data ?? []);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setAnnouncementsLoading(false);
+  // ── fetch announcements ────────────────────────────────────────────────────
+  const fetchAnnouncements = useCallback(async () => {
+    setAnnouncementsLoading(true);
+    try {
+      const { data, error } = await supabase
+      .from("announcements")
+      .select("*")
+      .order("is_pinned", { ascending: false })
+      .order("created_at",  { ascending: false })
+      .limit(20);
+
+      if (error) throw error;
+      setAnnouncements(data ?? []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setAnnouncementsLoading(false);
+    }
+  }, []);
+
+  // ── fetch user's tournaments & rounds for "mine" filter ────────────────────
+  const fetchMyMemberships = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data: captainTeams } = await supabase.from("teams").select("id,tournament_id").eq("captain_id", user.id).not("tournament_id","is",null);
+      const { data: memberTeams  } = await supabase.from("teams").select("id,tournament_id").contains("members_ids", [user.id]).not("tournament_id","is",null);
+      const teams = [...(captainTeams ?? []), ...(memberTeams ?? [])];
+      const tourIds = [...new Set(teams.map((t: any) => t.tournament_id).filter(Boolean))] as string[];
+      setMyTournamentIds(tourIds);
+
+      if (tourIds.length) {
+        const { data: rounds } = await supabase.from("rounds").select("id").in("tournament_id", tourIds);
+        setMyRoundIds((rounds ?? []).map((r: any) => r.id));
       }
-    }, []);
+    } catch(e) { console.error(e); }
+  }, [user]);
 
-    // ── fetch user's tournaments & rounds for "mine" filter ────────────────────
-    const fetchMyMemberships = useCallback(async () => {
-      if (!user) return;
-      try {
-        const { data: captainTeams } = await supabase.from("teams").select("id,tournament_id").eq("captain_id", user.id).not("tournament_id","is",null);
-        const { data: memberTeams  } = await supabase.from("teams").select("id,tournament_id").contains("members_ids",[user.id]).not("tournament_id","is",null);
-        const teams = [...(captainTeams ?? []), ...(memberTeams ?? [])];
-        const tourIds = [...new Set(teams.map((t: any) => t.tournament_id).filter(Boolean))] as string[];
-        setMyTournamentIds(tourIds);
+  // ── fetch current tournament & round ──────────────────────────────────────
+  const fetchCurrentInfo = useCallback(async () => {
+    if (!user) return;
+    setCurrentInfoLoading(true);
+    try {
+      let team: { id: string; name: string; tournament_id: string } | null = null;
 
-        if (tourIds.length) {
-          const { data: rounds } = await supabase.from("rounds").select("id").in("tournament_id", tourIds);
-          setMyRoundIds((rounds ?? []).map((r: any) => r.id));
-        }
-      } catch(e) { console.error(e); }
-    }, [user]);
+      const { data: captainRows } = await supabase
+      .from("teams")
+      .select("id, name, tournament_id")
+      .eq("captain_id", user.id)
+      .not("tournament_id", "is", null)
+      .limit(1);
 
-    // ── fetch current tournament & round ──────────────────────────────────────
-    const fetchCurrentInfo = useCallback(async () => {
-      if (!user) return;
-      setCurrentInfoLoading(true);
-      try {
-        let team: { id: string; name: string; tournament_id: string } | null = null;
-
-        const { data: captainRows } = await supabase
+      if (captainRows?.[0]) {
+        team = captainRows[0];
+      } else {
+        const { data: memberRows } = await supabase
         .from("teams")
         .select("id, name, tournament_id")
-        .eq("captain_id", user.id)
+        .contains("members_ids", [user.id])
         .not("tournament_id", "is", null)
         .limit(1);
-
-        if (captainRows?.[0]) {
-          team = captainRows[0];
-        } else {
-          const { data: memberRows } = await supabase
-          .from("teams")
-          .select("id, name, tournament_id")
-          .contains("members_ids", [user.id])
-          .not("tournament_id", "is", null)
-          .limit(1);
-          team = memberRows?.[0] ?? null;
-        }
-
-        if (!team?.tournament_id) {
-          setCurrentInfo({ tournament: null, round: null, status: null, submission: null });
-          return;
-        }
-
-        const { data: tourData } = await supabase
-        .from("tournaments")
-        .select("id, name, rules, status, start_at, end_at, registration_from, registration_to")
-        .eq("id", team.tournament_id)
-        .single();
-
-        if (!tourData) {
-          setCurrentInfo({ tournament: null, round: null, status: null, submission: null });
-          return;
-        }
-
-        const tournamentStatus = computeStatus(tourData);
-
-        const { data: roundRows } = await supabase
-        .from("rounds")
-        .select("id, name, description, status, start_at, end_at")
-        .eq("tournament_id", team.tournament_id)
-        .order("start_at", { ascending: true });
-
-        const rounds = roundRows ?? [];
-        const activeRound = rounds.find(r => r.status === "active");
-        const upcomingRound = rounds.find(r => {
-          if (!r.start_at) return false;
-          return new Date(r.start_at).getTime() > Date.now();
-        });
-        const round = activeRound ?? upcomingRound ?? rounds[rounds.length - 1] ?? null;
-
-        const status = round
-        ? (round.status ?? (activeRound ? "active" : "upcoming"))
-        : tournamentStatus;
-
-        let submission: Submission | null = null;
-        if (round && token) {
-          try {
-            const res = await fetch(`${API_URL}/api/rounds/${round.id}/submission`, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            if (res.ok) {
-              const json = await res.json();
-              if (json.submission) submission = json.submission;
-            }
-          } catch { /* silent */ }
-        }
-
-        setCurrentInfo({
-          tournament: { id: tourData.id, name: tourData.name, rules: tourData.rules },
-          round,
-          status,
-          submission,
-        });
-      } catch (e) {
-        console.error(e);
-        setCurrentInfo(null);
-      } finally {
-        setCurrentInfoLoading(false);
+        team = memberRows?.[0] ?? null;
       }
-    }, [user, token]);
 
-    // ── CRUD handlers ──────────────────────────────────────────────────────────
-    const handleSaveAnnouncement = async (payload: Partial<Announcement>) => {
-      if (editAnnouncement) {
-        const { error } = await (await authedSupabase(token))
-        .from("announcements")
-        .update(payload)
-        .eq("id", editAnnouncement.id);
-        if (!error) await fetchAnnouncements();
-      } else {
-        const { error } = await (await authedSupabase(token))
-        .from("announcements")
-        .insert({ ...payload, created_by: user?.id });
-        if (!error) await fetchAnnouncements();
+      if (!team?.tournament_id) {
+        setCurrentInfo({ tournament: null, round: null, status: null, submission: null });
+        return;
       }
-    };
 
-    const handleDeleteAnnouncement = async (id: string) => {
-      if (!confirm(t.mainPage.announcementsDelete)) return;
-      await (await authedSupabase(token)).from("announcements").delete().eq("id", id);
-      setAnnouncements(prev => prev.filter(a => a.id !== id));
-    };
+      const { data: tourData } = await supabase
+      .from("tournaments")
+      .select("id, name, rules, status, start_at, end_at, registration_from, registration_to")
+      .eq("id", team.tournament_id)
+      .single();
 
-    const handleTogglePin = async (a: Announcement) => {
+      if (!tourData) {
+        setCurrentInfo({ tournament: null, round: null, status: null, submission: null });
+        return;
+      }
+
+      const tournamentStatus = computeStatus(tourData);
+
+      const { data: roundRows } = await supabase
+      .from("rounds")
+      .select("id, name, description, status, start_at, end_at")
+      .eq("tournament_id", team.tournament_id)
+      .order("start_at", { ascending: true });
+
+      const rounds = roundRows ?? [];
+      const activeRound = rounds.find(r => r.status === "active");
+      const upcomingRound = rounds.find(r => {
+        if (!r.start_at) return false;
+        return new Date(r.start_at).getTime() > Date.now();
+      });
+      const round = activeRound ?? upcomingRound ?? rounds[rounds.length - 1] ?? null;
+
+      const status = round
+      ? (round.status ?? (activeRound ? "active" : "upcoming"))
+      : tournamentStatus;
+
+      let submission: Submission | null = null;
+      if (round && token) {
+        try {
+          const res = await fetch(`${API_URL}/api/rounds/${round.id}/submission`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const json = await res.json();
+            if (json.submission) submission = json.submission;
+          }
+        } catch { /* silent */ }
+      }
+
+      setCurrentInfo({
+        tournament: { id: tourData.id, name: tourData.name, rules: tourData.rules },
+        round,
+        status,
+        submission,
+      });
+    } catch (e) {
+      console.error(e);
+      setCurrentInfo(null);
+    } finally {
+      setCurrentInfoLoading(false);
+    }
+  }, [user, token]);
+
+  // ── CRUD handlers ──────────────────────────────────────────────────────────
+  const handleSaveAnnouncement = async (payload: Partial<Announcement>) => {
+    if (editAnnouncement) {
       const { error } = await (await authedSupabase(token))
       .from("announcements")
-      .update({ is_pinned: !a.is_pinned })
-      .eq("id", a.id);
+      .update(payload)
+      .eq("id", editAnnouncement.id);
       if (!error) await fetchAnnouncements();
-    };
+    } else {
+      const { error } = await (await authedSupabase(token))
+      .from("announcements")
+      .insert({ ...payload, created_by: user?.id });
+      if (!error) await fetchAnnouncements();
+    }
+  };
 
-      // ── effects ────────────────────────────────────────────────────────────────
-      // Fetch public data immediately — no need to wait for auth
-      useEffect(() => {
-        fetch(`${API_URL}/api/test`)
-        .then(r => r.json())
-        .then(d => setBackendMessage(d.message))
-        .catch(() => setBackendMessage("Disconnected"));
+  const handleDeleteAnnouncement = async (id: string) => {
+    if (!confirm(t.mainPage.announcementsDelete)) return;
+    await (await authedSupabase(token)).from("announcements").delete().eq("id", id);
+    setAnnouncements(prev => prev.filter(a => a.id !== id));
+  };
 
-        fetchTournaments();
-        fetchAnnouncements();
-      }, [fetchTournaments, fetchAnnouncements]);
+  const handleTogglePin = async (a: Announcement) => {
+    const { error } = await (await authedSupabase(token))
+    .from("announcements")
+    .update({ is_pinned: !a.is_pinned })
+    .eq("id", a.id);
+    if (!error) await fetchAnnouncements();
+  };
 
-      useEffect(() => {
-        if (isLoading) return;
+    // ── effects ────────────────────────────────────────────────────────────────
+    // Fetch public data immediately — no need to wait for auth
+    useEffect(() => {
+      fetch(`${API_URL}/api/test`)
+      .then(r => r.json())
+      .then(d => setBackendMessage(d.message))
+      .catch(() => setBackendMessage("Disconnected"));
 
-        // Only fetch user-specific data when logged in
-        if (user) {
-          fetchCurrentInfo();
-          fetchMyMemberships();
-        } else {
-          // Guests: mark loading as done so UI doesn't spin forever
-          setCurrentInfoLoading(false);
-        }
+      fetchTournaments();
+      fetchAnnouncements();
+    }, [fetchTournaments, fetchAnnouncements]);
 
-        const obs = new IntersectionObserver(
-          entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add("fuIn"); }),
-                                             { threshold: 0.1 }
-        );
-        revealRefs.current.forEach(r => { if (r) obs.observe(r); });
-        return () => obs.disconnect();
-      }, [isLoading, user, fetchCurrentInfo, fetchMyMemberships]);
+    useEffect(() => {
+      if (isLoading) return;
 
-      // Build calendar events from announcements that have a calendar_date
-      // NOTE: must be declared before any early returns to satisfy Rules of Hooks
-      const announcementCalendarEvents = useMemo<CalendarEvent[]>(() =>
-      announcements
-      .filter(a => !!a.calendar_date)
-      .map(a => ({
-        id: `ann-${a.id}`,
-        date: a.calendar_date!,
-        label: a.title,
-        type: "announcement" as const,
-      })),
-      [announcements]
-      );
-
-      // "Mine" filter: show only announcements that are linked to user's tournaments/rounds
-      // Since announcements don't have direct tournament_id links, "mine" shows announcements
-      // that have a calendar_date matching a round/tournament event the user is in,
-      // OR announcements created during the user's active tournament period.
-      // Practical approach: "mine" shows announcements where calendar_date falls within
-      // any of user's tournament date ranges, or the announcement has no specific targeting
-      // (i.e., it's a general announcement relevant to all participants).
-      // For now: "mine" = announcements where calendar_date is set AND matches user's tournament/round dates,
-      // OR pinned announcements (important for everyone), OR created after user joined.
-      // Simplest meaningful filter: show all pinned + any that have calendar events the user participates in.
-      const filteredAnnouncements = useMemo(() => {
-        if (announcementsFilter === "all") return announcements;
-        // "mine" = pinned announcements + announcements tied to events user participates in
-        // We check if the announcement's calendar_date corresponds to any tournament or round event.
-        // Additionally show all if user is in any tournament (most relevant context).
-        if (myTournamentIds.length === 0) {
-          // Not in any tournament — show pinned only
-          return announcements.filter(a => a.is_pinned);
-        }
-        // Show all announcements that are pinned or have calendar events
-        // (since we can't filter by tournament without explicit FK, we show announcements
-        // during the user's active tournament window + pinned)
-        return announcements.filter(a => {
-          if (a.is_pinned) return true;
-          if (a.calendar_date) return true; // calendar events are shown
-          return false;
-        });
-      }, [announcements, announcementsFilter, myTournamentIds]);
-
-      // Early returns — placed after all hooks to satisfy Rules of Hooks
-      if (isLoading) return (
-        <div className="min-h-screen bg-(--bg) flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-        </div>
-      );
-
-      if (!user) {
-        // Guest mode — show dashboard without user-specific sections
+      // Only fetch user-specific data when logged in
+      if (user) {
+        fetchCurrentInfo();
+        fetchMyMemberships();
+      } else {
+        // Guests: mark loading as done so UI doesn't spin forever
+        setCurrentInfoLoading(false);
       }
 
-      const isAdmin = user ? (user.role === "admin" || user.role === "superadmin") : false;
+      const obs = new IntersectionObserver(
+        entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add("fuIn"); }),
+                                           { threshold: 0.1 }
+      );
+      revealRefs.current.forEach(r => { if (r) obs.observe(r); });
+      return () => obs.disconnect();
+    }, [isLoading, user, fetchCurrentInfo, fetchMyMemberships]);
 
-  const filterLabels: { key: typeof activeFilter; label: string }[] = [
-    { key: "all",          label: t.mainPage.filterAll },
-    { key: "upcoming",     label: t.mainPage.filterUpcoming },
-    { key: "registration", label: t.mainPage.filterOpen },
-    { key: "ongoing",      label: t.mainPage.filterRunning },
-    { key: "finished",     label: t.mainPage.filterFinished },
-  ];
+    // Build calendar events from announcements that have a calendar_date
+    // NOTE: must be declared before any early returns to satisfy Rules of Hooks
+    const announcementCalendarEvents = useMemo<CalendarEvent[]>(() =>
+    announcements
+    .filter(a => !!a.calendar_date)
+    .map(a => ({
+      id: `ann-${a.id}`,
+      date: a.calendar_date!,
+      label: a.title,
+      type: "announcement" as const,
+    })),
+    [announcements]
+    );
 
-  const filteredTournaments = activeFilter === "all"
-  ? tournaments
-  : tournaments.filter(t => t.status === activeFilter);
+    // "Mine" filter: show only announcements that are linked to user's tournaments/rounds
+    // Since announcements don't have direct tournament_id links, "mine" shows announcements
+    // that have a calendar_date matching a round/tournament event the user is in,
+    // OR announcements created during the user's active tournament period.
+    // Practical approach: "mine" shows announcements where calendar_date falls within
+    // any of user's tournament date ranges, or the announcement has no specific targeting
+    // (i.e., it's a general announcement relevant to all participants).
+    // For now: "mine" = announcements where calendar_date is set AND matches user's tournament/round dates,
+    // OR pinned announcements (important for everyone), OR created after user joined.
+    // Simplest meaningful filter: show all pinned + any that have calendar events the user participates in.
+    const filteredAnnouncements = useMemo(() => {
+      if (announcementsFilter === "all") return announcements;
+      // "mine" = pinned announcements + announcements tied to events user participates in
+      // We check if the announcement's calendar_date corresponds to any tournament or round event.
+      // Additionally show all if user is in any tournament (most relevant context).
+      if (myTournamentIds.length === 0) {
+        // Not in any tournament — show pinned only
+        return announcements.filter(a => a.is_pinned);
+      }
+      // Show all announcements that are pinned or have calendar events
+      // (since we can't filter by tournament without explicit FK, we show announcements
+      // during the user's active tournament window + pinned)
+      return announcements.filter(a => {
+        if (a.is_pinned) return true;
+        if (a.calendar_date) return true; // calendar events are shown
+        return false;
+      });
+    }, [announcements, announcementsFilter, myTournamentIds]);
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
+    // Early returns — placed after all hooks to satisfy Rules of Hooks
+    if (isLoading) return (
+      <div className="min-h-screen bg-(--bg) flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+
+    if (!user) {
+      // Guest mode — show dashboard without user-specific sections
+    }
+
+    const isAdmin = user ? (user.role === "admin" || user.role === "superadmin") : false;
+
+    const filterLabels: { key: typeof activeFilter; label: string }[] = [
+      { key: "all",          label: t.mainPage.filterAll },
+      { key: "upcoming",     label: t.mainPage.filterUpcoming },
+      { key: "registration", label: t.mainPage.filterOpen },
+      { key: "ongoing",      label: t.mainPage.filterRunning },
+      { key: "finished",     label: t.mainPage.filterFinished },
+    ];
+
+    const filteredTournaments = activeFilter === "all"
+    ? tournaments
+    : tournaments.filter(t => t.status === activeFilter);
+
+    return (
+      <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1) transition-colors duration-300">
 
       {/* Background logo */}
       <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
@@ -1380,7 +1382,7 @@ export default function DashboardPage() {
       </div>
       {/* right column: EventCalendar */}
       <div className="w-full xl:sticky xl:top-6 xl:w-72 xl:flex-shrink-0">
-      <EventCalendar extraEvents={announcementCalendarEvents} eventsFilter={announcementsFilter} onEventsFilterChange={setAnnouncementsFilter} />
+      <EventCalendar extraEvents={announcementCalendarEvents} eventsFilter={calendarFilter} onEventsFilterChange={setCalendarFilter} />
       </div>
       </div>
       </div>
@@ -1395,5 +1397,5 @@ export default function DashboardPage() {
         />
       )}
       </div>
-  );
+    );
 }

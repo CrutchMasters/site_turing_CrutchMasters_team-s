@@ -41,6 +41,7 @@ const EVENT_ICONS: Record<CalendarEvent["type"], React.ReactNode> = {
 };
 
 // В режиме "Мои события" показываем только эти типы + только isMine=true
+// "announcement" намеренно исключён — объявления не относятся к "моим событиям"
 const MINE_TYPES = new Set<CalendarEvent["type"]>([
   "tournament_start",
   "tournament_end",
@@ -48,7 +49,6 @@ const MINE_TYPES = new Set<CalendarEvent["type"]>([
   "round_end",
   "registration_start",
   "registration_end",
-  "announcement",
 ]);
 
 const MONTHS_RU = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
@@ -121,9 +121,9 @@ export default function EventCalendar({ extraEvents = [], eventsFilter = "all", 
         if (!user) {
           // Guest: load all public tournament & round events
           const { data: tours } = await supabase
-            .from("tournaments")
-            .select("id,name,start_at,end_at,registration_from,registration_to")
-            .limit(50);
+          .from("tournaments")
+          .select("id,name,start_at,end_at,registration_from,registration_to")
+          .limit(50);
           for (const t of tours ?? []) {
             if (t.start_at)          evs.push({ id: `ts-${t.id}`,  date: isoToDateStr(t.start_at),          label: t.name, type: "tournament_start",   link: `/tournaments/${t.id}`, isMine: false });
             if (t.end_at)            evs.push({ id: `te-${t.id}`,  date: isoToDateStr(t.end_at),            label: t.name, type: "tournament_end",     link: `/tournaments/${t.id}`, isMine: false });
@@ -152,12 +152,12 @@ export default function EventCalendar({ extraEvents = [], eventsFilter = "all", 
 
           // Always load all tournaments (needed for "all" tab; admins also own all)
           const { data: tours } = await supabase
-            .from("tournaments")
-            .select("id,name,start_at,end_at,registration_from,registration_to")
-            .limit(50);
+          .from("tournaments")
+          .select("id,name,start_at,end_at,registration_from,registration_to")
+          .limit(50);
 
           for (const t of tours ?? []) {
-            const isMine = isAdminRole || personalTourIds.has(t.id);
+            const isMine = personalTourIds.has(t.id);
             if (t.start_at)          evs.push({ id: `ts-${t.id}`,  date: isoToDateStr(t.start_at),          label: t.name, type: "tournament_start",   link: `/tournaments/${t.id}`, isMine });
             if (t.end_at)            evs.push({ id: `te-${t.id}`,  date: isoToDateStr(t.end_at),            label: t.name, type: "tournament_end",     link: `/tournaments/${t.id}`, isMine });
             if (t.registration_from) evs.push({ id: `rs-${t.id}`,  date: isoToDateStr(t.registration_from), label: t.name, type: "registration_start", link: `/tournaments/${t.id}`, isMine });
@@ -168,7 +168,7 @@ export default function EventCalendar({ extraEvents = [], eventsFilter = "all", 
           if (allTourIds.length) {
             const { data: rounds } = await supabase.from("rounds").select("id,name,start_at,end_at,tournament_id").in("tournament_id", allTourIds);
             for (const r of rounds ?? []) {
-              const isMine = isAdminRole || personalTourIds.has(r.tournament_id) || juryRoundIds.has(r.id);
+              const isMine = personalTourIds.has(r.tournament_id) || juryRoundIds.has(r.id);
               if (r.start_at) evs.push({ id: `rds-${r.id}`, date: isoToDateStr(r.start_at), label: r.name, type: "round_start", link: `/rounds/${r.id}`, isMine });
               if (r.end_at)   evs.push({ id: `rde-${r.id}`, date: isoToDateStr(r.end_at),   label: r.name, type: "round_end",   link: `/rounds/${r.id}`, isMine });
             }
@@ -182,9 +182,8 @@ export default function EventCalendar({ extraEvents = [], eventsFilter = "all", 
 
   const allEvents = useMemo(() => {
     const seen = new Set<string>();
-    // extraEvents — announcements from page, always shown as "mine"
-    const taggedExtra = extraEvents.map(e => ({ ...e, isMine: true }));
-    return [...events, ...taggedExtra].filter(e => { if (seen.has(e.id)) return false; seen.add(e.id); return true; });
+    // extraEvents — announcements from page, shown in "all" tab only (isMine stays false)
+    return [...events, ...extraEvents].filter(e => { if (seen.has(e.id)) return false; seen.add(e.id); return true; });
   }, [events, extraEvents]);
 
   // "Мои события": только личные события релевантных типов (без объявлений и чужих турниров)
@@ -301,15 +300,15 @@ export default function EventCalendar({ extraEvents = [], eventsFilter = "all", 
     ) : eventsFilter === "mine" && !user ? (
       <div className="py-4 text-center flex flex-col items-center gap-3">
       <p className="text-[10px] font-bold text-(--t2)">
-        {locale === "ua" ? "Увійдіть, щоб бачити свої події" : locale === "en" ? "Sign in to see your events" : "Войдите, чтобы видеть свои события"}
+      {locale === "ua" ? "Увійдіть, щоб бачити свої події" : locale === "en" ? "Sign in to see your events" : "Войдите, чтобы видеть свои события"}
       </p>
       <div className="flex items-center gap-2">
-        <a href="/login" className="text-[9px] font-black px-3 py-1.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-colors">
-          {locale === "ua" ? "Увійти" : locale === "en" ? "Sign in" : "Войти"}
-        </a>
-        <a href="/register" className="text-[9px] font-black px-3 py-1.5 rounded-xl border border-(--brd) text-(--t2) hover:border-blue-600/40 hover:text-(--t1) transition-colors">
-          {locale === "ua" ? "Реєстрація" : locale === "en" ? "Register" : "Регистрация"}
-        </a>
+      <a href="/login" className="text-[9px] font-black px-3 py-1.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+      {locale === "ua" ? "Увійти" : locale === "en" ? "Sign in" : "Войти"}
+      </a>
+      <a href="/register" className="text-[9px] font-black px-3 py-1.5 rounded-xl border border-(--brd) text-(--t2) hover:border-blue-600/40 hover:text-(--t1) transition-colors">
+      {locale === "ua" ? "Реєстрація" : locale === "en" ? "Register" : "Регистрация"}
+      </a>
       </div>
       </div>
     ) : upcoming.length > 0 ? (
