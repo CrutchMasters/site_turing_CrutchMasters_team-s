@@ -69,8 +69,8 @@ function fmtDate(iso?: string) {
 }
 
 export default function TournamentPage() {
-    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar, isClosing: isSidebarClosing } = useSidebar();
-  const router = useRouter();
+    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
+    const router = useRouter();
     const params = useParams();
     const { user, isLoading: authLoading } = useAuth();
     const { dark } = useTheme();
@@ -263,39 +263,39 @@ export default function TournamentPage() {
         if (tab === "leaderboard") setLeaderboardTouched(true);
     };
 
-    return (
-        <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1)">
-        <div className={`fixed inset-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
-        <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] blur-sm ${dark ? "invert" : ""}`} />
-        </div>
-
-        {isMobileSidebarOpen && (
-            <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => closeMobileSidebar()} />
-        )}
-        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform duration-300 ease-in-out ${isMobileSidebarOpen && !isSidebarClosing ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
-        <Sidebar />
-        </div>
-
-        <main className="flex-1 flex flex-col overflow-y-auto">
-        <MobileHeader
-        onOpenSidebar={openMobile}
-        title={tournament.name}
-        icon={<Trophy size={18} className="text-blue-600" />}
-        />
-
-        <div className="p-6 max-w-3xl w-full mx-auto">
-        <button
-        onClick={() => router.push("/tournaments")}
-        className="mb-5 flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors"
-        >
-        <ArrowLeft size={16} /> Назад до турнірів
-        </button>
-
-        {tournament.banner_url && (
-            <div className="mb-5 rounded-2xl overflow-hidden border border-(--brd)">
-            <img src={tournament.banner_url} alt={tournament.name} className="w-full max-h-72 object-cover" />
+        return (
+            <div className="flex h-screen overflow-hidden bg-(--bg) text-(--t1)">
+            <div className={`fixed inset-y-0 left-[152px] right-0 flex items-center justify-center pointer-events-none z-0 ${dark ? "opacity-10" : "opacity-5"}`}>
+            <img src="/logo_background1.png" alt="" className={`w-[min(800px,90vw)] blur-sm ${dark ? "invert" : ""}`} />
             </div>
-        )}
+
+            {isMobileSidebarOpen && (
+                <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => closeMobileSidebar()} />
+            )}
+            <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+            <Sidebar />
+            </div>
+
+            <main className="flex-1 flex flex-col overflow-y-auto">
+            <MobileHeader
+            onOpenSidebar={openMobile}
+            title={tournament.name}
+            icon={<Trophy size={18} className="text-blue-600" />}
+            />
+
+            <div className="p-4 sm:p-6 md:p-8 max-w-3xl w-full mx-auto flex flex-col gap-5 relative z-10">
+            <button
+            onClick={() => router.push("/tournaments")}
+            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-(--t2) hover:text-blue-600 transition-colors w-fit"
+            >
+            <ArrowLeft size={14} /> Назад до турнірів
+            </button>
+
+            {tournament.banner_url && (
+                <div className="rounded-2xl sm:rounded-[2rem] overflow-hidden border border-(--brd) shadow-xl">
+                <img src={tournament.banner_url} alt={tournament.name} className="w-full max-h-72 object-cover" />
+                </div>
+            )}
 
             {/* ── Hero header card ── */}
             <div className="rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
