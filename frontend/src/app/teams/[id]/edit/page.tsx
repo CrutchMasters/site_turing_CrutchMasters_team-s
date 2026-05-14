@@ -287,7 +287,7 @@ export default function EditTeamPage() {
                     });
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.detail ?? t.editTeam.errRemoveMember);
-                    const newIds: string[] = (data.members_ids ?? team.members_ids.filter(id => id !== member.id));
+                    const newIds: string[] = (data.members_ids ?? (team.members_ids ?? []).filter(id => id !== member.id));
                     setTeam(prev => prev ? { ...prev, members_ids: newIds } : prev);
                     setMembers(prev => prev.filter(m => m.id !== member.id));
                     setConfirmRemove(null);
