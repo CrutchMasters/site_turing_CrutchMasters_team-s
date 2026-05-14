@@ -645,10 +645,10 @@ export default function TournamentEditPage() {
                 throw new Error(err.detail ?? `Помилка збереження раундів: ${roundsRes.statusText}`);
             }
 
-            showSuccess(t.editTourney?.savedSuccess ?? "Зміни збережено!");
+            showSuccess(t.editTourney?.successSaved ?? "Зміни збережено ✓");
             fetchTourney();
         } catch (e: any) {
-            setFieldErrors({ general: e?.message ?? (t.editTourney?.saveError ?? "Помилка збереження") });
+            setFieldErrors({ general: e?.message ?? "Помилка збереження" });
         } finally {
             setSaving(false);
         }
