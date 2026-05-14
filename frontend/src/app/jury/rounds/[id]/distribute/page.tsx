@@ -381,11 +381,11 @@ export default function DistributePage() {
                     {/* Header */}
                     <div className="flex items-center gap-3 mb-6 flex-wrap">
                         <button
-                            onClick={() => round && router.push(`/jury/rounds/${round.id}/evaluate`)}
-                            className="flex items-center gap-2 text-sm font-bold text-(--t2) hover:text-blue-600 transition-colors group"
+                            onClick={() => round && router.push(`/rounds/${round.id}`)}
+                            className="flex items-center justify-center w-8 h-8 rounded-full text-(--t2) hover:text-blue-600 hover:bg-blue-50 transition-colors group"
+                            title="Назад до раунду"
                         >
-                            <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
-                            Назад до оцінювання
+                            <ChevronLeft size={20} className="group-hover:-translate-x-0.5 transition-transform" />
                         </button>
                         <div className="flex-1 min-w-0">
                             <h1 className="text-xl sm:text-2xl font-black text-(--t1) uppercase tracking-tight">

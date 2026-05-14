@@ -10,7 +10,7 @@ import { useTheme } from "@/hooks/useTheme";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import { LeaderboardSection } from "@/components/LeaderboardSection";
-import { Trophy, Users, ArrowLeft, Loader, Edit, ChevronRight, Clock, Flag, Lock, LayoutList, Star } from "lucide-react";
+import { Trophy, Users, ArrowLeft, Loader, Edit, ChevronRight, Clock, Flag, Lock, LayoutList, Star, Calendar } from "lucide-react";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 const API_URL =
@@ -61,6 +61,39 @@ interface Tournament {
 
 type Tab = "info" | "leaderboard";
 
+function useCountdown(endAt?: string) {
+    const [time, setTime] = React.useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+    React.useEffect(() => {
+        if (!endAt) return;
+        const tick = () => {
+            const diff = Math.max(0, new Date(endAt).getTime() - Date.now());
+            setTime({
+                days:    Math.floor(diff / 86400000),
+                hours:   Math.floor((diff % 86400000) / 3600000),
+                minutes: Math.floor((diff % 3600000) / 60000),
+                seconds: Math.floor((diff % 60000) / 1000),
+            });
+        };
+        tick();
+        const id = setInterval(tick, 1000);
+        return () => clearInterval(id);
+    }, [endAt]);
+    return time;
+}
+
+function RegTimeBlock({ value, label, urgent }: { value: number; label: string; urgent?: boolean }) {
+    return (
+        <div className="flex flex-col items-center gap-1.5 flex-1">
+        <div className={`w-full py-4 rounded-2xl border flex items-center justify-center ${urgent ? "bg-red-500/10 border-red-500/25" : "bg-(--bg) border-(--brd)"}`}>
+        <span className={`text-3xl font-black tabular-nums ${urgent ? "text-red-500" : "text-(--t1)"}`} style={{ fontVariantNumeric: "tabular-nums" }}>
+        {String(value).padStart(2, "0")}
+        </span>
+        </div>
+        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">{label}</span>
+        </div>
+    );
+}
+
 function fmtDate(iso?: string) {
     if (!iso) return "—";
     return new Date(iso).toLocaleString("uk-UA", {
@@ -85,6 +118,9 @@ export default function TournamentPage() {
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<Tab>("info");
     const [leaderboardTouched, setLeaderboardTouched] = useState(false);
+
+    // ── useCountdown MUST be called unconditionally (Rules of Hooks) ──────────
+    const regCountdown = useCountdown(tournament?.registration_to);
 
     useEffect(() => { if (id && !authLoading) fetchTournament(); }, [id, authLoading]);
 
@@ -249,6 +285,15 @@ export default function TournamentPage() {
     const isAdmin = user?.role === "admin" || user?.role === "superadmin";
     const isRegistrationOpen = tournament.status === "registration";
     const isFinished = tournament.status === "finished";
+
+    const regEndTs = tournament.registration_to ? new Date(tournament.registration_to).getTime() : 0;
+    const now = Date.now();
+    const regStartTs = tournament.registration_from ? new Date(tournament.registration_from).getTime() : 0;
+    const regProgressPct = regEndTs > 0 && regStartTs > 0 && regEndTs > regStartTs
+        ? Math.min(100, Math.max(0, ((now - regStartTs) / (regEndTs - regStartTs)) * 100))
+        : 0;
+    const isRegUrgent = regProgressPct > 80;
+    const isRegEnded = regEndTs > 0 && now > regEndTs;
     const myTeamInTournament = tournament.teams?.find(
         t => t.captain_id === user?.id || (t.members_ids as string[] | undefined)?.includes(user?.id ?? "")
     );
@@ -390,6 +435,65 @@ export default function TournamentPage() {
                 )}
                 </div>
                 </div>
+
+                {/* ── Дедлайн реєстрації (таймер) ── */}
+                {tournament.registration_to && (
+                    <div className="rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
+                    <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5 flex items-center gap-3 border-b border-(--brd)">
+                    <div className="w-9 h-9 rounded-xl bg-(--bg) border border-(--brd) flex items-center justify-center flex-shrink-0">
+                    <Clock size={16} className="text-(--t2)" />
+                    </div>
+                    <h2 className="font-black text-base sm:text-lg text-(--t1) uppercase tracking-tight">
+                    {isRegEnded ? "Реєстрація завершена" : "До завершення реєстрації команд"}
+                    </h2>
+                    </div>
+                    <div className="p-4 sm:p-6 md:p-8">
+                    <div className="flex items-end gap-2 mb-5">
+                    <RegTimeBlock value={regCountdown.days}    label="днів"  urgent={isRegUrgent} />
+                    <span className="text-2xl font-black text-(--t2) mb-6 flex-shrink-0">:</span>
+                    <RegTimeBlock value={regCountdown.hours}   label="год"   urgent={isRegUrgent} />
+                    <span className="text-2xl font-black text-(--t2) mb-6 flex-shrink-0">:</span>
+                    <RegTimeBlock value={regCountdown.minutes} label="хв"    urgent={isRegUrgent} />
+                    <span className="text-2xl font-black text-(--t2) mb-6 flex-shrink-0">:</span>
+                    <RegTimeBlock value={regCountdown.seconds} label="сек"   urgent={isRegUrgent} />
+                    </div>
+                    {regEndTs > 0 && (
+                        <>
+                        <div className="relative h-2 rounded-full bg-(--brd) overflow-hidden mb-1">
+                        <div
+                        className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000"
+                        style={{
+                            width: `${regProgressPct}%`,
+                            background: isRegUrgent
+                            ? "linear-gradient(90deg,#f97316,#ef4444)"
+                            : "linear-gradient(90deg,#2563eb,#1d4ed8)",
+                            minWidth: regProgressPct > 0 ? 8 : 0,
+                        }}
+                        />
+                        {regProgressPct > 0 && regProgressPct < 100 && (
+                            <div
+                            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-(--card) transition-all duration-1000"
+                            style={{
+                                left: `calc(${regProgressPct}% - 8px)`,
+                                background: isRegUrgent ? "#ef4444" : "#2563eb",
+                                boxShadow: `0 0 0 3px ${isRegUrgent ? "rgba(239,68,68,0.25)" : "rgba(37,99,235,0.25)"}`,
+                            }}
+                            />
+                        )}
+                        </div>
+                        <div className="flex items-center justify-between">
+                        <span className="text-xs text-(--t2) font-bold flex items-center gap-1.5">
+                        <Calendar size={12} /> {tournament.registration_from ? fmtDate(tournament.registration_from) : "Старт не вказано"}
+                        </span>
+                        <span className="text-xs text-(--t2) font-bold flex items-center gap-1.5">
+                        {fmtDate(tournament.registration_to)} <Calendar size={12} />
+                        </span>
+                        </div>
+                        </>
+                    )}
+                    </div>
+                    </div>
+                )}
 
                 {tournament.rules && (
                     <div className="rounded-2xl sm:rounded-[2.5rem] overflow-hidden bg-(--card) border border-(--brd) shadow-xl">
