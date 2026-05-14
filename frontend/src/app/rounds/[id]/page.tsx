@@ -135,7 +135,7 @@ function ViewOnlyBanner({ children }: { children: React.ReactNode }) {
 
 export default function RoundPage() {
     const params        = useParams();
-    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
+    const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar, isClosing: isSidebarClosing } = useSidebar();
   const router        = useRouter();
     const searchParams  = useSearchParams();
     const { user, token, isLoading: authLoading } = useAuth();
@@ -309,7 +309,7 @@ export default function RoundPage() {
     /* ── loading guards ── */
     if (authLoading || loading) return (
         <div className="flex min-h-screen bg-(--bg)">
-        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform duration-300 ease-in-out ${isMobileSidebarOpen && !isSidebarClosing ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <Sidebar />
         </div>
         <main className="flex-1 flex items-center justify-center">
@@ -320,7 +320,7 @@ export default function RoundPage() {
 
     if (!round) return (
         <div className="flex min-h-screen bg-(--bg)">
-        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform duration-300 ease-in-out ${isMobileSidebarOpen && !isSidebarClosing ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <Sidebar />
         </div>
         <main className="flex-1 flex flex-col items-center justify-center gap-4">
@@ -580,7 +580,7 @@ export default function RoundPage() {
             <div className="fixed inset-0 bg-black/50 z-40 lg:hidden"
             onClick={() => closeMobileSidebar()} />
         )}
-        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+        <div className={`fixed inset-y-0 left-0 z-50 lg:relative transition-transform duration-300 ease-in-out ${isMobileSidebarOpen && !isSidebarClosing ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <Sidebar />
         </div>
 
