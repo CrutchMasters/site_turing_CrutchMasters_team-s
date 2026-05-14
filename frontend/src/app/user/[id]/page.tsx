@@ -1199,6 +1199,7 @@ function JuryZebraLineChart({ data }: { data: JuryEvalByTournament[] }) {
 function JuryStatsBlock({
   loading,
   totalAssigned,
+  totalInProgress,
   totalDone,
   totalRounds,
   tournamentsCount,
@@ -1207,6 +1208,7 @@ function JuryStatsBlock({
 }: {
   loading: boolean;
   totalAssigned: number;
+  totalInProgress: number;
   totalDone: number;
   totalRounds: number;
   tournamentsCount: number;
