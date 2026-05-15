@@ -12,6 +12,7 @@ import {
   Globe, User as UserIcon,
 } from "lucide-react";
 import EventCalendar, { CalendarEvent } from "@/components/EventCalendar";
+import TournamentLeaderboard from "@/components/TournamentLeaderboard";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import { supabase, authedSupabase } from "@/lib/supabase";
@@ -766,6 +767,10 @@ export default function DashboardPage() {
   const [myTournamentIds,      setMyTournamentIds]      = useState<string[]>([]);
   const [myRoundIds,           setMyRoundIds]           = useState<string[]>([]);
 
+  // Leaderboard: active tournament
+  const [activeTournamentId,   setActiveTournamentId]   = useState<string | null>(null);
+  const [activeTournamentName, setActiveTournamentName] = useState<string | null>(null);
+
   const revealRefs = useRef<(HTMLElement | null)[]>([]);
   const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar, isClosing: isSidebarClosing } = useSidebar();
   const router = useRouter();
@@ -797,20 +802,35 @@ export default function DashboardPage() {
       const ids = (data ?? []).map((t: any) => t.id);
       let counts: Record<string, number> = {};
       if (ids.length) {
-        const { data: regData } = await supabase
-        .from("tournament_teams")
-        .select("tournament_id")
-        .in("tournament_id", ids);
-        (regData ?? []).forEach((r: any) => {
-          counts[r.tournament_id] = (counts[r.tournament_id] ?? 0) + 1;
-        });
+        try {
+          const { data: regData, error: regError } = await supabase
+          .from("tournament_teams")
+          .select("tournament_id")
+          .in("tournament_id", ids);
+          if (regError) throw regError;
+          (regData ?? []).forEach((r: any) => {
+            counts[r.tournament_id] = (counts[r.tournament_id] ?? 0) + 1;
+          });
+        } catch (e) {
+          console.warn("Failed to fetch team counts:", e);
+          // не прерываем основной поток — counts остаётся пустым
+        }
       }
 
-      setTournaments((data ?? []).map((t: any) => ({
+      const mapped: Tournament[] = (data ?? []).map((t: any) => ({
         ...t,
         team_count: counts[t.id] ?? 0,
         status: computeStatus(t),
-      })));
+      }));
+
+      setTournaments(mapped);
+
+      // Pick the first ongoing tournament for the leaderboard (ищем по уже пересчитанному статусу)
+      const ongoing = mapped.find(t => t.status === "ongoing");
+      if (ongoing) {
+        setActiveTournamentId(ongoing.id);
+        setActiveTournamentName(ongoing.name);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -1084,8 +1104,8 @@ export default function DashboardPage() {
 
       {(isMobileSidebarOpen || isSidebarClosing) && (
         <div
-          className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300 ${isSidebarClosing ? "opacity-0" : "opacity-100"}`}
-          onClick={() => closeMobileSidebar()}
+        className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300 ${isSidebarClosing ? "opacity-0" : "opacity-100"}`}
+        onClick={() => closeMobileSidebar()}
         />
       )}
 
@@ -1130,12 +1150,8 @@ export default function DashboardPage() {
         </SectionHeader>
 
         {/* Body */}
-        <div className="p-4 sm:p-6 md:p-8 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -right-16 -top-16 w-64 h-64 rounded-full blur-3xl opacity-10 bg-blue-600" />
-        <div className="absolute -left-8 -bottom-8 w-40 h-40 rounded-full blur-2xl opacity-5 bg-blue-400" />
-        </div>
-        <div className="relative z-10 flex items-start gap-4">
+        <div className="p-4 sm:p-6 md:p-8">
+        <div className="flex items-start gap-4">
         <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-blue-600/15 border border-blue-600/30 flex items-center justify-center flex-shrink-0">
         <Trophy className="text-blue-600" size={24} />
         </div>
@@ -1148,7 +1164,7 @@ export default function DashboardPage() {
         </p>
         </div>
         </div>
-        <div className="relative z-10 mt-6 pt-5 border-t border-(--brd) flex flex-wrap gap-4 sm:gap-8">
+        <div className="mt-6 pt-5 border-t border-(--brd) flex flex-wrap gap-4 sm:gap-8">
         {[
           { label: t.admin.statActive, value: tournaments.filter(t => t.status === "ongoing").length.toString() },
                    { label: t.admin.statOpen,   value: tournaments.filter(t => t.status === "registration").length.toString() },
@@ -1176,31 +1192,6 @@ export default function DashboardPage() {
       badge={announcements.length > 0 ? announcements.length : null}
       accentColor="amber"
       >
-      {/* Filter tabs: Всі події / Мої події */}
-      <div className="flex items-center rounded-xl border border-(--brd) overflow-hidden bg-(--bg)">
-        <button
-          onClick={() => setAnnouncementsFilter("all")}
-          className={`flex items-center justify-center gap-1.5 px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-all ${
-            announcementsFilter === "all"
-            ? "bg-blue-600 text-white shadow-inner"
-            : "text-(--t2) hover:text-(--t1)"
-          }`}
-        >
-          <Globe size={10} />
-          {locale === "ua" ? "Всі події" : locale === "en" ? "All events" : "Все события"}
-        </button>
-        <button
-          onClick={() => setAnnouncementsFilter("mine")}
-          className={`flex items-center justify-center gap-1.5 px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-all ${
-            announcementsFilter === "mine"
-            ? "bg-blue-600 text-white shadow-inner"
-            : "text-(--t2) hover:text-(--t1)"
-          }`}
-        >
-          <UserIcon size={10} />
-          {locale === "ua" ? "Мої події" : locale === "en" ? "My events" : "Мои события"}
-        </button>
-      </div>
       {isAdmin && (
         <button
         onClick={() => { setEditAnnouncement(undefined); setModalOpen(true); }}
@@ -1271,7 +1262,6 @@ export default function DashboardPage() {
 
       {/* ── Current tournament/round section ── */}
       <section ref={el => { revealRefs.current[2] = el; }} className="cdIn opacity-0 rounded-2xl sm:rounded-[2.5rem] overflow-hidden relative bg-(--card) border border-(--brd) shadow-xl">
-      <div className="absolute -right-12 -top-12 w-40 h-40 rounded-full blur-3xl opacity-10 bg-blue-600 pointer-events-none" />
 
       {/* Dark section header */}
       <SectionHeader
@@ -1408,9 +1398,14 @@ export default function DashboardPage() {
       </section>
 
       </div>
-      {/* right column: EventCalendar */}
-      <div className="w-full xl:sticky xl:top-6 xl:w-72 xl:flex-shrink-0">
+      {/* right column: EventCalendar + Leaderboard */}
+      <div className="w-full xl:sticky xl:top-6 xl:w-72 xl:flex-shrink-0 flex flex-col gap-4">
       <EventCalendar extraEvents={announcementCalendarEvents} eventsFilter={calendarFilter} onEventsFilterChange={setCalendarFilter} />
+      <TournamentLeaderboard
+      tournamentId={activeTournamentId}
+      tournamentName={activeTournamentName}
+      locale={locale}
+      />
       </div>
       </div>
       </div>

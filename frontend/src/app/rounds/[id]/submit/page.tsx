@@ -10,13 +10,14 @@ import { useTheme } from "@/hooks/useTheme";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import {
-    Clock, Calendar, ChevronLeft, Upload,
+    ChevronLeft, Upload,
     Github, Youtube, Globe, Link2,
     FileText, AlertCircle, CheckCircle2, Loader2,
     X, Paperclip, Flag, File, Film,
     Image as ImageIcon, Archive, FileCode, Send, BookOpen, Trash2,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import { Deadline } from "@/components/Deadline";
 
 const API_URL =
 typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -32,25 +33,7 @@ function fmtDate(iso?: string) {
         hour: "2-digit", minute: "2-digit" });
 }
 
-function useCountdown(endAt?: string) {
-    const [time, setTime] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
-    useEffect(() => {
-        if (!endAt) return;
-        const tick = () => {
-            const diff = Math.max(0, new Date(endAt).getTime() - Date.now());
-            setTime({
-                days: Math.floor(diff / 86400000),
-                    hours: Math.floor((diff % 86400000) / 3600000),
-                    minutes: Math.floor((diff % 3600000) / 60000),
-                    seconds: Math.floor((diff % 60000) / 1000),
-            });
-        };
-        tick();
-        const id = setInterval(tick, 1000);
-        return () => clearInterval(id);
-    }, [endAt]);
-    return time;
-}
+
 
 function getFileType(name: string): "image" | "video" | "pdf" | "archive" | "code" | "other" {
     const ext = (name.split(".").pop() ?? "").toLowerCase();
@@ -86,19 +69,7 @@ function SectionLabel({ icon, children }: { icon: React.ReactNode; children: Rea
     );
 }
 
-function TimeBlock({ value, label, urgent }: { value: number; label: string; urgent?: boolean }) {
-    return (
-        <div className="flex flex-col items-center gap-1.5 flex-1">
-        <div className={`w-full py-4 rounded-2xl border flex items-center justify-center ${urgent ? "bg-red-500/10 border-red-500/25" : "bg-(--bg) border-(--brd)"}`}>
-        <span className={`text-3xl font-black tabular-nums ${urgent ? "text-red-500" : "text-(--t1)"}`}
-        style={{ fontVariantNumeric: "tabular-nums" }}>
-        {String(value).padStart(2, "0")}
-        </span>
-        </div>
-        <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">{label}</span>
-        </div>
-    );
-}
+
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
     return (
@@ -160,7 +131,7 @@ interface ExistingSubmission {
 export default function SubmitPage() {
     const params = useParams();
     const { mobileOpen: isMobileSidebarOpen, openMobile, closeMobile: closeMobileSidebar } = useSidebar();
-  const router = useRouter();
+    const router = useRouter();
     const { user, token, isLoading: authLoading } = useAuth();
     const { dark } = useTheme();
     const id = params?.id as string;
@@ -183,7 +154,6 @@ export default function SubmitPage() {
     const [isDragging, setIsDragging] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const countdown = useCountdown(round?.end_at);
 
     /* ── fetch round ── */
     const fetchRound = async () => {
@@ -387,21 +357,6 @@ export default function SubmitPage() {
                     setSubmitting(false);
                 }
             };
-
-            /* ── deadline progress ── */
-            const now = Date.now();
-            const endTs = round?.end_at ? new Date(round.end_at).getTime() : 0;
-            let progressPct = 0;
-            if (endTs > 0) {
-                if (round?.start_at) {
-                    const startTs = new Date(round.start_at).getTime();
-                    if (endTs > startTs)
-                        progressPct = Math.min(100, Math.max(0, ((now - startTs) / (endTs - startTs)) * 100));
-                } else {
-                    progressPct = now >= endTs ? 100 : 0;
-                }
-            }
-            const isUrgent = progressPct > 80;
 
             const isDraftLocked = existingSubmission?.status === "closed" || existingSubmission?.status === "reviewed";
             const isAlreadySubmitted = existingSubmission && !existingSubmission.is_draft;
@@ -657,52 +612,14 @@ export default function SubmitPage() {
                 <div className="flex flex-col gap-4">
 
                 {/* deadline countdown */}
-                <Card>
-                <SectionLabel icon={<Clock size={13} />}>Дедлайн до {fmtDate(round.end_at)}</SectionLabel>
-                <div className="flex items-end gap-2 mb-5">
-                <TimeBlock value={countdown.days} label="днів" urgent={isUrgent} />
-                <span className="text-2xl font-black text-(--t2) mb-6 flex-shrink-0">:</span>
-                <TimeBlock value={countdown.hours} label="год" urgent={isUrgent} />
-                <span className="text-2xl font-black text-(--t2) mb-6 flex-shrink-0">:</span>
-                <TimeBlock value={countdown.minutes} label="хв" urgent={isUrgent} />
-                <span className="text-2xl font-black text-(--t2) mb-6 flex-shrink-0">:</span>
-                <TimeBlock value={countdown.seconds} label="сек" urgent={isUrgent} />
-                </div>
-                {endTs > 0 && (
-                    <>
-                    <div className="relative h-2 rounded-full bg-(--brd) overflow-hidden mb-1">
-                    <div
-                    className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000"
-                    style={{
-                        width: `${progressPct}%`,
-                        background: isUrgent
-                        ? "linear-gradient(90deg,#f97316,#ef4444)"
-                        : "linear-gradient(90deg,#2563eb,#1d4ed8)",
-                               minWidth: progressPct > 0 ? 8 : 0,
-                    }}
+                {round.end_at && (
+                    <Deadline
+                    endAt={round.end_at}
+                    startAt={round.start_at}
+                    activeLabel="До дедлайну здачі"
+                    endedLabel="Дедлайн здачі минув"
                     />
-                    {progressPct > 0 && progressPct < 100 && (
-                        <div
-                        className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-(--card) transition-all duration-1000"
-                        style={{
-                            left: `calc(${progressPct}% - 8px)`,
-                                                              background: isUrgent ? "#ef4444" : "#2563eb",
-                                                              boxShadow: `0 0 0 3px ${isUrgent ? "rgba(239,68,68,0.25)" : "rgba(37,99,235,0.25)"}`,
-                        }}
-                        />
-                    )}
-                    </div>
-                    <div className="flex items-center justify-between">
-                    <span className="text-xs text-(--t2) font-bold flex items-center gap-1.5">
-                    <Calendar size={12} /> {round.start_at ? fmtDate(round.start_at) : "Старт не вказано"}
-                    </span>
-                    <span className="text-xs text-(--t2) font-bold flex items-center gap-1.5">
-                    {fmtDate(round.end_at)} <Calendar size={12} />
-                    </span>
-                    </div>
-                    </>
                 )}
-                </Card>
 
                 {/* links */}
                 <Card>
