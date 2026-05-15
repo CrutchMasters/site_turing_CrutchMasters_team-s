@@ -825,14 +825,13 @@ def get_caller(token: str) -> dict:
 
 def send_notification_email(to_email: str, title: str, message: str, notif_type: str = "notification", accept_url: str = ""):
     """
-    Відправляє email через Gmail SMTP.
+    Відправляє email через Gmail SMTP у фоновому daemon-треді.
+    Ніколи не блокує event loop FastAPI або планувальник APScheduler.
     Потребує GMAIL_USER і GMAIL_APP_PASSWORD у .env (App Password, не звичайний пароль!).
     """
-    import smtplib
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
-    from datetime import datetime, timezone as _tz
+    import threading as _email_threading
 
+    # Захоплюємо всі змінні до запуску треду (env читається в основному треді)
     gmail_user     = os.getenv("GMAIL_USER", "").strip()
     gmail_password = os.getenv("GMAIL_APP_PASSWORD", "").strip()
 
@@ -845,34 +844,40 @@ def send_notification_email(to_email: str, title: str, message: str, notif_type:
         )
         return
 
-    # Читабельні назви типів для badge
-    _badge_labels: dict[str, str] = {
-        "team_invitation":         "Запрошення до команди",
-        "invitation_accepted":     "Запрошення прийнято",
-        "invitation_declined":     "Запрошення відхилено",
-        "kicked_from_team":        "Виключено з команди",
-        "tournament_registered":   "Реєстрація на турнір",
-        "tournament_unregistered": "Знято з турніру",
-        "tournament_start":        "Старт турніру",
-        "deadline_24h":            "Дедлайн через 24 год",
-        "evaluation_received":     "Нова оцінка",
-        "jury_invitation":         "Запрошення журі",
-        "jury_invitation_accepted":"Журі прийняв запрошення",
-        "jury_invitation_declined":"Журі відхилив запрошення",
-        "score_updated":           "Оцінку оновлено",
-        "notification":            "Сповіщення",
-    }
-    badge_label = _badge_labels.get(notif_type, notif_type.replace("_", " ").title())
+    def _do_send():
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from datetime import datetime, timezone as _tz
 
-    # Текст та стиль кнопки залежно від типу
-    if "invitation" in notif_type and accept_url:
-        btn_text = "✓ Прийняти запрошення"
-    else:
-        btn_text = "Перейти на платформу"
+        # Читабельні назви типів для badge
+        _badge_labels: dict[str, str] = {
+            "team_invitation":         "Запрошення до команди",
+            "invitation_accepted":     "Запрошення прийнято",
+            "invitation_declined":     "Запрошення відхилено",
+            "kicked_from_team":        "Виключено з команди",
+            "tournament_registered":   "Реєстрація на турнір",
+            "tournament_unregistered": "Знято з турніру",
+            "tournament_start":        "Старт турніру",
+            "deadline_24h":            "Дедлайн через 24 год",
+            "evaluation_received":     "Нова оцінка",
+            "jury_invitation":         "Запрошення журі",
+            "jury_invitation_accepted":"Журі прийняв запрошення",
+            "jury_invitation_declined":"Журі відхилив запрошення",
+            "score_updated":           "Оцінку оновлено",
+            "notification":            "Сповіщення",
+        }
+        badge_label = _badge_labels.get(notif_type, notif_type.replace("_", " ").title())
 
-    date_str = datetime.now(_tz.utc).strftime("%d.%m.%Y %H:%M")
+        # Текст та стиль кнопки залежно від типу
+        if "invitation" in notif_type and accept_url:
+            btn_text = "✓ Прийняти запрошення"
+        else:
+            btn_text = "Перейти на платформу"
 
-    html = f"""<!DOCTYPE html>
+        date_str = datetime.now(_tz.utc).strftime("%d.%m.%Y %H:%M")
+
+        html = f"""<!DOCTYPE html>
 <html lang="uk">
 <head>
   <meta charset="UTF-8">
@@ -914,27 +919,29 @@ def send_notification_email(to_email: str, title: str, message: str, notif_type:
 </body>
 </html>"""
 
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = title
-        msg["From"]    = f"CrutchMasters <{gmail_user}>"
-        msg["To"]      = to_email
-        msg.attach(MIMEText(html, "html", "utf-8"))
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = title
+            msg["From"]    = f"CrutchMasters <{gmail_user}>"
+            msg["To"]      = to_email
+            msg.attach(MIMEText(html, "html", "utf-8"))
 
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(gmail_user, gmail_password)
-            server.sendmail(gmail_user, to_email, msg.as_string())
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                server.login(gmail_user, gmail_password)
+                server.sendmail(gmail_user, to_email, msg.as_string())
 
-        print(f"[EMAIL] ✅ Відправлено → {to_email} | {notif_type} | {title}", flush=True)
-    except smtplib.SMTPAuthenticationError:
-        print(
-            f"[EMAIL] ❌ SMTPAuthenticationError — перевір GMAIL_APP_PASSWORD. "
-            f"Потрібен 'App Password' (myaccount.google.com/apppasswords), "
-            f"не звичайний пароль від Gmail. Також увімкни 2FA на акаунті.",
-            flush=True,
-        )
-    except Exception as e:
-        print(f"[EMAIL] ❌ Помилка відправки → {to_email}: {e}", flush=True)
+            print(f"[EMAIL] ✅ Відправлено → {to_email} | {notif_type} | {title}", flush=True)
+        except smtplib.SMTPAuthenticationError:
+            print(
+                f"[EMAIL] ❌ SMTPAuthenticationError — перевір GMAIL_APP_PASSWORD. "
+                f"Потрібен 'App Password' (myaccount.google.com/apppasswords), "
+                f"не звичайний пароль від Gmail. Також увімкни 2FA на акаунті.",
+                flush=True,
+            )
+        except Exception as e:
+            print(f"[EMAIL] ❌ Помилка відправки → {to_email}: {e}", flush=True)
+
+    _email_threading.Thread(target=_do_send, daemon=True).start()
 
 
 def _get_user_email(user_id: str) -> str | None:
