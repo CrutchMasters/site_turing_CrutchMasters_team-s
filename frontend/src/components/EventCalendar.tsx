@@ -222,9 +222,6 @@ export default function EventCalendar({ extraEvents = [], eventsFilter = "all", 
     <div className="relative flex items-center justify-between rounded-2xl border border-(--brd) bg-(--bg) px-2 py-1.5 overflow-hidden">
     {/* Градиентный фон */}
     <div className="absolute inset-0 bg-gradient-to-r from-blue-600/5 via-transparent to-blue-600/5 pointer-events-none" />
-    {/* Боковые акцентные полосы */}
-    <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-2xl bg-gradient-to-b from-blue-600/0 via-blue-600/50 to-blue-600/0 pointer-events-none" />
-    <div className="absolute right-0 top-0 bottom-0 w-[3px] rounded-r-2xl bg-gradient-to-b from-blue-600/0 via-blue-600/50 to-blue-600/0 pointer-events-none" />
 
     <button onClick={prevMonth} className="relative z-10 p-1.5 rounded-xl text-(--t2) hover:bg-blue-600/10 hover:text-blue-600 transition-colors">
     <ChevronLeft size={15} />
