@@ -657,7 +657,9 @@ export default function RoundPage() {
             {/* Дедлайн — вище панелі дій */}
             <Card>
             <SectionLabel icon={<Clock size={13} />}>
-            Дедлайн {isEnded ? "(завершено)" : `до ${fmtDate(round.end_at)}`}
+            {isJury
+                ? (isEnded ? "Час на перевірку (активний)" : `Подачі до ${fmtDate(round.end_at)}`)
+                : (isEnded ? "Дедлайн (завершено)" : `Дедлайн до ${fmtDate(round.end_at)}`)}
             </SectionLabel>
 
             <div className="flex items-end gap-2 mb-5">

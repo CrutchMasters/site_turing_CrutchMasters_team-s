@@ -373,8 +373,8 @@ function EditProfileSection({ profileUser, onSave, onCancel, onModalChange, t }:
     <KeyRound size={13} className="text-blue-600" />
     </div>
     <p className="text-xs font-black uppercase tracking-widest text-(--t1)">{t.profile.changePassword}</p>
-    </div>\n    <div className="p-5 space-y-3">
-    <p className="text-xs font-medium text-(--t2)">
+    </div>
+    <div className="p-5 space-y-3">    <p className="text-xs font-medium text-(--t2)">
     {t.profile.pwSendHint}{" "}
     <span className="font-black text-(--t1)">{profileUser.email}</span>
     </p>
