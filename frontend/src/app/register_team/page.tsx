@@ -354,7 +354,6 @@ export default function RegisterTeamPage() {
 
   const [teamAvatarUrl, setTeamAvatarUrl] = useState<string | null>(null);
   const [showAvatarModal, setShowAvatarModal] = useState(false);
-  const [avatarTempTeamId, setAvatarTempTeamId] = useState<string | null>(null);
 
   // ── Redirect restricted roles ──
   const isRestricted = user && RESTRICTED_ROLES.includes(user.role);
@@ -466,13 +465,10 @@ export default function RegisterTeamPage() {
 
           if (teamAvatarUrl) {
             await supabase.from("teams").update({ avatar_url: teamAvatarUrl }).eq("id", teamId);
-            setSubmitted(true);
-            setTimeout(() => router.push("/teams"), 2000);
-          } else {
-            setAvatarTempTeamId(teamId);
-            setShowAvatarModal(true);
-            setSubmitting(false);
           }
+
+          setSubmitted(true);
+          setTimeout(() => router.push("/teams"), 2000);
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : "Невідома помилка";
           setSubmitError(`Помилка збереження: ${msg}`);
@@ -801,26 +797,7 @@ export default function RegisterTeamPage() {
             />
           )}
 
-          {/* Avatar editor - post-creation */}
-          {showAvatarModal && avatarTempTeamId && (
-            <AvatarEditorModal
-            userId={avatarTempTeamId}
-            supabase={supabase}
-            tableConfig={{ table: "teams", idColumn: "id" }}
-            onSave={async () => {
-              setShowAvatarModal(false);
-              clearDraft();
-              setSubmitted(true);
-              setTimeout(() => router.push("/teams"), 2000);
-            }}
-            onClose={() => {
-              setShowAvatarModal(false);
-              clearDraft();
-              setSubmitted(true);
-              setTimeout(() => router.push("/teams"), 2000);
-            }}
-            />
-          )}
+
           </div>
       );
 }
