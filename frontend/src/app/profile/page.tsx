@@ -1281,7 +1281,9 @@ export default function ProfilePage() {
       </main>
 
       {showAvatarEditor && profileUser && (
-        <AvatarEditorModal userId={profileUser.id} supabase={supabase}
+        <AvatarEditorModal userId={profileUser.id}
+        apiUrl={API_URL}
+        uploadType="user"
         onSave={(url) => setProfileUser((prev: any) => ({ ...prev, avatar_url: url }))}
         onClose={() => setShowAvatarEditor(false)} />
       )}

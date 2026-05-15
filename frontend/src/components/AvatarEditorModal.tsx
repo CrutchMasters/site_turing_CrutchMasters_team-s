@@ -1,27 +1,21 @@
 "use client";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { X, Loader } from "lucide-react";
-import { authedSupabase } from "@/lib/supabase";
-
-interface TableConfig {
-    table: string;
-    idColumn: string;
-}
 
 interface Props {
     userId: string;
     onSave: (url: string) => void;
     onClose: () => void;
-    supabase: any;
     token?: string | null;
-    // Какую таблицу обновлять: по умолчанию "account" / "id"
-    // Для команд передавай: tableConfig={{ table: "teams", idColumn: "id" }}
-    tableConfig?: TableConfig;
-    // Если true — только загружает в Storage, НЕ обновляет БД (для pre-creation аватаров)
-    skipDbUpdate?: boolean;
+    apiUrl: string;
+    // "user"    → POST /api/upload/user-avatar
+    // "team"    → POST /api/upload/team-avatar  (requires teamId)
+    // "preview" → POST /api/upload/avatar-preview (storage only, no DB update)
+    uploadType?: "user" | "team" | "preview";
+    teamId?: string;
 }
 
-export default function AvatarEditorModal({ userId, onSave, onClose, supabase, token, tableConfig, skipDbUpdate }: Props) {
+export default function AvatarEditorModal({ userId, onSave, onClose, token, apiUrl, uploadType = "user", teamId }: Props) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [img, setImg] = useState<HTMLImageElement | null>(null);
     const [scale, setScale] = useState(100);
@@ -29,10 +23,6 @@ export default function AvatarEditorModal({ userId, onSave, onClose, supabase, t
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [uploading, setUploading] = useState(false);
     const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
-
-    // Резолвим таблицу и колонку — берём из пропса или дефолт "account"/"id"
-    const dbTable   = tableConfig?.table    ?? "account";
-    const dbIdCol   = tableConfig?.idColumn ?? "id";
 
     const SIZE = 260;
 
@@ -84,53 +74,41 @@ export default function AvatarEditorModal({ userId, onSave, onClose, supabase, t
         if (!canvas) return;
         setUploading(true);
         try {
-            const blob: Blob = await new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error("Canvas is empty")), "image/webp", 0.85));
-            const timestamp = Date.now();
-            const path = `${userId}/avatar_${timestamp}.webp`;
+            const blob: Blob = await new Promise((res, rej) =>
+                canvas.toBlob(b => b ? res(b) : rej(new Error("Canvas is empty")), "image/webp", 0.85)
+            );
 
-            // Используем authed-клиент чтобы запросы проходили через RLS
-            const client = await authedSupabase(token);
+            const activeToken = token ?? (typeof window !== "undefined" ? localStorage.getItem("access_token") : null);
+            if (!activeToken) throw new Error("Не авторизовано");
 
-            // 1. Загружаем новый файл в bucket
-            const { error: uploadError } = await client.storage
-            .from("avatars")
-            .upload(path, blob, { contentType: "image/webp" });
+            const formData = new FormData();
+            formData.append("file", blob, "avatar.webp");
 
-            if (uploadError) throw uploadError;
-
-            const { data: urlData } = client.storage.from("avatars").getPublicUrl(path);
-            const finalUrl = `${urlData.publicUrl}?v=${timestamp}`;
-
-            if (!skipDbUpdate) {
-                // 2. Получаем старый avatar_url из нужной таблицы (account ИЛИ teams)
-                const { data: existingRow } = await client
-                .from(dbTable)
-                .select("avatar_url")
-                .eq(dbIdCol, userId)
-                .maybeSingle();
-
-                // 3. Обновляем avatar_url в нужной таблице
-                const { error: updateError } = await client
-                .from(dbTable)
-                .update({ avatar_url: finalUrl })
-                .eq(dbIdCol, userId);
-
-                if (updateError) throw updateError;
-
-                // 4. Удаляем старый файл из storage если был
-                if (existingRow?.avatar_url) {
-                    try {
-                        const url = new URL(existingRow.avatar_url);
-                        const pathParts = url.pathname.split("/object/public/avatars/");
-                        if (pathParts[1]) {
-                            const oldPath = pathParts[1].split("?")[0];
-                            await client.storage.from("avatars").remove([oldPath]);
-                        }
-                    } catch { /* игнорируем ошибку удаления старого файла */ }
-                }
+            let endpoint: string;
+            if (uploadType === "team") {
+                if (!teamId) throw new Error("teamId is required for team avatar upload");
+                formData.append("team_id", teamId);
+                endpoint = `${apiUrl}/api/upload/team-avatar`;
+            } else if (uploadType === "preview") {
+                formData.append("preview_id", userId);
+                endpoint = `${apiUrl}/api/upload/avatar-preview`;
+            } else {
+                endpoint = `${apiUrl}/api/upload/user-avatar`;
             }
 
-            onSave(finalUrl);
+            const res = await fetch(endpoint, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${activeToken}` },
+                body: formData,
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ detail: res.statusText }));
+                throw new Error(err.detail ?? "Upload failed");
+            }
+
+            const { url } = await res.json();
+            onSave(url);
             onClose();
         } catch (err: any) {
             console.error("Avatar upload error:", err);

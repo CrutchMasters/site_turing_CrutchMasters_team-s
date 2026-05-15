@@ -796,8 +796,9 @@ export default function EditTeamPage() {
         {showAvatarModal && team && (
             <AvatarEditorModal
             userId={team.id}
-            supabase={supabase}
-            tableConfig={{ table: "teams", idColumn: "id" }}
+            apiUrl={API_URL}
+            uploadType="team"
+            teamId={team.id}
             onSave={(url) => { setTeamAvatarUrl(url); setShowAvatarModal(false); }}
             onClose={() => setShowAvatarModal(false)}
             />
