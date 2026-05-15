@@ -13,6 +13,8 @@ import MobileHeader from "@/components/MobileHeader";
 import RoundSettingsPanel, { type RoundData, type Criterion, validateRoundsData } from "@/components/RoundSettingsPanel";
 import TournamentTimeline, { type RoundSlice } from "@/components/TournamentTimeline";
 import JuryInvitePanel from "@/components/JuryInvitePanel";
+import RoundJuryEmailInvitePanel from "@/components/RoundJuryEmailInvitePanel";
+import TournamentJuryEmailInvitePanel from "@/components/TournamentJuryEmailInvitePanel";
 import { DatePicker, TimePicker } from "@/components/DateTimePicker";
 import {
     Trophy, ChevronRight, Save, AlertCircle,
@@ -1131,6 +1133,11 @@ export default function TournamentEditPage() {
                 <JuryInvitePanel tournamentId={id as string} tournamentName={name} onRemoveJury={handleRemoveJury} />
                 </div>
 
+                {/* Tournament-level email invites on xl+ */}
+                <div className="hidden xl:block cdIn" style={{ animationDelay: "170ms" }}>
+                <TournamentJuryEmailInvitePanel tournamentId={id as string} tournamentName={name} />
+                </div>
+
                 {/* Зведена плашка помилок */}
                 {Object.entries(fieldErrors).filter(([k]) => k !== "general").length > 0 && (
                     <div className="flex flex-col gap-2 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl">
@@ -1320,6 +1327,24 @@ export default function TournamentEditPage() {
                 initialData={initialRoundsData}
                 externalData={externalRoundDates}
                 />
+
+                {/* Запрошення журі до конкретного раунду (зареєстровані + по email) */}
+                {roundMeta[selectedRoundTab]?.id && (
+                    <JuryInvitePanel
+                        tournamentId={id as string}
+                        tournamentName={name}
+                        roundId={roundMeta[selectedRoundTab].id}
+                        roundNumber={selectedRoundTab}
+                        roundName={roundsData?.[selectedRoundTab]?.name}
+                    />
+                )}
+                {roundMeta[selectedRoundTab]?.id && (
+                    <RoundJuryEmailInvitePanel
+                        roundId={roundMeta[selectedRoundTab].id}
+                        roundNumber={selectedRoundTab}
+                        roundName={roundsData?.[selectedRoundTab]?.name}
+                    />
+                )}
                 </div>
                 {/* end RIGHT COLUMN */}
 
@@ -1330,6 +1355,7 @@ export default function TournamentEditPage() {
                  * ════════════════════════════════════════ */}
                 <div className={`w-full xl:hidden flex flex-col gap-4 ${mobileTab !== 'jury' ? 'hidden' : ''}`}>
                 <JuryInvitePanel tournamentId={id as string} tournamentName={name} onRemoveJury={handleRemoveJury} />
+                <TournamentJuryEmailInvitePanel tournamentId={id as string} tournamentName={name} />
                 </div>
 
             </div>

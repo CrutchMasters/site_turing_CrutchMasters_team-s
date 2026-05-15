@@ -119,7 +119,8 @@ def fetch_one(query) -> dict | None:
         if result and result.data:
             return result.data[0]
         return None
-    except Exception:
+    except Exception as _fe:
+        print(f"[fetch_one] ERROR: {_fe}", flush=True)
         return None
 
 
@@ -438,6 +439,7 @@ def ensure_buckets():
 ensure_buckets()
 
 app = FastAPI()
+print("[STARTUP] main.py v2-scope loaded — jury-invitations/send EXISTS", flush=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # AUTO STATUS UPDATER
@@ -1914,6 +1916,7 @@ async def create_tournament_rounds(
                 .select("jury_id") \
                 .eq("tournament_id", tournament_id) \
                 .eq("status", "accepted") \
+                .eq("scope", "tournament") \
                 .execute()
 
             for jury_row in (accepted_jury.data or []):
@@ -2036,10 +2039,19 @@ async def send_invitation(payload: SendInvitation, authorization: str = Header(.
 class SendJuryInvitation(BaseModel):
     jury_id:       str
     tournament_id: str
+    round_id:      str | None = None  # якщо None — запрошення на весь турнір (scope='tournament')
 
 class RespondJuryInvitation(BaseModel):
     invitation_id: str
     accept: bool
+
+class SendRoundJuryEmailInvitation(BaseModel):
+    email:      str
+    round_id:   str
+
+
+class SendTournamentJuryEmailInvitation(BaseModel):
+    email: str
 
 
 @app.post("/api/jury-invitations/send")
@@ -2060,8 +2072,6 @@ async def send_jury_invitation(payload: SendJuryInvitation, authorization: str =
     )
     if not tournament:
         raise HTTPException(status_code=404, detail="Турнір не знайдено")
-    if caller.get("role") not in ("admin", "superadmin") and tournament.get("created_by") != caller["id"]:
-        raise HTTPException(status_code=403, detail="Ви не є власником цього турніру")
 
     jury_user = fetch_one(
         supabase.table("account")
@@ -2073,70 +2083,493 @@ async def send_jury_invitation(payload: SendJuryInvitation, authorization: str =
     if jury_user.get("role") != "jury":
         raise HTTPException(status_code=400, detail="Користувач не має ролі журі")
 
-    existing = supabase.table("jury_tournament_invitations") \
-        .select("id, status") \
+    # Визначаємо scope: якщо round_id передано — запрошення на конкретний раунд
+    scope    = "round" if payload.round_id else "tournament"
+    round_id = payload.round_id
+
+    round_info = None
+    if scope == "round":
+        print(f"[JURY-INVITE] Перевірка раунду: round_id={round_id!r} tournament_id={payload.tournament_id!r}", flush=True)
+        round_info = fetch_one(
+            supabase.table("rounds")
+                .select("id, name, number")
+                .eq("id", round_id)
+                .eq("tournament_id", payload.tournament_id)
+        )
+        print(f"[JURY-INVITE] round_info={round_info!r}", flush=True)
+        if not round_info:
+            # Спробуємо знайти раунд без фільтра tournament_id щоб зрозуміти проблему
+            round_exists = fetch_one(supabase.table("rounds").select("id, tournament_id").eq("id", round_id))
+            print(f"[JURY-INVITE] round_exists (без tournament filter)={round_exists!r}", flush=True)
+            raise HTTPException(status_code=404, detail="Раунд не знайдено або не належить цьому турніру")
+
+    # Перевіряємо чи вже є запрошення з таким самим scope
+    q = supabase.table("jury_tournament_invitations") \
+        .select("id, status, scope") \
         .eq("tournament_id", payload.tournament_id) \
         .eq("jury_id", payload.jury_id) \
-        .execute()
+        .eq("scope", scope)
+    if scope == "round":
+        q = q.eq("round_id", round_id)
+    else:
+        q = q.eq("scope", "tournament")  # scope=tournament means round_id IS NULL
+    existing = q.execute()
 
     if existing.data:
         rec = existing.data[0]
         if rec["status"] == "pending":
             raise HTTPException(status_code=400, detail="Запрошення вже відправлено і очікує відповіді")
         if rec["status"] == "accepted":
-            raise HTTPException(status_code=400, detail="Це журі вже є учасником оцінювання даного турніру")
-        # status is "removed" or "declined" — reuse the existing record
+            raise HTTPException(status_code=400, detail="Це журі вже має доступ до цього " + ("раунду" if scope == "round" else "турніру"))
         inv_res = supabase.table("jury_tournament_invitations") \
-            .update({
-                "status":     "pending",
-                "inviter_id": caller["id"],
-            }) \
+            .update({"status": "pending", "inviter_id": caller["id"]}) \
             .eq("id", rec["id"]) \
             .execute()
         if not inv_res.data:
             raise HTTPException(status_code=500, detail="Не вдалося оновити запрошення")
         invitation_id = rec["id"]
     else:
-        inv_res = supabase.table("jury_tournament_invitations").insert({
+        insert_data: dict = {
             "tournament_id": payload.tournament_id,
             "jury_id":       payload.jury_id,
             "inviter_id":    caller["id"],
             "status":        "pending",
-        }).execute()
+            "scope":         scope,
+        }
+        if scope == "round":
+            insert_data["round_id"] = round_id
+        inv_res = supabase.table("jury_tournament_invitations").insert(insert_data).execute()
         if not inv_res.data:
             raise HTTPException(status_code=500, detail="Не вдалося створити запрошення")
         invitation_id = inv_res.data[0]["id"]
 
-    _notif_title   = f"Запрошення до журі турніру «{tournament['name']}»"
-    _notif_message = (
-        f"Адміністратор {caller['username']} запрошує вас взяти участь "
-        f"в оцінюванні робіт турніру «{tournament['name']}»."
-    )
+    if scope == "round" and round_info:
+        round_label = round_info.get("name") or f"Раунд {round_info.get('number', '')}"
+        _notif_title   = f"Запрошення журі до {round_label} турніру \u00ab{tournament['name']}\u00bb"
+        _notif_message = (
+            f"Адміністратор {caller['username']} запрошує вас оцінювати роботи "
+            f"у {round_label} турніру \u00ab{tournament['name']}\u00bb."
+        )
+    else:
+        _notif_title   = f"Запрошення до журі турніру \u00ab{tournament['name']}\u00bb"
+        _notif_message = (
+            f"Адміністратор {caller['username']} запрошує вас взяти участь "
+            f"в оцінюванні робіт турніру \u00ab{tournament['name']}\u00bb."
+        )
+
+    meta: dict = {
+        "invitation_id":   invitation_id,
+        "tournament_id":   payload.tournament_id,
+        "tournament_name": tournament["name"],
+        "inviter_id":      caller["id"],
+        "inviter_name":    caller["username"],
+        "scope":           scope,
+    }
+    if scope == "round":
+        meta["round_id"] = round_id
+
     supabase.table("notifications").insert({
         "user_id": payload.jury_id,
         "type":    "jury_invitation",
         "title":   _notif_title,
         "message": _notif_message,
-        "meta": {
-            "invitation_id":  invitation_id,
-            "tournament_id":  payload.tournament_id,
-            "tournament_name": tournament["name"],
-            "inviter_id":     caller["id"],
-            "inviter_name":   caller["username"],
-        },
-        "read": False,
+        "meta":    meta,
+        "read":    False,
     }).execute()
-    _jury_email = _get_user_email(payload.jury_id)
-    if _jury_email:
+
+    _jury_email_checked = _get_user_email(payload.jury_id)
+    if _jury_email_checked:
         _token = _create_invitation_token(invitation_id, "jury_invitation")
         _api_url = os.getenv("API_URL", "http://localhost:8000")
         _accept_url = f"{_api_url}/api/invitations/accept-by-token?token={_token}" if _token else ""
-        _jury_email_checked = _get_user_email(payload.jury_id)  # перевіряє email_notifications
-        if _jury_email_checked:
-            send_notification_email(_jury_email_checked, _notif_title, _notif_message, "jury_invitation", _accept_url)
+        send_notification_email(_jury_email_checked, _notif_title, _notif_message, "jury_invitation", _accept_url)
 
-    print(f"[JURY-INVITE] {caller['username']} → {jury_user['username']} для турніру {tournament['name']}", flush=True)
-    return {"success": True, "invitation_id": invitation_id}
+    print(f"[JURY-INVITE] {caller['username']} -> {jury_user['username']} scope={scope} tournament={tournament['name']}", flush=True)
+    return {"success": True, "invitation_id": invitation_id, "scope": scope}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Запрошення НЕЗАРЕЄСТРОВАНОГО журі по email на конкретний раунд
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.post("/api/rounds/{round_id}/invite-by-email")
+async def invite_jury_by_email(round_id: str, payload: SendRoundJuryEmailInvitation, authorization: str = Header(...)):
+    """
+    Адмін запрошує людину, якої ще немає на платформі, бути журі для конкретного раунду.
+    Надсилає email з унікальним посиланням на спеціальну реєстраційну сторінку.
+    Email в формі буде заблокований, роль 'jury' видається автоматично,
+    а після реєстрації одразу додається jury_assignment для цього раунду.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+    if caller.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки адміністратор може запрошувати журі")
+
+    import re as _re
+    email = payload.email.strip().lower()
+    if not _re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        raise HTTPException(status_code=400, detail="Невірний формат email")
+
+    # Перевіряємо — чи вже зареєстровано цей email
+    existing_account = fetch_one(
+        supabase.table("account").select("id, role").eq("email", email)
+    )
+    if existing_account:
+        raise HTTPException(
+            status_code=400,
+            detail="Користувач з таким email вже зареєстрований. Запросіть його через панель журі турніру."
+        )
+
+    # Отримуємо раунд + турнір
+    rnd = fetch_one(
+        supabase.table("rounds")
+            .select("id, number, name, tournament_id")
+            .eq("id", round_id)
+    )
+    if not rnd:
+        raise HTTPException(status_code=404, detail="Раунд не знайдено")
+
+    tournament = fetch_one(
+        supabase.table("tournaments")
+            .select("id, name")
+            .eq("id", rnd["tournament_id"])
+    )
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Турнір не знайдено")
+
+    # Перевіряємо — чи вже є активне запрошення для цього email + раунду
+    existing_inv = supabase.table("jury_round_email_invitations") \
+        .select("id, status, expires_at") \
+        .eq("round_id", round_id) \
+        .eq("invited_email", email) \
+        .eq("status", "pending") \
+        .execute()
+
+    if existing_inv.data:
+        inv_rec = existing_inv.data[0]
+        from datetime import datetime, timezone as _tz
+        expires = datetime.fromisoformat(inv_rec["expires_at"].replace("Z", "+00:00"))
+        if expires > datetime.now(_tz.utc):
+            raise HTTPException(status_code=400, detail="Активне запрошення для цього email вже існує")
+
+    # Створюємо запис запрошення (токен генерується в БД DEFAULT)
+    inv_res = supabase.table("jury_round_email_invitations").insert({
+        "round_id":      round_id,
+        "tournament_id": rnd["tournament_id"],
+        "invited_email": email,
+        "inviter_id":    caller["id"],
+    }).execute()
+
+    if not inv_res.data:
+        raise HTTPException(status_code=500, detail="Не вдалося створити запрошення")
+
+    inv = inv_res.data[0]
+    inv_token = inv["token"]
+
+    # Формуємо посилання на спеціальну сторінку реєстрації
+    _frontend_url = os.getenv("FRONTEND_URL", "https://site-turing-crutchmasters-team-s.vercel.app")
+    register_url = f"{_frontend_url}/jury-register?token={inv_token}"
+
+    round_label = rnd.get("name") or f"Раунд {rnd['number']}"
+    notif_title   = f"Запрошення до журі: {tournament['name']}"
+    notif_message = (
+        f"Адміністратор {caller['username']} запрошує вас оцінювати роботи у раунді "
+        f"«{round_label}» турніру «{tournament['name']}». "
+        f"Перейдіть за посиланням, щоб зареєструватись та приєднатись."
+    )
+
+    send_notification_email(email, notif_title, notif_message, "jury_invitation", register_url)
+    print(
+        f"[ROUND-EMAIL-INVITE] {caller['username']} → {email} "
+        f"для раунду {round_id} турніру {tournament['name']}",
+        flush=True
+    )
+    return {"success": True, "invitation_id": inv["id"]}
+
+
+@app.get("/api/jury-register/validate")
+async def validate_jury_register_token(token: str):
+    """
+    Фронтенд викликає цей ендпоінт при завантаженні сторінки /jury-register?token=...
+    Повертає email та інформацію про раунд/турнір, або помилку якщо токен невалідний/прострочений.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    inv = fetch_one(
+        supabase.table("jury_round_email_invitations")
+            .select("id, round_id, tournament_id, invited_email, status, expires_at")
+            .eq("token", token)
+    )
+    if not inv:
+        raise HTTPException(status_code=404, detail="Запрошення не знайдено або посилання недійсне")
+
+    from datetime import datetime, timezone as _tz
+    expires = datetime.fromisoformat(inv["expires_at"].replace("Z", "+00:00"))
+    if expires < datetime.now(_tz.utc):
+        supabase.table("jury_round_email_invitations") \
+            .update({"status": "expired"}) \
+            .eq("id", inv["id"]) \
+            .execute()
+        raise HTTPException(status_code=410, detail="Посилання для реєстрації закінчило термін дії")
+
+    if inv["status"] == "accepted":
+        raise HTTPException(status_code=409, detail="Це запрошення вже було використано")
+
+    if inv["status"] == "expired":
+        raise HTTPException(status_code=410, detail="Посилання для реєстрації закінчило термін дії")
+
+    rnd = fetch_one(
+        supabase.table("rounds")
+            .select("id, number, name, tournament_id")
+            .eq("id", inv["round_id"])
+    )
+    tournament = fetch_one(
+        supabase.table("tournaments")
+            .select("id, name")
+            .eq("id", inv["tournament_id"])
+    )
+
+    return {
+        "valid":          True,
+        "invitation_id":  inv["id"],
+        "email":          inv["invited_email"],
+        "round_id":       inv["round_id"],
+        "round_number":   rnd["number"] if rnd else None,
+        "round_name":     rnd.get("name") if rnd else None,
+        "tournament_id":  inv["tournament_id"],
+        "tournament_name": tournament["name"] if tournament else None,
+    }
+
+
+@app.post("/api/jury-register/complete")
+async def complete_jury_registration(token: str, authorization: str = Header(...)):
+    """
+    Викликається після успішної реєстрації через Supabase Auth.
+    Встановлює роль 'jury', позначає запрошення як 'accepted',
+    додає jury_assignment для раунду та jury_tournament_invitations.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    jwt_token = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(jwt_token)
+    caller_id = caller["id"]
+
+    inv = fetch_one(
+        supabase.table("jury_round_email_invitations")
+            .select("id, round_id, tournament_id, invited_email, status, expires_at")
+            .eq("token", token)
+    )
+    if not inv:
+        raise HTTPException(status_code=404, detail="Запрошення не знайдено")
+
+    from datetime import datetime, timezone as _tz
+    expires = datetime.fromisoformat(inv["expires_at"].replace("Z", "+00:00"))
+    if expires < datetime.now(_tz.utc):
+        raise HTTPException(status_code=410, detail="Посилання закінчило термін дії")
+
+    if inv["status"] == "accepted":
+        # Вже прийнято — просто повертаємо success (ідемпотентно)
+        return {"success": True, "already_accepted": True}
+
+    # Перевіряємо що email акаунту збігається з запрошеним
+    account = fetch_one(
+        supabase.table("account").select("id, email, role").eq("id", caller_id)
+    )
+    if not account:
+        raise HTTPException(status_code=404, detail="Акаунт не знайдено")
+
+    if account["email"].lower() != inv["invited_email"].lower():
+        raise HTTPException(
+            status_code=403,
+            detail="Email акаунту не збігається з запрошеним email"
+        )
+
+    # 1. Встановлюємо роль 'jury' якщо ще не встановлена
+    if account.get("role") != "jury":
+        supabase.table("account") \
+            .update({"role": "jury"}) \
+            .eq("id", caller_id) \
+            .execute()
+
+    # 2. jury_tournament_invitations — додаємо запис (прийнятий)
+    existing_tourn_inv = supabase.table("jury_tournament_invitations") \
+        .select("id, status") \
+        .eq("tournament_id", inv["tournament_id"]) \
+        .eq("jury_id", caller_id) \
+        .execute()
+
+    if existing_tourn_inv.data:
+        if existing_tourn_inv.data[0]["status"] != "accepted":
+            supabase.table("jury_tournament_invitations") \
+                .update({"status": "accepted"}) \
+                .eq("id", existing_tourn_inv.data[0]["id"]) \
+                .execute()
+    else:
+        supabase.table("jury_tournament_invitations").insert({
+            "tournament_id": inv["tournament_id"],
+            "jury_id":       caller_id,
+            "inviter_id":    inv["inviter_id"] if "inviter_id" in inv else caller_id,
+            "status":        "accepted",
+        }).execute()
+
+    # 3. jury_assignments — тільки для конкретного раунду
+    existing_assign = supabase.table("jury_assignments") \
+        .select("id") \
+        .eq("jury_id", caller_id) \
+        .eq("round_id", inv["round_id"]) \
+        .execute()
+
+    if not existing_assign.data:
+        supabase.table("jury_assignments").insert({
+            "jury_id":       caller_id,
+            "round_id":      inv["round_id"],
+            "tournament_id": inv["tournament_id"],
+        }).execute()
+
+    # 4. Позначаємо запрошення як прийняте
+    supabase.table("jury_round_email_invitations") \
+        .update({
+            "status":      "accepted",
+            "accepted_at": datetime.now(_tz.utc).isoformat(),
+            "accepted_by": caller_id,
+        }) \
+        .eq("id", inv["id"]) \
+        .execute()
+
+    print(
+        f"[JURY-REG-COMPLETE] {caller_id} прийняв запрошення для раунду {inv['round_id']}",
+        flush=True
+    )
+    return {"success": True, "round_id": inv["round_id"], "tournament_id": inv["tournament_id"]}
+
+
+@app.get("/api/rounds/{round_id}/email-invitations")
+async def get_round_email_invitations(round_id: str, authorization: str = Header(...)):
+    """Список email-запрошень для раунду (тільки для адміна)."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    jwt_token = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(jwt_token)
+    if caller.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки адміністратор")
+
+    res = supabase.table("jury_round_email_invitations") \
+        .select("id, invited_email, status, created_at, expires_at, accepted_at") \
+        .eq("round_id", round_id) \
+        .order("created_at", desc=True) \
+        .execute()
+
+    return {"invitations": res.data or []}
+
+
+@app.post("/api/tournaments/{tournament_id}/invite-by-email")
+async def invite_jury_by_email_tournament(
+    tournament_id: str,
+    payload: SendTournamentJuryEmailInvitation,
+    authorization: str = Header(...),
+):
+    """
+    Адмін запрошує незареєстровану людину бути журі для всього турніру.
+    Після реєстрації вона отримає jury_assignments для всіх існуючих раундів.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+    if caller.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки адміністратор може запрошувати журі")
+
+    import re as _re
+    email = payload.email.strip().lower()
+    if not _re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        raise HTTPException(status_code=400, detail="Невірний формат email")
+
+    # Перевіряємо — чи вже зареєстровано цей email
+    existing_account = fetch_one(
+        supabase.table("account").select("id, role").eq("email", email)
+    )
+    if existing_account:
+        raise HTTPException(
+            status_code=400,
+            detail="Користувач з таким email вже зареєстрований. Запросіть його через панель журі турніру."
+        )
+
+    tournament = fetch_one(
+        supabase.table("tournaments").select("id, name").eq("id", tournament_id)
+    )
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Турнір не знайдено")
+
+    # Перевіряємо — чи вже є активне pending-запрошення для цього email + турніру
+    existing_inv = supabase.table("jury_tournament_email_invitations") \
+        .select("id, status, expires_at") \
+        .eq("tournament_id", tournament_id) \
+        .eq("invited_email", email) \
+        .eq("status", "pending") \
+        .execute()
+
+    if existing_inv.data:
+        from datetime import datetime, timezone as _tz
+        expires = datetime.fromisoformat(existing_inv.data[0]["expires_at"].replace("Z", "+00:00"))
+        if expires > datetime.now(_tz.utc):
+            raise HTTPException(status_code=400, detail="Активне запрошення для цього email вже існує")
+
+    inv_res = supabase.table("jury_tournament_email_invitations").insert({
+        "tournament_id": tournament_id,
+        "invited_email": email,
+        "inviter_id":    caller["id"],
+    }).execute()
+
+    if not inv_res.data:
+        raise HTTPException(status_code=500, detail="Не вдалося створити запрошення")
+
+    inv = inv_res.data[0]
+    inv_token = inv["token"]
+
+    _frontend_url = os.getenv("FRONTEND_URL", "https://site-turing-crutchmasters-team-s.vercel.app")
+    register_url = f"{_frontend_url}/jury-register?token={inv_token}"
+
+    notif_title   = f"Запрошення до журі турніру: {tournament['name']}"
+    notif_message = (
+        f"Адміністратор {caller['username']} запрошує вас бути журі у турнірі "
+        f"«{tournament['name']}». "
+        f"Перейдіть за посиланням, щоб зареєструватись та приєднатись."
+    )
+
+    send_notification_email(email, notif_title, notif_message, "jury_invitation", register_url)
+    print(
+        f"[TOURNAMENT-EMAIL-INVITE] {caller['username']} → {email} "
+        f"для турніру {tournament['name']}",
+        flush=True
+    )
+    return {"success": True, "invitation_id": inv["id"]}
+
+
+@app.get("/api/tournaments/{tournament_id}/email-invitations")
+async def get_tournament_email_invitations(tournament_id: str, authorization: str = Header(...)):
+    """Список email-запрошень на весь турнір (тільки для адміна)."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    jwt_token = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(jwt_token)
+    if caller.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Тільки адміністратор")
+
+    res = supabase.table("jury_tournament_email_invitations") \
+        .select("id, invited_email, status, created_at, expires_at, accepted_at") \
+        .eq("tournament_id", tournament_id) \
+        .order("created_at", desc=True) \
+        .execute()
+
+    return {"invitations": res.data or []}
 
 
 @app.post("/api/jury-invitations/respond")
@@ -2152,7 +2585,7 @@ async def respond_jury_invitation(payload: RespondJuryInvitation, authorization:
 
     inv = fetch_one(
         supabase.table("jury_tournament_invitations")
-            .select("id, tournament_id, jury_id, inviter_id, status")
+            .select("id, tournament_id, jury_id, inviter_id, status, scope, round_id")
             .eq("id", payload.invitation_id)
     )
     if not inv:
@@ -2161,6 +2594,9 @@ async def respond_jury_invitation(payload: RespondJuryInvitation, authorization:
         raise HTTPException(status_code=403, detail="Це запрошення не для вас")
     if inv["status"] != "pending":
         raise HTTPException(status_code=400, detail=f"Запрошення вже {inv['status']}")
+
+    inv_scope    = inv.get("scope", "tournament")
+    inv_round_id = inv.get("round_id")
 
     new_status = "accepted" if payload.accept else "declined"
 
@@ -2183,12 +2619,18 @@ async def respond_jury_invitation(payload: RespondJuryInvitation, authorization:
     )
 
     if payload.accept:
-        rounds_res = supabase.table("rounds") \
-            .select("id") \
-            .eq("tournament_id", inv["tournament_id"]) \
-            .execute()
+        if inv_scope == "round" and inv_round_id:
+            # Доступ лише до конкретного раунду
+            rounds_to_assign = [{"id": inv_round_id}]
+        else:
+            # Доступ до всіх існуючих раундів турніру
+            rounds_res = supabase.table("rounds") \
+                .select("id") \
+                .eq("tournament_id", inv["tournament_id"]) \
+                .execute()
+            rounds_to_assign = rounds_res.data or []
 
-        for r in (rounds_res.data or []):
+        for r in rounds_to_assign:
             exists = supabase.table("jury_assignments") \
                 .select("id") \
                 .eq("jury_id", caller["id"]) \
@@ -2196,17 +2638,28 @@ async def respond_jury_invitation(payload: RespondJuryInvitation, authorization:
                 .execute()
             if not exists.data:
                 supabase.table("jury_assignments").insert({
-                    "jury_id":  caller["id"],
-                    "round_id": r["id"],
+                    "jury_id":       caller["id"],
+                    "round_id":      r["id"],
                     "tournament_id": inv["tournament_id"],
                 }).execute()
 
         if tournament:
-            _notif_title   = f"{caller['username']} прийняв запрошення журі"
-            _notif_message = (
-                f"Журі {caller['username']} прийняв запрошення до оцінювання "
-                f"турніру «{tournament['name']}»."
-            )
+            if inv_scope == "round" and inv_round_id:
+                round_info = fetch_one(
+                    supabase.table("rounds").select("name, number").eq("id", inv_round_id)
+                )
+                round_label = (round_info.get("name") or f"Раунд {round_info.get('number','')}") if round_info else "раунд"
+                _notif_title   = f"{caller['username']} прийняв запрошення журі ({round_label})"
+                _notif_message = (
+                    f"Журі {caller['username']} прийняв запрошення до оцінювання "
+                    f"{round_label} турніру «{tournament['name']}»."
+                )
+            else:
+                _notif_title   = f"{caller['username']} прийняв запрошення журі"
+                _notif_message = (
+                    f"Журі {caller['username']} прийняв запрошення до оцінювання "
+                    f"турніру «{tournament['name']}»."
+                )
             supabase.table("notifications").insert({
                 "user_id": inv["inviter_id"],
                 "type":    "jury_invitation_accepted",
@@ -2217,6 +2670,7 @@ async def respond_jury_invitation(payload: RespondJuryInvitation, authorization:
                     "tournament_name": tournament["name"] if tournament else "",
                     "jury_id":         caller["id"],
                     "jury_name":       caller["username"],
+                    "scope":           inv_scope,
                 },
                 "read": False,
             }).execute()
@@ -2224,8 +2678,8 @@ async def respond_jury_invitation(payload: RespondJuryInvitation, authorization:
             if _inviter_email:
                 send_notification_email(_inviter_email, _notif_title, _notif_message, "jury_invitation_accepted")
 
-        print(f"[JURY-INVITE] {caller['username']} ПРИЙНЯВ журі для {inv['tournament_id']}", flush=True)
-        return {"success": True, "status": "accepted"}
+        print(f"[JURY-INVITE] {caller['username']} ПРИЙНЯВ scope={inv_scope} для {inv['tournament_id']}", flush=True)
+        return {"success": True, "status": "accepted", "scope": inv_scope}
 
     else:
         if tournament:
@@ -2332,7 +2786,17 @@ async def get_tournament_jury(tournament_id: str, authorization: str = Header(..
 
 
 @app.get("/api/tournaments/{tournament_id}/jury-candidates")
-async def get_jury_candidates(tournament_id: str, authorization: str = Header(...)):
+async def get_jury_candidates(
+    tournament_id: str,
+    authorization: str = Header(...),
+    scope: str = "tournament",
+    round_id: str | None = None,
+):
+    """
+    Повертає список журі-кандидатів.
+    scope=tournament: виключає тих, хто вже запрошений/прийнятий на весь турнір.
+    scope=round&round_id=...: виключає тих, хто вже запрошений/прийнятий саме до цього раунду.
+    """
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not initialized")
 
@@ -2347,13 +2811,27 @@ async def get_jury_candidates(tournament_id: str, authorization: str = Header(..
         .eq("role", "jury") \
         .execute()
 
-    already = supabase.table("jury_tournament_invitations") \
-        .select("jury_id, status") \
+    # Завжди виключаємо тих, хто запрошений на весь турнір (вони вже мають доступ до всіх раундів)
+    already_tournament = supabase.table("jury_tournament_invitations") \
+        .select("jury_id, status, scope") \
         .eq("tournament_id", tournament_id) \
+        .eq("scope", "tournament") \
         .in_("status", ["pending", "accepted"]) \
         .execute()
 
-    already_ids = {r["jury_id"] for r in (already.data or [])}
+    already_ids = {r["jury_id"] for r in (already_tournament.data or [])}
+
+    # Якщо запит для конкретного раунду — також виключаємо тих, хто вже запрошений саме до цього раунду
+    if scope == "round" and round_id:
+        already_round = supabase.table("jury_tournament_invitations") \
+            .select("jury_id, status") \
+            .eq("tournament_id", tournament_id) \
+            .eq("scope", "round") \
+            .eq("round_id", round_id) \
+            .in_("status", ["pending", "accepted"]) \
+            .execute()
+        for r in (already_round.data or []):
+            already_ids.add(r["jury_id"])
 
     candidates = [u for u in (all_jury.data or []) if u["id"] not in already_ids]
 
