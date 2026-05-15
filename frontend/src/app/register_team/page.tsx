@@ -792,10 +792,9 @@ export default function RegisterTeamPage() {
           {/* Avatar editor - pre-upload */}
           {showAvatarModal && !avatarTempTeamId && (
             <AvatarEditorModal
-            userId={`team_preview_${user?.id ?? "anon"}`}
-            supabase={supabase}
-            tableConfig={{ table: "teams", idColumn: "id" }}
-            skipDbUpdate={true}
+            userId={`preview_${user?.id ?? "anon"}`}
+            apiUrl={API_URL}
+            uploadType="preview"
             onSave={(url) => { setTeamAvatarUrl(url); setShowAvatarModal(false); }}
             onClose={() => setShowAvatarModal(false)}
             />
@@ -805,8 +804,9 @@ export default function RegisterTeamPage() {
           {showAvatarModal && avatarTempTeamId && (
             <AvatarEditorModal
             userId={avatarTempTeamId}
-            supabase={supabase}
-            tableConfig={{ table: "teams", idColumn: "id" }}
+            apiUrl={API_URL}
+            uploadType="team"
+            teamId={avatarTempTeamId}
             onSave={async () => {
               setShowAvatarModal(false);
               clearDraft();

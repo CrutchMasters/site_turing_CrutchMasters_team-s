@@ -4542,6 +4542,181 @@ async def upload_tournament_banner_temp(
         raise HTTPException(status_code=500, detail=f"Помилка завантаження банера: {str(e)}")
 
 
+@app.post("/api/upload/avatar-preview")
+async def upload_avatar_preview(
+    preview_id:    str        = Form(...),
+    file:          UploadFile = File(...),
+    authorization: str        = Header(...),
+):
+    """Upload avatar to storage only (no DB update). Used for team avatar before team is created."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    MAX_SIZE = 5 * 1024 * 1024
+    content = await file.read()
+    if len(content) > MAX_SIZE:
+        raise HTTPException(status_code=413, detail="Файл занадто великий. Максимум 5 MB")
+
+    import time as _time
+    timestamp = int(_time.time() * 1000)
+    path = f"team_preview_{caller['id']}/{preview_id}/avatar_{timestamp}.webp"
+
+    try:
+        supabase.storage.from_("avatars").upload(
+            path=path,
+            file=content,
+            file_options={"content-type": "image/webp", "upsert": "true"},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Помилка завантаження: {e}")
+
+    url_data = supabase.storage.from_("avatars").get_public_url(path)
+    public_url = f"{url_data}?v={timestamp}"
+
+    print(f"[AVATAR PREVIEW] {caller['username']} завантажив preview → {path}", flush=True)
+    return {"success": True, "url": public_url}
+
+
+@app.post("/api/upload/user-avatar")
+async def upload_user_avatar(
+    file:          UploadFile = File(...),
+    authorization: str        = Header(...),
+):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+    user_id = caller["id"]
+
+    MAX_SIZE = 5 * 1024 * 1024
+    content = await file.read()
+    if len(content) > MAX_SIZE:
+        raise HTTPException(status_code=413, detail="Файл занадто великий. Максимум 5 MB")
+
+    import time as _time
+    timestamp = int(_time.time() * 1000)
+    path = f"{user_id}/avatar_{timestamp}.webp"
+
+    # Отримуємо старий avatar_url
+    old_avatar = None
+    try:
+        old_data = fetch_one(supabase.table("account").select("avatar_url").eq("id", user_id))
+        old_avatar = (old_data or {}).get("avatar_url")
+    except Exception:
+        pass
+
+    # Upload через service role
+    try:
+        supabase.storage.from_("avatars").upload(
+            path=path,
+            file=content,
+            file_options={"content-type": "image/webp", "upsert": "true"},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Помилка завантаження: {e}")
+
+    url_data = supabase.storage.from_("avatars").get_public_url(path)
+    public_url = f"{url_data}?v={timestamp}"
+
+    supabase.table("account").update({"avatar_url": public_url}).eq("id", user_id).execute()
+
+    # Видаляємо старий файл
+    if old_avatar:
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(old_avatar)
+            parts = parsed.path.split("/object/public/avatars/")
+            if len(parts) > 1:
+                old_path = parts[1].split("?")[0]
+                supabase.storage.from_("avatars").remove([old_path])
+        except Exception:
+            pass
+
+    print(f"[AVATAR] {caller['username']} оновив особистий аватар → {path}", flush=True)
+    return {"success": True, "url": public_url}
+
+
+@app.post("/api/upload/team-avatar")
+async def upload_team_avatar(
+    team_id:       str        = Form(...),
+    file:          UploadFile = File(...),
+    authorization: str        = Header(...),
+):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not initialized")
+
+    token  = authorization.replace("Bearer ", "").strip()
+    caller = get_caller(token)
+
+    # Перевіряємо що юзер є капітаном або учасником команди
+    team = fetch_one(
+        supabase.table("teams")
+            .select("id, captain_id, members_ids")
+            .eq("id", team_id)
+    )
+    if not team:
+        raise HTTPException(status_code=404, detail="Команду не знайдено")
+
+    members    = team.get("members_ids") or []
+    is_captain = team["captain_id"] == caller["id"]
+    is_member  = caller["id"] in members
+    if not is_captain and not is_member:
+        raise HTTPException(status_code=403, detail="Ви не є членом цієї команди")
+
+    MAX_SIZE = 5 * 1024 * 1024  # 5MB
+    content = await file.read()
+    if len(content) > MAX_SIZE:
+        raise HTTPException(status_code=413, detail="Файл занадто великий. Максимум 5 MB")
+
+    import time as _time
+    timestamp = int(_time.time() * 1000)
+    path = f"teams/{team_id}/avatar_{timestamp}.webp"
+
+    # Отримуємо старий avatar_url щоб потім видалити
+    old_avatar = None
+    try:
+        old_data = fetch_one(supabase.table("teams").select("avatar_url").eq("id", team_id))
+        old_avatar = (old_data or {}).get("avatar_url")
+    except Exception:
+        pass
+
+    # Upload через service role — обходить RLS
+    try:
+        supabase.storage.from_("avatars").upload(
+            path=path,
+            file=content,
+            file_options={"content-type": "image/webp", "upsert": "true"},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Помилка завантаження: {e}")
+
+    # Отримуємо публічний URL
+    url_data = supabase.storage.from_("avatars").get_public_url(path)
+    public_url = f"{url_data}?v={timestamp}"
+
+    # Оновлюємо avatar_url в таблиці teams
+    supabase.table("teams").update({"avatar_url": public_url}).eq("id", team_id).execute()
+
+    # Видаляємо старий файл
+    if old_avatar:
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(old_avatar)
+            parts = parsed.path.split("/object/public/avatars/")
+            if len(parts) > 1:
+                old_path = parts[1].split("?")[0]
+                supabase.storage.from_("avatars").remove([old_path])
+        except Exception:
+            pass
+
+    print(f"[AVATAR] {caller['username']} оновив аватар команди {team_id} → {path}", flush=True)
+    return {"success": True, "url": public_url}
+
+
 @app.post("/api/upload/signed-urls")
 async def get_signed_urls(body: dict, authorization: str = Header(...)):
     if not supabase:

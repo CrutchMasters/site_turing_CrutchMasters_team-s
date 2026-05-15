@@ -7,6 +7,11 @@ import { useTheme } from "@/hooks/useTheme";
 import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
+
+const API_URL =
+    typeof window !== "undefined" && window.location.hostname === "localhost"
+        ? "http://localhost:8000"
+        : "https://site-turing-crutchmasters-team-s.onrender.com";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import {
@@ -148,43 +153,28 @@ function TeamAvatarModal({
         setUploading(true);
         try {
             const blob: Blob = await new Promise(res => canvas.toBlob(b => res(b!), "image/webp", 0.85));
-            const timestamp = Date.now();
-            const path = `teams/${teamId}/avatar_${timestamp}.webp`;
+            const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+            if (!token) throw new Error("Не авторизовано");
 
-            const { error } = await supabase.storage
-            .from("avatars")
-            .upload(path, blob, { contentType: "image/webp" });
+            const formData = new FormData();
+            formData.append("team_id", teamId);
+            formData.append("file", blob, "avatar.webp");
 
-            if (error) throw error;
-
-            const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-            const finalUrl = `${data.publicUrl}?v=${timestamp}`;
-
-            // Delete old avatar if present
-            const { data: teamData } = await supabase
-            .from("teams")
-            .select("avatar_url")
-            .eq("id", teamId)
-            .single();
-
-            await supabase.from("teams").update({ avatar_url: finalUrl }).eq("id", teamId);
-
-            if (teamData?.avatar_url) {
-                try {
-                    const url = new URL(teamData.avatar_url);
-                    const pathParts = url.pathname.split("/object/public/avatars/");
-                    if (pathParts[1]) {
-                        const oldPath = pathParts[1].split("?")[0];
-                        await supabase.storage.from("avatars").remove([oldPath]);
-                    }
-                } catch { /* ignore */ }
+            const res = await fetch(`${API_URL}/api/upload/team-avatar`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+                body: formData,
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ detail: res.statusText }));
+                throw new Error(err.detail ?? "Upload failed");
             }
-
-            onSave(finalUrl);
+            const { url } = await res.json();
+            onSave(url);
             onClose();
         } catch (err: any) {
             console.error("Team avatar upload error:", err);
-            alert(err?.message ?? "Failed to load team profile");
+            alert(err?.message ?? "Failed to upload avatar");
         } finally {
             setUploading(false);
         }
