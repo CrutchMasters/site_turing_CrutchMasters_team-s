@@ -32,8 +32,6 @@
 | *Dashboard — головна панель* | *Сторінка турніру* |
 | ![Leaderboard](screenshots/leaderboard.png) | ![Evaluate](screenshots/evaluate.png) |
 | *Лідерборд* | *Панель оцінювання жюрі* |
-| ![Submit](screenshots/submit.png) | ![Profile](screenshots/profile.png) |
-| *Подача рішення* | *Профіль користувача* |
 | ![Certificates](screenshots/certificates.png) | ![Calendar](screenshots/calendar.png) |
 | *Редактор сертифікатів* | *Календар подій* |
 
@@ -364,7 +362,7 @@ pip install -r requirements.txt
 
 > **Примітка:** Бекенд задеплоєний на [Render](https://render.com). При локальній розробці він запускається автоматично через Render — локальний запуск `uvicorn` не потрібен. Достатньо вказати у `frontend/.env.local` актуальний URL з Render як `NEXT_PUBLIC_API_URL`.
 
-Swagger-документація: **https://ваш-сервіс.onrender.com/docs**
+Swagger-документація: **https://site-turing-crutchmasters-team-s.onrender.com/docs**
 
 ---
 
@@ -421,7 +419,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 
 ## Ліцензія
 
-MIT © CrutchMasters Team — made with ❤️ at Turing Hackathon
+MIT © CrutchMasters Team — made with ❤️
 
 ---
 
