@@ -339,6 +339,8 @@ npm run dev
 
 Фронтенд буде доступний за адресою: **http://localhost:3000**
 
+Live-demo: **https://siteturingcrutchmastersteam-s.crutch-mastersss.workers.dev**
+
 ---
 
 ### ⚙️ Встановлення Backend
