@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
-    X, Plus, Upload, Link2, Trash2, AlertTriangle,
+    X, Plus, Upload, Link2, Trash2, AlertTriangle, Clock,
 } from 'lucide-react';
 import { DatePicker, TimePicker } from '@/components/DateTimePicker';
 import { RichTextEditor } from '@/components/RichTextEditor';
@@ -25,6 +25,8 @@ export interface RoundData {
     /** Дедлайн оцінювання журі (необов'язково). Якщо задано — оцінювання закривається автоматично */
     judgingDeadlineDate: string;
     judgingDeadlineTime: string;
+    /** Час на оцінювання для журі (хвилини). null = необмежено */
+    judgingDurationMinutes: number | null;
     requirements: string[];
     /** Критерії оцінювання з вагами — обов'язкові */
     criteria: Criterion[];
@@ -102,6 +104,7 @@ const defaultRound = (): RoundData => ({
     startDate: '', startTime: '',
     deadlineDate: '', deadlineTime: '',
     judgingDeadlineDate: '', judgingDeadlineTime: '',
+    judgingDurationMinutes: null,
     requirements: [], criteria: [], links: [], files: [],
 });
 
@@ -347,6 +350,108 @@ function FilesField({ files, onChange, uploadFilesLabel, savedInCloudLabel, file
         );
 }
 
+// ── JudgingDurationField ───────────────────────────────────────────────────
+const DURATION_PRESETS = [30, 60, 120, 240, 480];
+const DURATION_STEP = 30; // хв
+
+function formatDuration(minutes: number): string {
+    if (minutes < 60) return `${minutes} хв`;
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m === 0 ? `${h} год` : `${h} год ${m} хв`;
+}
+
+function JudgingDurationField({
+    value,
+    onChange,
+}: {
+    value: number | null;
+    onChange: (v: number | null) => void;
+}) {
+    const isUnlimited = value === null;
+
+    const dec = () => {
+        if (isUnlimited) return;
+        const next = Math.max(DURATION_STEP, (value ?? DURATION_STEP) - DURATION_STEP);
+        onChange(next);
+    };
+    const inc = () => {
+        const cur = isUnlimited ? 0 : (value ?? 0);
+        onChange(cur + DURATION_STEP);
+    };
+
+    return (
+        <div className="bg-(--card) rounded-2xl sm:rounded-3xl border border-(--brd) p-5">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+        <div className="w-7 h-7 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center flex-shrink-0">
+        <Clock size={13} className="text-purple-400" />
+        </div>
+        <p className="text-[10px] font-black uppercase tracking-widest text-(--t2)">Час на оцінювання</p>
+        </div>
+        <span className="text-[9px] font-bold text-(--t2) border border-(--brd) px-2 py-0.5 rounded-full">Опціонально</span>
+        </div>
+
+        {/* Stepper display */}
+        <div className="flex items-center gap-3 mb-3">
+        <button
+        type="button"
+        onClick={dec}
+        disabled={isUnlimited}
+        className="w-8 h-8 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-lg font-black flex items-center justify-center hover:border-purple-500/50 hover:text-purple-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-90"
+        >−</button>
+
+        <div className="flex-1 text-center">
+        {isUnlimited
+            ? <span className="text-lg font-black text-(--t2)">∞</span>
+            : <span className="text-lg font-black text-(--t1)">{formatDuration(value!)}</span>
+        }
+        </div>
+
+        <button
+        type="button"
+        onClick={inc}
+        className="w-8 h-8 rounded-xl border border-(--brd) bg-(--bg) text-(--t1) text-lg font-black flex items-center justify-center hover:border-purple-500/50 hover:text-purple-400 transition-all active:scale-90"
+        >+</button>
+        </div>
+
+        {/* Quick presets */}
+        <div className="flex gap-1.5 flex-wrap">
+        <button
+        type="button"
+        onClick={() => onChange(null)}
+        className={`px-2.5 py-1 rounded-lg text-[10px] font-black border transition-all active:scale-95 ${
+            isUnlimited
+            ? 'bg-purple-600 border-purple-600 text-white shadow-md shadow-purple-600/25'
+            : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-purple-500/40 hover:text-purple-400'
+        }`}
+        >∞</button>
+        {DURATION_PRESETS.map(p => (
+            <button
+            key={p}
+            type="button"
+            onClick={() => onChange(p)}
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-black border transition-all active:scale-95 ${
+                value === p
+                ? 'bg-purple-600 border-purple-600 text-white shadow-md shadow-purple-600/25'
+                : 'bg-(--bg) border-(--brd) text-(--t2) hover:border-purple-500/40 hover:text-purple-400'
+            }`}
+            >{formatDuration(p)}</button>
+        ))}
+        </div>
+
+        {/* Hint */}
+        <p className="mt-3 text-[10px] text-(--t2)/60 font-medium">
+        {isUnlimited
+            ? 'Журі може оцінювати без обмеження часу.'
+            : `Кожен журі матиме ${formatDuration(value!)} на оцінювання після розподілу.`
+        }
+        </p>
+        </div>
+    );
+}
+
 // ── RoundSettingsPanel ─────────────────────────────────────────────────────
 export default function RoundSettingsPanel({ roundCount, selectedRound, onSelectRound, onRoundsChange, initialData, externalData, labels }: Props) {
     const [rounds, setRounds] = useState<Record<number, RoundData>>({});
@@ -486,6 +591,12 @@ export default function RoundSettingsPanel({ roundCount, selectedRound, onSelect
             : <p className="mt-2 text-[10px] text-(--t2)/60 font-medium">Якщо не задано — адмін закриває оцінювання вручну.</p>
         }
         </div>
+
+        {/* 3в. Час на оцінювання для журі */}
+        <JudgingDurationField
+        value={rd.judgingDurationMinutes}
+        onChange={v => update(selectedRound, 'judgingDurationMinutes', v)}
+        />
 
         {/* 4. Критерії оцінювання — обов'язкові, повна ширина */}
         <CriteriaField
