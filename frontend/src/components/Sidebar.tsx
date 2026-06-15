@@ -40,6 +40,19 @@ export default function Sidebar({}: SidebarProps) {
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
+  const [emailNotif, setEmailNotif] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const stored = localStorage.getItem("email_notif");
+    return stored === null ? true : stored === "true";
+  });
+
+  const toggleEmailNotif = () => {
+    setEmailNotif(prev => {
+      const next = !prev;
+      localStorage.setItem("email_notif", String(next));
+      return next;
+    });
+  };
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
@@ -51,9 +64,7 @@ export default function Sidebar({}: SidebarProps) {
   const pathname = usePathname();
   const { dark, toggle } = useTheme();
   const { locale, setLocale, t } = useLanguage();
-  const { user, logout, token } = useAuth();
-  const [emailNotif, setEmailNotif]             = useState<boolean>(true);
-  const [emailNotifSaving, setEmailNotifSaving] = useState(false);
+  const { user, logout } = useAuth();
 
   const toggleCollapse = () => {
     setCollapsed(prev => {
@@ -72,33 +83,6 @@ export default function Sidebar({}: SidebarProps) {
   const avatarUrl = user?.avatar_url;
 
 
-
-  // Load email_notifications setting
-  useEffect(() => {
-    if (!user) return;
-    const t = (typeof window !== "undefined" && localStorage.getItem("access_token")) || token || "";
-    fetch(`${API_URL}/api/users/me/email-notifications-status`, {
-      headers: { Authorization: `Bearer ${t}` },
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) setEmailNotif(d.email_notifications !== false); })
-      .catch(() => {});
-  }, [user]);
-
-  const toggleEmailNotif = async (val: boolean) => {
-    setEmailNotifSaving(true);
-    try {
-      const t = (typeof window !== "undefined" && localStorage.getItem("access_token")) || token || "";
-      await fetch(`${API_URL}/api/users/me/email-notifications`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
-        body: JSON.stringify({ enabled: val }),
-      });
-      setEmailNotif(val);
-    } finally {
-      setEmailNotifSaving(false);
-    }
-  };
 
   // Fetch notifications when panel opens, then mark all as read
   useEffect(() => {
@@ -204,9 +188,9 @@ export default function Sidebar({}: SidebarProps) {
       const diff = Math.floor((now.getTime() - date.getTime()) / 1000);
       const localeMap: Record<string, string> = { ua: "uk-UA", ru: "ru-RU", en: "en-US" };
       const loc = localeMap[locale] ?? "uk-UA";
-      if (diff < 60) return locale === "en" ? `${diff}s ago` : `${diff}с тому`;
-      if (diff < 3600) return locale === "en" ? `${Math.floor(diff/60)}m ago` : `${Math.floor(diff/60)}хв тому`;
-      if (diff < 86400) return locale === "en" ? `${Math.floor(diff/3600)}h ago` : `${Math.floor(diff/3600)}год тому`;
+      if (diff < 60) return locale === "ru" ? `${diff}с назад` : locale === "en" ? `${diff}s ago` : `${diff}с тому`;
+      if (diff < 3600) return locale === "ru" ? `${Math.floor(diff/60)}мин назад` : locale === "en" ? `${Math.floor(diff/60)}m ago` : `${Math.floor(diff/60)}хв тому`;
+      if (diff < 86400) return locale === "ru" ? `${Math.floor(diff/3600)}ч назад` : locale === "en" ? `${Math.floor(diff/3600)}h ago` : `${Math.floor(diff/3600)}год тому`;
       return date.toLocaleDateString(loc, { day: "numeric", month: "short" });
     } catch {
       return "";
@@ -453,18 +437,12 @@ export default function Sidebar({}: SidebarProps) {
             </div>
 
             <div className="flex flex-col gap-2">
-            <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">Email</span>
-            <button
-              onClick={() => toggleEmailNotif(!emailNotif)}
-              disabled={emailNotifSaving}
-              className="flex items-center justify-between px-3 py-2 rounded-xl bg-(--card) hover:bg-(--brd) transition border border-(--brd)"
-            >
-              <span className="text-xs font-black uppercase tracking-wide text-(--t1)">
-                {emailNotif ? "✉️ Сповіщення вкл." : "✉️ Сповіщення викл."}
-              </span>
-              <div className={`w-10 h-5 rounded-full transition-all relative flex-shrink-0 ${emailNotif ? "bg-blue-600" : "bg-gray-400"} ${emailNotifSaving ? "opacity-50" : ""}`}>
-                <div className={`absolute top-0 left-0 w-5 h-5 bg-white rounded-full shadow transition-all ${emailNotif ? "translate-x-5" : "translate-x-0"}`} />
-              </div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-(--t2)">EMAIL</span>
+            <button onClick={toggleEmailNotif} className="flex items-center justify-between px-3 py-2 rounded-xl bg-(--card) hover:bg-(--brd) transition border border-(--brd)">
+            <span className="text-xs font-black uppercase tracking-wide text-(--t1)">{t.settings.emailNotif}</span>
+            <div className={`w-10 h-5 rounded-full transition-all relative ${emailNotif ? "bg-blue-600" : "bg-gray-400"}`}>
+            <div className={`absolute top-0 left-0 w-5 h-5 bg-white rounded-full shadow transition-all ${emailNotif ? "translate-x-5" : "translate-x-0"}`} />
+            </div>
             </button>
             </div>
 
