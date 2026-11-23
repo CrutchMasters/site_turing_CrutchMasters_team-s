@@ -307,7 +307,7 @@ site_turing_CrutchMasters_team-s-main/
 ### Вимоги
 - Ubuntu 20.04+ (або будь-який Linux)
 - Node.js 20+ (встановлюється через NVM)
-- Python 3.10+
+- Python 3.12 або 3.13 (рекомендовано). На Python 3.14 для частини пакетів (`pyiceberg`, `pyroaring`) немає готових збірок, тож вони компілюються з вихідників — потрібні `build-essential` і `python3-dev` (див. нижче)
 - Обліковий запис [Supabase](https://supabase.com)
 
 ### Налаштування Supabase
@@ -324,9 +324,26 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 Для **backend** створіть файл `backend/.env`:
 ```env
 SUPABASE_URL=https://ваш-проєкт.supabase.co
-SUPABASE_KEY=ваш-service-role-key
+SUPABASE_KEY=ваш-anon-key
+SUPABASE_SERVICE_KEY=ваш-service-role-key
 SUPABASE_JWT_SECRET=ваш-jwt-secret
 ```
+
+Усі ключі беруться в Supabase: **Project Settings → API** (`anon`, `service_role`, JWT Secret).
+
+| Змінна | Обов'язкова | Для чого |
+|---|---|---|
+| `SUPABASE_URL` | так | Адреса проєкту Supabase |
+| `SUPABASE_SERVICE_KEY` | так | `service_role`-ключ: доступ до БД та Storage з бекенду. Без нього бекенд не підключиться до Supabase |
+| `SUPABASE_KEY` | так | `anon`-ключ: вхід користувачів (`sign_in_with_password`) |
+| `SUPABASE_JWT_SECRET` | рекомендовано | Перевірка підпису JWT. Без нього підпис токенів не перевіряється (у логах буде попередження) |
+| `GMAIL_USER`, `GMAIL_APP_PASSWORD` | ні | Email-сповіщення через Gmail SMTP (пароль додатка). Без них листи не надсилаються |
+| `SITE_URL` | ні | Адреса фронтенду для посилань у листах (за замовчуванням `http://localhost:3000`) |
+| `API_URL` | ні | Публічна адреса бекенду для посилань у листах (за замовчуванням `http://localhost:8000`) |
+| `FRONTEND_URL` | на проді | Адреса фронтенду для редиректів після прийняття запрошень. Задайте актуальну — значення за замовчуванням вказує на старий Vercel-деплой |
+| `CORS_EXTRA_ORIGINS` | ні | Додаткові дозволені origin через кому |
+
+> **Не комітьте `.env`** — він у `.gitignore`. Ключ `service_role` дає повний доступ до бази.
 
 ---
 
@@ -354,8 +371,8 @@ source ~/.bashrc
 nvm install 20
 nvm use 20
 
-# 6. Перехід до директорії фронтенду та встановлення залежностей
-cd site_turing_CrutchMasters_team-s-main/frontend
+# 6. Перехід до директорії фронтенду (з кореня репозиторію) та встановлення залежностей
+cd frontend
 npm install
 
 # 7. Запуск у режимі розробки
@@ -371,11 +388,12 @@ Live-demo: **https://siteturingcrutchmastersteam-s.crutch-mastersss.workers.dev*
 ### ⚙️ Встановлення Backend
 
 ```bash
-# 1. Встановлення python3-venv (якщо ще не встановлено)
-sudo apt install python3-venv
+# 1. Встановлення python3-venv, а також компілятора й заголовків Python
+#    (потрібні, якщо для вашої версії Python немає готових збірок pyiceberg/pyroaring)
+sudo apt install python3-venv build-essential python3-dev
 
-# 2. Перехід до директорії бекенду
-cd site_turing_CrutchMasters_team-s-main/backend
+# 2. Перехід до директорії бекенду (з кореня репозиторію)
+cd backend
 
 # 3. Створення віртуального оточення
 python3 -m venv venv
@@ -385,11 +403,18 @@ source venv/bin/activate
 
 # 5. Встановлення залежностей
 pip install -r requirements.txt
+
+# 6. Запуск у режимі розробки (потрібен backend/.env, див. вище)
+uvicorn main:app --reload --port 8000
 ```
 
-> **Примітка:** Бекенд задеплоєний на [Render](https://render.com). При локальній розробці він запускається автоматично через Render — локальний запуск `uvicorn` не потрібен. Достатньо вказати у `frontend/.env.local` актуальний URL з Render як `NEXT_PUBLIC_API_URL`.
+Бекенд буде доступний за адресою **http://127.0.0.1:8000**, Swagger-документація — **http://127.0.0.1:8000/docs**.
 
-Swagger-документація: **https://site-turing-crutchmasters-team-s.onrender.com/docs**
+> **Примітка:** Бекенд також задеплоєний на [Render](https://render.com). Якщо локальний бекенд не потрібен, у `frontend/.env.local` вкажіть актуальний URL з Render як `NEXT_PUBLIC_API_URL`. Безкоштовний інстанс Render «засинає» після періоду бездіяльності, тому перший запит може тривати до хвилини.
+
+Swagger-документація на Render: **https://site-turing-crutchmasters-team-s.onrender.com/docs**
+
+**Якщо `pip install` падає з `No such file or directory: 'x86_64-linux-gnu-gcc'`** — не встановлено компілятор: виконайте `sudo apt install build-essential python3-dev` і повторіть. Альтернатива — створити оточення на Python 3.12/3.13 (`python3.13 -m venv venv`), тоді компіляція не потрібна.
 
 ---
 
@@ -403,8 +428,10 @@ npm run start
 
 **Backend:**
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
+
+> Запускайте **один** воркер процесу. Фонові задачі (автооновлення статусів турнірів і раундів, нагадування про дедлайн) стартують у кожному воркері, тож при `--workers N` вони виконувалися б N разів, а сповіщення могли б дублюватися.
 
 ---
 
