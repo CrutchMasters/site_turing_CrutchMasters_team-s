@@ -132,9 +132,9 @@ export default function TournamentLeaderboard({
   }, [tournamentId]);
 
   const lbl = {
-    title:  locale === "en" ? "Leaderboard"             : locale === "ru" ? "Лидерборд"           : "Лідерборд",
-    empty:  locale === "en" ? "No results yet"          : locale === "ru" ? "Результатов пока нет" : "Ще немає результатів",
-    view:   locale === "en" ? "View tournament"         : locale === "ru" ? "Открыть турнир"       : "Переглянути турнір",
+    title:  locale === "en" ? "Leaderboard"             : "Лідерборд",
+    empty:  locale === "en" ? "No results yet"          : "Ще немає результатів",
+    view:   locale === "en" ? "View tournament"         : "Переглянути турнір",
     rounds: "R",
   };
 

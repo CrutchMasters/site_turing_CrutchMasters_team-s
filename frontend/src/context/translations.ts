@@ -1,6 +1,6 @@
 // src/context/translations.ts
 // Centralized translations for all pages and components.
-// To add a new key: add it to the `en` object first, then mirror to `ru` and `ua`.
+// To add a new key: add it to the `en` object first, then mirror to `ua`.
 
 const def = {
   en: {

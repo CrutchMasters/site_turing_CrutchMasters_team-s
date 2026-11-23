@@ -202,7 +202,7 @@ export default function Sidebar({}: SidebarProps) {
       const date = new Date(iso);
       const now = new Date();
       const diff = Math.floor((now.getTime() - date.getTime()) / 1000);
-      const localeMap: Record<string, string> = { ua: "uk-UA", ru: "ru-RU", en: "en-US" };
+      const localeMap: Record<string, string> = { ua: "uk-UA", en: "en-US" };
       const loc = localeMap[locale] ?? "uk-UA";
       if (diff < 60) return locale === "en" ? `${diff}s ago` : `${diff}с тому`;
       if (diff < 3600) return locale === "en" ? `${Math.floor(diff/60)}m ago` : `${Math.floor(diff/60)}хв тому`;
