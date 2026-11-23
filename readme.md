@@ -270,8 +270,33 @@ site_turing_CrutchMasters_team-s-main/
 │       ├── hooks/              # Кастомні хуки (useTheme)
 │       └── lib/                # API-клієнт, Supabase, утиліти
 ├── backend/                    # FastAPI додаток
-│   ├── main.py                 # Весь бекенд (єдиний файл)
-│   └── requirements.txt        # Python-залежності
+│   ├── main.py                 # Точка входу: створення app, CORS, підключення роутерів, старт/стоп
+│   ├── requirements.txt        # Python-залежності
+│   └── src/
+│       ├── config.py           # Змінні оточення, ролі, дозволені CORS-origins
+│       ├── db.py               # Клієнти Supabase, створення storage-бакетів, fetch_one
+│       ├── security.py         # Перевірка JWT (HS256/ES256+JWKS), get_caller
+│       ├── schemas.py          # Pydantic-моделі запитів
+│       ├── utils.py            # Дрібні хелпери (parse_dt)
+│       ├── routers/            # Ендпоінти за темами
+│       │   ├── health.py       # /api/test
+│       │   ├── users.py        # Реєстрація, логін, ролі, профіль, пошук
+│       │   ├── teams.py        # Команди
+│       │   ├── tournaments.py  # Турніри, реєстрація команд, раунди, банер
+│       │   ├── invitations.py  # Запрошення в команди, прийняття за email-токеном
+│       │   ├── jury.py         # Запрошення журі, реєстрація журі, видалення
+│       │   ├── notifications.py# Внутрішні сповіщення
+│       │   ├── submissions.py  # Подача та перегляд робіт
+│       │   ├── evaluation.py   # Оцінювання журі
+│       │   ├── rounds.py       # Статус раунду, розподіл робіт між журі
+│       │   ├── uploads.py      # Файли, аватари, підписані URL
+│       │   └── leaderboard.py  # Таблиця лідерів
+│       └── services/           # Бізнес-логіка без HTTP
+│           ├── assignment.py   # Автоматичний розподіл робіт
+│           ├── statuses.py     # Перерахунок статусів, валідація таймлайну
+│           ├── scheduler.py    # Фонові задачі (кожні 15 сек / 30 хв)
+│           ├── emails.py       # Gmail SMTP
+│           └── invitation_tokens.py
 └── database/                   # CSV-схеми та приклади даних
 ```
 
