@@ -97,6 +97,7 @@ class JuryEvaluationPayload(BaseModel):
     submission_id:   str
     criteria_scores: dict
     general_comment: str | None = None
+    # Ігнорується: сервер сам рахує підсумок за критеріями (поле лишено для сумісності зі старим клієнтом)
     total_score:     float | None = None
 
 
