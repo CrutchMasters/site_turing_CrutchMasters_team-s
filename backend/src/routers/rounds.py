@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Header
 from src.db import fetch_one, supabase
 from src.schemas import ManualAssignPayload, PartialRedistributePayload, RoundStatusUpdate
 from src.security import get_caller
+from src.services.assignment import pick_least_loaded
 
 
 router = APIRouter()
@@ -118,7 +119,6 @@ async def redistribute_submissions(round_id: str, authorization: str = Header(..
 
     # 6. Load-balanced розподіл — кожна робота отримує K журі
     #    з найменшим поточним навантаженням.
-    random.shuffle(jury_ids)  # tie-breaking
     load: dict[str, int] = {jid: 0 for jid in jury_ids}
 
     unique_assignments: list[dict] = []
@@ -126,8 +126,7 @@ async def redistribute_submissions(round_id: str, authorization: str = Header(..
 
     for sub_id in sub_ids:
         # Для кожної роботи вибираємо K журі з найменшим навантаженням
-        sorted_jury = sorted(jury_ids, key=lambda jid: load[jid])
-        chosen = sorted_jury[:k]
+        chosen = pick_least_loaded(jury_ids, load, k)
         for jid in chosen:
             pair = (jid, sub_id)
             if pair not in seen:
@@ -275,7 +274,6 @@ async def partial_redistribute_submissions(
 
     # 8. Load-balanced дорозподіл для "недоукомплектованих" робіт
     #    Починаємо з навантаження = кількість locked призначень кожного журі
-    random.shuffle(jury_ids)  # tie-breaking
     load: dict[str, int] = {jid: 0 for jid in jury_ids}
     for a in locked:
         jid = a["jury_id"]
@@ -297,9 +295,8 @@ async def partial_redistribute_submissions(
         if not candidates:
             continue
 
-        # Сортуємо за навантаженням (менше — краще), tie-breaking вже є через shuffle вище
-        candidates.sort(key=lambda jid: load[jid])
-        chosen = candidates[:need]
+        # Менше навантаження — краще; нічиї розв'язуються випадково для кожної роботи
+        chosen = pick_least_loaded(candidates, load, need)
 
         for jid in chosen:
             new_assignments.append({
