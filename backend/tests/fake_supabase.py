@@ -30,6 +30,10 @@ class Query:
         self.mode, self.rows = "insert", rows
         return self
 
+    def update(self, values):
+        self.mode, self.rows = "update", values
+        return self
+
     def upsert(self, row, on_conflict=""):
         self.mode, self.rows, self.conflict = "upsert", row, [c.strip() for c in on_conflict.split(",") if c.strip()]
         return self
@@ -43,6 +47,12 @@ class Query:
         if self.mode == "insert":
             table.extend(self.rows if isinstance(self.rows, list) else [self.rows])
             return Result(self.rows)
+        if self.mode == "update":
+            changed = [r for r in table if match(r)]
+            for row in changed:
+                row.update(self.rows)
+            self.store.setdefault("__writes__", []).append((self.name, dict(self.rows), len(changed)))
+            return Result(changed)
         if self.mode == "upsert":
             for existing in table:
                 if all(existing.get(c) == self.rows.get(c) for c in self.conflict):
