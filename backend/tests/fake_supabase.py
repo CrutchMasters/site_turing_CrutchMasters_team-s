@@ -30,6 +30,10 @@ class Query:
         self.mode, self.rows = "insert", rows
         return self
 
+    def upsert(self, row, on_conflict=""):
+        self.mode, self.rows, self.conflict = "upsert", row, [c.strip() for c in on_conflict.split(",") if c.strip()]
+        return self
+
     def execute(self):
         table = self.store.setdefault(self.name, [])
         match = lambda row: all(row.get(k) == v for k, v in self.filters)
@@ -37,8 +41,15 @@ class Query:
             self.store[self.name] = [r for r in table if not match(r)]
             return Result([])
         if self.mode == "insert":
-            table.extend(self.rows)
+            table.extend(self.rows if isinstance(self.rows, list) else [self.rows])
             return Result(self.rows)
+        if self.mode == "upsert":
+            for existing in table:
+                if all(existing.get(c) == self.rows.get(c) for c in self.conflict):
+                    existing.update(self.rows)
+                    return Result([existing])
+            table.append(dict(self.rows))
+            return Result([self.rows])
         out = [r for r in table if match(r)]
         return Result(out[: self.lim] if self.lim else out)
 

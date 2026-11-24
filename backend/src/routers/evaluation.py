@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Header
 from src.db import fetch_one, supabase
 from src.schemas import JuryEvaluationPayload
 from src.security import get_caller
+from src.services.scoring import ScoringError, compute_total
 from src.services.emails import get_user_email, send_notification_email
 
 
@@ -48,7 +49,7 @@ async def save_jury_evaluation(
 
     round_ = fetch_one(
         supabase.table("rounds")
-            .select("id, status, tournament_id")
+            .select("id, status, tournament_id, criteria")
             .eq("id", round_id)
     )
     if not round_:
@@ -122,13 +123,25 @@ async def save_jury_evaluation(
                     detail="Ця робота не призначена вам для оцінювання. Зверніться до адміністратора для перерозподілу."
                 )
 
+    # Підсумок рахує сервер за вагами критеріїв раунду; число з клієнта не береться
+    try:
+        total_score = compute_total(payload.criteria_scores, round_.get("criteria"))
+    except ScoringError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if payload.total_score is not None and abs(payload.total_score - total_score) > 0.05:
+        print(
+            f"[EVAL] total_score з клієнта ({payload.total_score}) не збігається з серверним "
+            f"({total_score}) для submission {payload.submission_id}, збережено серверне",
+            flush=True,
+        )
+
     record = {
         "jury_id":         caller["id"],
         "submission_id":   payload.submission_id,
         "round_id":        round_id,
         "criteria_scores": payload.criteria_scores,
         "general_comment": payload.general_comment,
-        "total_score":     payload.total_score,
+        "total_score":     total_score,
         "updated_at":      datetime.now(timezone.utc).isoformat(),
     }
 
@@ -157,7 +170,7 @@ async def save_jury_evaluation(
                 tour_name = tour_info["name"] if tour_info else "Турнір"
                 _notif_title   = f"Вашу роботу оцінено"
                 _notif_message = (
-                    f"Журі виставило оцінку {payload.total_score} для роботи вашої команди "
+                    f"Журі виставило оцінку {total_score} для роботи вашої команди "
                     f"«{team_info['name']}» в турнірі «{tour_name}»."
                 )
                 _all_members = list({team_info["captain_id"]} | set(team_info.get("members_ids") or []))
@@ -171,7 +184,7 @@ async def save_jury_evaluation(
                             "meta":    {
                                 "submission_id": payload.submission_id,
                                 "round_id":      round_id,
-                                "total_score":   payload.total_score,
+                                "total_score":   total_score,
                             },
                             "read": False,
                         }).execute()
