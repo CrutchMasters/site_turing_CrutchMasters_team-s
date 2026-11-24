@@ -1,6 +1,23 @@
 """Автоматичний розподіл робіт між журі раунду."""
 
+import random
+
 from src.db import supabase
+
+
+def pick_least_loaded(candidates, load: dict, count: int, rng=random) -> list:
+    """Обирає `count` кандидатів з найменшим навантаженням.
+
+    Кандидати перемішуються при КОЖНОМУ виклику, потім працює стабільне сортування за
+    навантаженням: нічиї розв'язуються випадково для кожної роботи окремо. Якщо
+    перемішати суддів один раз на весь раунд, при кількості суддів, кратній K, вони
+    діляться на незмінні панелі, що ніколи не оцінюють спільних робіт, і оцінки різних
+    панелей неможливо порівняти (див. research/README.md).
+    """
+    pool = list(candidates)
+    rng.shuffle(pool)
+    pool.sort(key=lambda jid: load[jid])
+    return pool[:count]
 
 
 def auto_assign_submission(submission_id: str, round_id: str, tournament_id: str) -> int:
@@ -15,8 +32,6 @@ def auto_assign_submission(submission_id: str, round_id: str, tournament_id: str
     3. Вибираємо K журі з мінімальним навантаженням (з рандомним tie-breaking).
     4. Записуємо в jury_submission_assignments — пропускаємо дублікати.
     """
-    import random as _random
-
     if not supabase:
         return 0
 
@@ -64,11 +79,8 @@ def auto_assign_submission(submission_id: str, round_id: str, tournament_id: str
         if not candidates:
             return 0
 
-        # Сортуємо за навантаженням + tie-breaking через shuffle
-        _random.shuffle(candidates)
-        candidates.sort(key=lambda jid: load[jid])
-
-        chosen = candidates[:k]
+        # Найменш завантажені журі; нічиї розв'язуються випадково
+        chosen = pick_least_loaded(candidates, load, k)
 
         # Вставляємо
         rows = [

@@ -410,6 +410,12 @@ uvicorn main:app --reload --port 8000
 
 Бекенд буде доступний за адресою **http://127.0.0.1:8000**, Swagger-документація — **http://127.0.0.1:8000/docs**.
 
+**Тести бекенду** (Supabase підміняється in-memory базою, ключі не потрібні):
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
+
 > **Примітка:** Бекенд також задеплоєний на [Render](https://render.com). Якщо локальний бекенд не потрібен, у `frontend/.env.local` вкажіть актуальний URL з Render як `NEXT_PUBLIC_API_URL`. Безкоштовний інстанс Render «засинає» після періоду бездіяльності, тому перший запит може тривати до хвилини.
 
 Swagger-документація на Render: **https://site-turing-crutchmasters-team-s.onrender.com/docs**
