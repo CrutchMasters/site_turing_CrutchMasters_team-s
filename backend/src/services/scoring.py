@@ -49,6 +49,23 @@ def resolve_criteria(round_criteria) -> list[dict]:
     return [{"key": key, "weight": 20} for key in DEFAULT_CRITERIA_KEYS]
 
 
+def is_complete(criteria_scores, round_criteria) -> bool:
+    """True, якщо бали виставлено за КОЖЕН критерій раунду.
+
+    Журі може зберегти оцінку частково (у формі це статус «in_progress»): тоді
+    `total_score` — лише сума виставлених балів, і порівнювати її з повними оцінками
+    некоректно. Таблиця лідерів враховує тільки повні оцінки.
+    """
+    if not isinstance(criteria_scores, dict):
+        return False
+    for criterion in resolve_criteria(round_criteria):
+        entry = criteria_scores.get(criterion["key"])
+        raw = entry.get("score") if isinstance(entry, dict) else None
+        if not _is_number(raw) or not math.isfinite(raw):
+            return False
+    return True
+
+
 def compute_total(criteria_scores, round_criteria) -> float:
     """Підсумкова оцінка. Кидає ScoringError, якщо бали некоректні."""
     if not isinstance(criteria_scores, dict):

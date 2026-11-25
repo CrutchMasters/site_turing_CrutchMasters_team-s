@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException, Header
 
 from src.db import fetch_one, supabase
+from src.services.scoring import is_complete
 
 
 router = APIRouter()
@@ -24,11 +25,14 @@ async def get_tournament_leaderboard(tournament_id: str, authorization: str | No
         raise HTTPException(status_code=404, detail="Турнір не знайдено")
 
     rounds_res = supabase.table("rounds") \
-        .select("id, name, number, status") \
+        .select("id, name, number, status, criteria") \
         .eq("tournament_id", tournament_id) \
         .order("number") \
         .execute()
-    rounds = rounds_res.data or []
+    rounds_raw = rounds_res.data or []
+    criteria_by_round = {r["id"]: r.get("criteria") for r in rounds_raw}
+    # критерії потрібні лише для перевірки повноти оцінок, у відповідь вони не потрапляють
+    rounds = [{k: v for k, v in r.items() if k != "criteria"} for r in rounds_raw]
 
     if not rounds:
         return {"tournament": tournament, "leaderboard": [], "rounds": []}
@@ -97,7 +101,14 @@ async def get_tournament_leaderboard(tournament_id: str, authorization: str | No
                 team_scores[team_id]["rounds"][round_id] = None
                 continue
 
-            scored = [e["total_score"] for e in sub_evals if e.get("total_score") is not None]
+            # Частково заповнені оцінки (журі зберегло не всі критерії) не враховуємо:
+            # їхня сума нижча за повну й несправедливо знижувала б середнє команди.
+            round_criteria = criteria_by_round.get(round_id)
+            scored = [
+                e["total_score"] for e in sub_evals
+                if e.get("total_score") is not None
+                and is_complete(e.get("criteria_scores"), round_criteria)
+            ]
             if not scored:
                 team_scores[team_id]["rounds"][round_id] = None
                 continue
