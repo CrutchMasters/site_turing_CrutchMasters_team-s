@@ -30,6 +30,10 @@ interface LeaderboardEntry {
     round_scores: Record<string, number | null>;
     total_score: number;
     evaluated_rounds: number;
+    // Рейтинг з поправкою на строгість суддів (необов'язкові: старий бекенд їх не повертає)
+    adjusted_total_score?: number;
+    adjusted_round_scores?: Record<string, number | null>;
+    adjusted_place?: number;
 }
 
 const placeColors: Record<number, string> = {
@@ -58,7 +62,8 @@ interface Props {
 export function LeaderboardSection({ tournamentId }: Props) {
     const router = useRouter();
     const [rounds, setRounds] = useState<Round[]>([]);
-    const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+    const [officialBoard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+    const [adjustedView, setAdjustedView] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isLive, setIsLive] = useState(false);
@@ -171,6 +176,18 @@ export function LeaderboardSection({ tournamentId }: Props) {
         );
     }
 
+    // Скоригований вигляд: ті самі команди, але бали й місця з поправкою на строгість суддів
+    const canAdjust = officialBoard.length > 0 && officialBoard.every((e) => e.adjusted_total_score !== undefined);
+    const leaderboard: LeaderboardEntry[] = adjustedView && canAdjust
+        ? officialBoard
+            .map((e) => ({
+                ...e,
+                total_score: e.adjusted_total_score ?? e.total_score,
+                round_scores: e.adjusted_round_scores ?? e.round_scores,
+                place: e.adjusted_place ?? e.place,
+            }))
+            .sort((a, b) => a.place - b.place || a.team_name.localeCompare(b.team_name))
+        : officialBoard;
     const isEmpty = leaderboard.length === 0;
     const hasScores = leaderboard.some((e) => e.total_score > 0);
 
@@ -211,6 +228,32 @@ export function LeaderboardSection({ tournamentId }: Props) {
                     Оновити
                 </button>
             </div>
+
+            {/* Перемикач: офіційний рейтинг (середнє) / з поправкою на строгість суддів */}
+            {!isEmpty && canAdjust && (
+                <div className="mb-6 flex flex-col gap-2">
+                    <div className="inline-flex self-start rounded-xl border border-(--brd) bg-(--card) p-1 text-[11px] font-black uppercase tracking-wider">
+                        <button
+                            onClick={() => setAdjustedView(false)}
+                            className={`px-3 py-1.5 rounded-lg transition-all ${!adjustedView ? "bg-blue-600 text-white" : "text-(--t2) hover:text-blue-600"}`}
+                        >
+                            Офіційний (середнє)
+                        </button>
+                        <button
+                            onClick={() => setAdjustedView(true)}
+                            className={`px-3 py-1.5 rounded-lg transition-all ${adjustedView ? "bg-blue-600 text-white" : "text-(--t2) hover:text-blue-600"}`}
+                        >
+                            З поправкою на суворість суддів
+                        </button>
+                    </div>
+                    {adjustedView && (
+                        <p className="text-[11px] font-medium text-(--t2)">
+                            Додатковий рейтинг: бали виправлено з урахуванням того, що одні судді оцінюють суворіше за інших.
+                            Офіційні місця визначаються за простим середнім.
+                        </p>
+                    )}
+                </div>
+            )}
 
             {/* Попередні результати: не всі раунди ще оцінено */}
             {!isEmpty && progress && !progress.isFinal && (
