@@ -138,6 +138,74 @@ def test_rounds_are_returned_in_order(get):
     assert [r["number"] for r in res["rounds"]] == [1, 2, 3]
 
 
+# ---- рейтинг з поправкою на строгість суддів ----
+
+def strict_vs_lenient_store():
+    """Роботи A і B однакові за якістю (70), але A оцінюють лише суворі судді, B — лише м'які;
+    C і D оцінені змішаними парами й пов'язують суддів між собою."""
+    quality = {"A": 70, "B": 70, "C": 60, "D": 80}
+    bias = {"s1": -20, "s2": -20, "m1": 20, "m2": 20}
+    panels = {"A": ("s1", "s2"), "B": ("m1", "m2"), "C": ("s1", "m1"), "D": ("s2", "m2")}
+    evals = [(t.lower(), j, quality[t] + bias[j]) for t, js in panels.items() for j in js]
+    return build(teams=tuple(quality), subs=[(t.lower(), t, "r1") for t in quality], evals=evals)
+
+
+def test_official_ranking_stays_the_plain_mean_but_adjusted_fields_are_added(get):
+    res = get(strict_vs_lenient_store())
+    teams = by_team(res)
+    assert teams["A"]["total_score"] == 50.0 and teams["B"]["total_score"] == 90.0     # просте середнє
+    assert [e["team_id"] for e in res["leaderboard"]][0] == "B"
+    for e in res["leaderboard"]:
+        assert {"adjusted_total_score", "adjusted_round_scores", "adjusted_place"} <= set(e)
+
+
+def test_adjusted_scores_pull_equally_good_works_closer(get):
+    teams = by_team(get(strict_vs_lenient_store()))
+    gap_mean = teams["B"]["total_score"] - teams["A"]["total_score"]
+    gap_adj = teams["B"]["adjusted_total_score"] - teams["A"]["adjusted_total_score"]
+    assert gap_adj < gap_mean                       # поправка зменшує «везіння» з суддями
+
+
+def test_adjusted_places_can_differ_from_official_places(get):
+    """Офіційно (просте середнє): B, D, C, A. З поправкою A (оцінена лише суворими) наздоганяє C,
+    а B і D зближуються. Значення λ = 1 звірені з numpy (research/jury_sim/aggregate.py::ls)."""
+    res = get(strict_vs_lenient_store())
+    official = {e["team_id"]: e["place"] for e in res["leaderboard"]}
+    adjusted = {e["team_id"]: e["adjusted_place"] for e in res["leaderboard"]}
+    assert official == {"B": 1, "D": 2, "C": 3, "A": 4}
+    assert adjusted == {"B": 1, "D": 1, "A": 3, "C": 3}
+    totals = {e["team_id"]: e["adjusted_total_score"] for e in res["leaderboard"]}
+    assert totals == pytest.approx({"A": 60.0, "B": 80.0, "C": 60.0, "D": 80.0}, abs=1e-6)
+
+
+def test_adjustment_summary_is_reported_without_juror_identities(get):
+    res = get(strict_vs_lenient_store())
+    assert res["adjustment"] == {"method": "ridge_least_squares", "lambda": 1.0,
+                                 "evaluations": 8, "juror_groups": 1}
+    assert "s1" not in str(res) and "m1" not in str(res)       # ідентифікатори суддів не виходять назовні
+
+
+def test_with_one_juror_per_work_adjusted_equals_official(get):
+    store = build(subs=[("a", "A", "r1"), ("b", "B", "r1")], evals=[("a", "j1", 70), ("b", "j2", 90)])
+    for e in get(store)["leaderboard"]:
+        assert e["adjusted_total_score"] == e["total_score"]
+        assert e["adjusted_place"] == e["place"]
+
+
+def test_partial_evaluations_do_not_enter_the_adjustment(get):
+    partial = {"backend_quality": {"score": 5, "comment": ""}}
+    store = build(subs=[("a", "A", "r1")], evals=[("a", "j1", 80), ("a", "j2", 1.0, partial)])
+    assert get(store)["adjustment"]["evaluations"] == 1
+
+
+def test_adjusted_round_scores_follow_round_structure(get):
+    store = build(rounds=("r1", "r2"), subs=[("a1", "A", "r1"), ("a2", "A", "r2")],
+                  evals=[("a1", "j1", 70)])
+    entry = by_team(get(store))["A"]
+    assert entry["adjusted_round_scores"] == {"r1": 70.0, "r2": None}
+    assert entry["adjusted_total_score"] == 70.0
+
+
 # ---- попередній / остаточний стан таблиці ----
 
 def with_statuses(store, *statuses):

@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException, Header
 
 from src.db import fetch_one, supabase
+from src.services.ranking import DEFAULT_LAMBDA, adjusted_quality, juror_groups
 from src.services.scoring import is_complete
 
 
@@ -20,7 +21,7 @@ def round_progress(rounds: list[dict]) -> dict:
             "rounds_judged": judged, "rounds_total": len(rounds)}
 
 
-def assign_places(entries: list[dict]) -> None:
+def assign_places(entries: list[dict], total_key: str = "total_score", place_key: str = "place") -> None:
     """Проставляє `place` у відсортованому списку; команди з однаковою сумою ділять місце.
 
     «Змагальна» нумерація: 1, 1, 3 (а не 1, 2, 3): після двох перших місць наступне — третє.
@@ -28,10 +29,10 @@ def assign_places(entries: list[dict]) -> None:
     """
     previous_total, previous_place = None, 0
     for index, entry in enumerate(entries, start=1):
-        if entry["total_score"] != previous_total:
+        if entry[total_key] != previous_total:
             previous_place = index
-            previous_total = entry["total_score"]
-        entry["place"] = previous_place
+            previous_total = entry[total_key]
+        entry[place_key] = previous_place
 
 
 @router.get("/api/tournaments/{tournament_id}/leaderboard")
@@ -109,6 +110,8 @@ async def get_tournament_leaderboard(tournament_id: str, authorization: str | No
         evals_by_sub.setdefault(e["submission_id"], []).append(e)
 
     team_scores: dict = {}
+    observations: list = []                      # (робота, суддя, бал) — для поправки на суворість
+    counted_sub: dict = {}                       # (команда, раунд) → робота, що потрапила в підсумок
     for team_id in team_ids:
         team_scores[team_id] = {"rounds": {}, "total": 0.0}
         for r in rounds:
@@ -129,11 +132,12 @@ async def get_tournament_leaderboard(tournament_id: str, authorization: str | No
             # Частково заповнені оцінки (журі зберегло не всі критерії) не враховуємо:
             # їхня сума нижча за повну й несправедливо знижувала б середнє команди.
             round_criteria = criteria_by_round.get(round_id)
-            scored = [
-                e["total_score"] for e in sub_evals
+            counted = [
+                e for e in sub_evals
                 if e.get("total_score") is not None
                 and is_complete(e.get("criteria_scores"), round_criteria)
             ]
+            scored = [e["total_score"] for e in counted]
             if not scored:
                 team_scores[team_id]["rounds"][round_id] = None
                 continue
@@ -141,11 +145,21 @@ async def get_tournament_leaderboard(tournament_id: str, authorization: str | No
             avg = sum(scored) / len(scored)
             team_scores[team_id]["rounds"][round_id] = round(avg, 2)
             team_scores[team_id]["total"] += avg
+            counted_sub[(team_id, round_id)] = team_sub["id"]
+            observations.extend((team_sub["id"], e["jury_id"], e["total_score"]) for e in counted)
+
+    # Додатковий рейтинг: якість робіт з поправкою на строгість суддів (див. services/ranking.py)
+    quality, _bias = adjusted_quality(observations, DEFAULT_LAMBDA)
 
     leaderboard = []
     for team_id, scores in team_scores.items():
         team = teams_map.get(team_id, {})
         captain_id = team.get("captain_id")
+        adjusted_rounds = {
+            round_id: (round(quality[counted_sub[(team_id, round_id)]], 2)
+                       if (team_id, round_id) in counted_sub else None)
+            for round_id in scores["rounds"]
+        }
         entry = {
             "team_id":           team_id,
             "team_name":         team.get("name", "—"),
@@ -154,16 +168,27 @@ async def get_tournament_leaderboard(tournament_id: str, authorization: str | No
             "round_scores":      scores["rounds"],
             "total_score":       round(scores["total"], 2),
             "evaluated_rounds":  sum(1 for v in scores["rounds"].values() if v is not None),
+            "adjusted_round_scores": adjusted_rounds,
+            "adjusted_total_score":  round(sum(v for v in adjusted_rounds.values() if v is not None), 2),
         }
         leaderboard.append(entry)
 
     # Порядок: за підсумком (спадання), а при рівності — за назвою, щоб вивід був стабільним.
     leaderboard.sort(key=lambda x: (-x["total_score"], str(x["team_name"]).casefold()))
     assign_places(leaderboard)
+    # Місце за скоригованим підсумком (офіційне місце `place` лишається за простим середнім)
+    by_adjusted = sorted(leaderboard, key=lambda x: (-x["adjusted_total_score"], str(x["team_name"]).casefold()))
+    assign_places(by_adjusted, "adjusted_total_score", "adjusted_place")
 
     return {
         "tournament": tournament,
         "rounds":     rounds,
         "leaderboard": leaderboard,
+        "adjustment": {
+            "method": "ridge_least_squares",
+            "lambda": DEFAULT_LAMBDA,
+            "evaluations": len(observations),
+            "juror_groups": juror_groups(observations),
+        },
         **round_progress(rounds),
     }
