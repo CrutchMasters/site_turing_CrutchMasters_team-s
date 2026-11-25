@@ -1,0 +1,181 @@
+"""Тести таблиці лідерів: усереднення оцінок журі, сума за раунди, місця."""
+
+import asyncio
+
+import pytest
+from fastapi import HTTPException
+
+import src.routers.leaderboard as lb
+
+from tests.fake_supabase import FakeSupabase
+
+
+def build(teams=("A", "B"), rounds=("r1",), subs=(), evals=(), captains=True):
+    """subs: (id, team, round[, is_draft]); evals: (submission_id, jury_id, total_score)."""
+    store = {
+        "tournaments": [{"id": "t1", "name": "Турнір", "status": "ongoing"}],
+        "rounds": [{"id": r, "name": r, "number": i + 1, "status": "judging", "tournament_id": "t1"}
+                   for i, r in enumerate(rounds)],
+        "submissions": [{"id": s[0], "team_id": s[1], "round_id": s[2],
+                         "status": "submitted", "is_draft": s[3] if len(s) > 3 else False} for s in subs],
+        "jury_evaluations": [{"id": f"e{i}", "submission_id": e[0], "jury_id": e[1],
+                              "total_score": e[2], "criteria_scores": {}} for i, e in enumerate(evals)],
+        "teams": [{"id": t, "name": f"Команда {t}", "city_school_org": "Київ",
+                   "captain_id": f"cap{t}" if captains else None} for t in teams],
+        "account": [{"id": f"cap{t}", "username": f"user_{t}"} for t in teams],
+    }
+    return store
+
+
+@pytest.fixture
+def get(monkeypatch):
+    def run(store, tournament_id="t1"):
+        monkeypatch.setattr(lb, "supabase", FakeSupabase(store))
+        return asyncio.run(lb.get_tournament_leaderboard(tournament_id))
+    return run
+
+
+def by_team(result):
+    return {e["team_id"]: e for e in result["leaderboard"]}
+
+
+def test_round_score_is_the_mean_of_jury_totals(get):
+    res = get(build(subs=[("s1", "A", "r1")], evals=[("s1", "j1", 80), ("s1", "j2", 90), ("s1", "j3", 70)]))
+    entry = by_team(res)["A"]
+    assert entry["round_scores"] == {"r1": 80.0}
+    assert entry["total_score"] == 80.0
+    assert entry["evaluated_rounds"] == 1
+
+
+def test_total_is_the_sum_of_round_means_and_places_follow_total(get):
+    store = build(rounds=("r1", "r2"),
+                  subs=[("a1", "A", "r1"), ("a2", "A", "r2"), ("b1", "B", "r1"), ("b2", "B", "r2")],
+                  evals=[("a1", "j1", 70), ("a2", "j1", 60), ("b1", "j1", 90), ("b2", "j1", 85)])
+    res = get(store)
+    assert [e["team_id"] for e in res["leaderboard"]] == ["B", "A"]
+    assert [e["place"] for e in res["leaderboard"]] == [1, 2]
+    assert by_team(res)["B"]["total_score"] == 175.0
+    assert by_team(res)["A"]["total_score"] == 130.0
+
+
+def test_values_are_rounded_to_two_decimals(get):
+    res = get(build(subs=[("s1", "A", "r1")], evals=[("s1", "j1", 80), ("s1", "j2", 80), ("s1", "j3", 81)]))
+    assert by_team(res)["A"]["round_scores"]["r1"] == 80.33
+    assert by_team(res)["A"]["total_score"] == 80.33
+
+
+def test_drafts_are_ignored_and_a_team_with_only_drafts_is_absent(get):
+    store = build(subs=[("s1", "A", "r1"), ("s2", "B", "r1", True)],
+                  evals=[("s1", "j1", 50), ("s2", "j1", 100)])
+    res = get(store)
+    assert list(by_team(res)) == ["A"]
+
+
+def test_unevaluated_round_is_none_and_adds_nothing(get):
+    store = build(rounds=("r1", "r2"),
+                  subs=[("a1", "A", "r1"), ("a2", "A", "r2")],
+                  evals=[("a1", "j1", 70)])
+    entry = by_team(get(store))["A"]
+    assert entry["round_scores"] == {"r1": 70.0, "r2": None}
+    assert entry["total_score"] == 70.0
+    assert entry["evaluated_rounds"] == 1
+
+
+def test_team_with_no_submission_in_a_round_gets_none_for_it(get):
+    store = build(rounds=("r1", "r2"),
+                  subs=[("a1", "A", "r1"), ("a2", "A", "r2"), ("b1", "B", "r1")],
+                  evals=[("a1", "j1", 70), ("a2", "j1", 70), ("b1", "j1", 70)])
+    assert by_team(get(store))["B"]["round_scores"] == {"r1": 70.0, "r2": None}
+
+
+def test_evaluations_with_null_total_are_skipped(get):
+    store = build(subs=[("s1", "A", "r1")], evals=[("s1", "j1", None), ("s1", "j2", 60)])
+    assert by_team(get(store))["A"]["round_scores"]["r1"] == 60.0
+    store = build(subs=[("s1", "A", "r1")], evals=[("s1", "j1", None)])
+    assert by_team(get(store))["A"]["round_scores"]["r1"] is None
+
+
+def test_zero_is_a_real_score_not_missing(get):
+    entry = by_team(get(build(subs=[("s1", "A", "r1")], evals=[("s1", "j1", 0)])))["A"]
+    assert entry["round_scores"]["r1"] == 0.0
+    assert entry["evaluated_rounds"] == 1
+
+
+def test_last_submission_in_the_list_is_the_one_that_counts(get):
+    store = build(subs=[("old", "A", "r1"), ("new", "A", "r1")],
+                  evals=[("old", "j1", 90), ("new", "j1", 40)])
+    assert by_team(get(store))["A"]["round_scores"]["r1"] == 40.0
+
+
+def test_other_teams_evaluations_do_not_leak(get):
+    store = build(subs=[("a", "A", "r1"), ("b", "B", "r1")],
+                  evals=[("a", "j1", 10), ("b", "j1", 99)])
+    res = by_team(get(store))
+    assert res["A"]["total_score"] == 10.0 and res["B"]["total_score"] == 99.0
+
+
+def test_captain_and_team_details(get):
+    entry = by_team(get(build(subs=[("s1", "A", "r1")], evals=[("s1", "j1", 70)])))["A"]
+    assert entry["team_name"] == "Команда A"
+    assert entry["city_school_org"] == "Київ"
+    assert entry["captain_username"] == "user_A"
+    assert get(build(subs=[("s1", "A", "r1")], captains=False))["leaderboard"][0]["captain_username"] is None
+
+
+def test_rounds_are_returned_in_order(get):
+    res = get(build(rounds=("r3", "r1", "r2"), subs=[("s", "A", "r1")]))
+    assert [r["number"] for r in res["rounds"]] == [1, 2, 3]
+
+
+# ---- порожні й помилкові випадки ----
+
+def test_tournament_without_rounds_or_submissions_returns_empty_board(get):
+    assert get(build(rounds=()))["leaderboard"] == []
+    assert get(build(subs=[]))["leaderboard"] == []
+    assert get(build(subs=[]))["rounds"] != []
+
+
+def test_unknown_tournament_is_404(get):
+    with pytest.raises(HTTPException) as exc:
+        get(build(), tournament_id="nope")
+    assert exc.value.status_code == 404
+
+
+def test_missing_database_is_500(monkeypatch):
+    monkeypatch.setattr(lb, "supabase", None)
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(lb.get_tournament_leaderboard("t1"))
+    assert exc.value.status_code == 500
+
+
+# ---- поточна поведінка, яку варто знати (не обов'язково бажана) ----
+
+def test_known_ties_get_different_places(get):
+    """Команди з однаковою сумою отримують різні місця (1 і 2), а не спільне."""
+    store = build(subs=[("a", "A", "r1"), ("b", "B", "r1")], evals=[("a", "j1", 80), ("b", "j1", 80)])
+    assert sorted(e["place"] for e in get(store)["leaderboard"]) == [1, 2]
+
+
+def test_known_missing_round_is_penalised_by_sum(get):
+    """Підсумок — сума по раундах, тож команда з одним оціненим раундом (100)
+    програє команді з двома оціненими по 60."""
+    store = build(rounds=("r1", "r2"),
+                  subs=[("a1", "A", "r1"), ("a2", "A", "r2"), ("b1", "B", "r1"), ("b2", "B", "r2")],
+                  evals=[("a1", "j1", 100), ("b1", "j1", 60), ("b2", "j1", 60)])
+    assert [e["team_id"] for e in get(store)["leaderboard"]] == ["B", "A"]
+
+
+def test_known_partial_evaluation_counts_as_a_low_score(get):
+    """Якщо суддя заповнив лише частину критеріїв, збережена часткова сума (напр. 20 з 100)
+    усереднюється нарівні з повними оцінками й знижує результат."""
+    store = build(subs=[("s1", "A", "r1")], evals=[("s1", "j1", 90), ("s1", "j2", 20)])
+    assert by_team(get(store))["A"]["round_scores"]["r1"] == 55.0
+
+
+def test_known_scores_are_not_corrected_for_juror_strictness(get):
+    """Простий середній (тема дослідження): та сама робота отримує різний бал залежно від
+    того, наскільки суворі судді. Це й міряє research/."""
+    store = build(subs=[("a", "A", "r1"), ("b", "B", "r1")],
+                  evals=[("a", "strict1", 60), ("a", "strict2", 60), ("b", "lenient1", 80), ("b", "lenient2", 80)])
+    res = by_team(get(store))
+    assert res["B"]["total_score"] - res["A"]["total_score"] == 20.0
