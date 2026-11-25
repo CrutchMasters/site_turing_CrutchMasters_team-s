@@ -410,17 +410,36 @@ uvicorn main:app --reload --port 8000
 
 Бекенд буде доступний за адресою **http://127.0.0.1:8000**, Swagger-документація — **http://127.0.0.1:8000/docs**.
 
-**Тести бекенду** (Supabase підміняється in-memory базою, ключі не потрібні):
+**Тести бекенду** (Supabase підміняється in-memory базою, ключі, `.env` та інтернет не потрібні).
+Команди виконуються **всередині віртуального оточення** з кроків 1–4 вище — у терміналі на початку рядка має бути `(venv)`:
 ```bash
-pip install -r requirements-dev.txt
-pytest -q
+cd backend                              # з кореня репозиторію
+source venv/bin/activate                # якщо оточення ще не активоване
+pip install -r requirements-dev.txt     # один раз: залежності + pytest
+pytest -q                               # усі тести; у кінці рядок на кшталт «165 passed»
 ```
+Корисні варіанти: `pytest -v` (кожен тест окремим рядком), `pytest tests/test_statuses.py` (один файл),
+`pytest -k leaderboard` (тести, у назві яких є слово). Якщо тест впав, pytest покаже `FAILED`,
+рядок із перевіркою та очікуване/отримане значення. Наступного разу достатньо `cd backend`,
+`source venv/bin/activate` і `pytest -q` — перевстановлювати нічого не треба.
 
 > **Примітка:** Бекенд також задеплоєний на [Render](https://render.com). Якщо локальний бекенд не потрібен, у `frontend/.env.local` вкажіть актуальний URL з Render як `NEXT_PUBLIC_API_URL`. Безкоштовний інстанс Render «засинає» після періоду бездіяльності, тому перший запит може тривати до хвилини.
 
 Swagger-документація на Render: **https://site-turing-crutchmasters-team-s.onrender.com/docs**
 
-**Якщо `pip install` падає з `No such file or directory: 'x86_64-linux-gnu-gcc'`** — не встановлено компілятор: виконайте `sudo apt install build-essential python3-dev` і повторіть. Альтернатива — створити оточення на Python 3.12/3.13 (`python3.13 -m venv venv`), тоді компіляція не потрібна.
+**Типові помилки під час встановлення (Ubuntu/Debian)**
+
+| Повідомлення | Причина і що робити |
+|---|---|
+| `Command 'pip' not found` | Команду `pip` запускали поза оточенням. Створіть і активуйте `venv` (кроки 1–4): у ньому `pip` є. Системний `pip` ставити не потрібно |
+| `error: externally-managed-environment` | Ubuntu забороняє `pip install` у системний Python. Рішення — `venv`: `python3 -m venv venv && source venv/bin/activate`, потім `pip install …`. Прапорець `--break-system-packages` не використовуйте |
+| `The virtual environment was not created successfully` / `ensurepip is not available` | Не встановлено `python3-venv`: `sudo apt install python3-venv` |
+| `No such file or directory: 'x86_64-linux-gnu-gcc'` | Не встановлено компілятор: `sudo apt install build-essential python3-dev` і повторіть `pip install`. Альтернатива — оточення на Python 3.12/3.13 (`python3.13 -m venv venv`), тоді компіляція не потрібна |
+| `pytest: command not found` | Оточення не активоване або не встановлено `requirements-dev.txt`: `source venv/bin/activate && pip install -r requirements-dev.txt` |
+| `ModuleNotFoundError: No module named 'fastapi'` (чи інший пакет) | Те саме: активуйте `venv` і виконайте `pip install -r requirements-dev.txt`. Перевірити, що використовується саме оточення: `which python` має вказувати на `…/backend/venv/bin/python` |
+| `sudo apt install python3-xyz` → `Unable to locate package` | `xyz` у підказці pip — лише приклад. Ставити окремий пакет не потрібно, використовуйте `venv` |
+
+> `(venv)` на початку рядка термінала зникає, коли ви відкриваєте нове вікно — тоді знову виконайте `source venv/bin/activate`.
 
 ---
 
