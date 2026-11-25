@@ -147,3 +147,34 @@ def test_permissions_are_still_checked_before_scores(monkeypatch):
     with pytest.raises(HTTPException) as err:
         _call(monkeypatch, store, _payload(scores(code=500)))
     assert err.value.status_code == 403
+
+
+# ---------------- is_complete ----------------
+
+from src.services.scoring import is_complete  # noqa: E402
+
+
+def _all(score, keys=("backend_quality", "database_structure", "frontend_quality", "must_have", "no_bugs")):
+    return {k: {"score": score, "comment": ""} for k in keys}
+
+
+def test_is_complete_requires_every_default_criterion():
+    assert is_complete(_all(70), None)
+    partial = _all(70)
+    partial["no_bugs"]["score"] = ""
+    assert not is_complete(partial, None)
+    del partial["no_bugs"]
+    assert not is_complete(partial, None)
+
+
+def test_is_complete_zero_counts_but_none_and_garbage_do_not():
+    assert is_complete(_all(0), None)
+    for bad in (None, "", "x", float("nan"), True):
+        assert not is_complete(_all(bad), None)
+    assert not is_complete(None, None) and not is_complete([], None)
+
+
+def test_is_complete_follows_round_criteria():
+    crit = [{"key": "a", "weight": 50}, {"key": "b", "weight": 50}]
+    assert is_complete({"a": {"score": 1}, "b": {"score": 2}}, crit)
+    assert not is_complete({"a": {"score": 1}}, crit)

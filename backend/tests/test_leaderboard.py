@@ -10,8 +10,17 @@ import src.routers.leaderboard as lb
 from tests.fake_supabase import FakeSupabase
 
 
+DEFAULT_KEYS = ("backend_quality", "database_structure", "frontend_quality", "must_have", "no_bugs")
+
+
+def full(score):
+    """Повна оцінка за 5 критеріями за замовчуванням (ваги по 20 → підсумок = score)."""
+    return {k: {"score": score, "comment": ""} for k in DEFAULT_KEYS}
+
+
 def build(teams=("A", "B"), rounds=("r1",), subs=(), evals=(), captains=True):
-    """subs: (id, team, round[, is_draft]); evals: (submission_id, jury_id, total_score)."""
+    """subs: (id, team, round[, is_draft]);
+    evals: (submission_id, jury_id, total_score[, criteria_scores]); без 4-го елемента оцінка повна."""
     store = {
         "tournaments": [{"id": "t1", "name": "Турнір", "status": "ongoing"}],
         "rounds": [{"id": r, "name": r, "number": i + 1, "status": "judging", "tournament_id": "t1"}
@@ -19,7 +28,9 @@ def build(teams=("A", "B"), rounds=("r1",), subs=(), evals=(), captains=True):
         "submissions": [{"id": s[0], "team_id": s[1], "round_id": s[2],
                          "status": "submitted", "is_draft": s[3] if len(s) > 3 else False} for s in subs],
         "jury_evaluations": [{"id": f"e{i}", "submission_id": e[0], "jury_id": e[1],
-                              "total_score": e[2], "criteria_scores": {}} for i, e in enumerate(evals)],
+                              "total_score": e[2],
+                              "criteria_scores": e[3] if len(e) > 3 else full(e[2])}
+                             for i, e in enumerate(evals)],
         "teams": [{"id": t, "name": f"Команда {t}", "city_school_org": "Київ",
                    "captain_id": f"cap{t}" if captains else None} for t in teams],
         "account": [{"id": f"cap{t}", "username": f"user_{t}"} for t in teams],
@@ -165,11 +176,38 @@ def test_known_missing_round_is_penalised_by_sum(get):
     assert [e["team_id"] for e in get(store)["leaderboard"]] == ["B", "A"]
 
 
-def test_known_partial_evaluation_counts_as_a_low_score(get):
-    """Якщо суддя заповнив лише частину критеріїв, збережена часткова сума (напр. 20 з 100)
-    усереднюється нарівні з повними оцінками й знижує результат."""
-    store = build(subs=[("s1", "A", "r1")], evals=[("s1", "j1", 90), ("s1", "j2", 20)])
-    assert by_team(get(store))["A"]["round_scores"]["r1"] == 55.0
+def test_partial_evaluations_are_ignored(get):
+    """Журі зберегло лише частину критеріїв (у формі це «in_progress»): така оцінка
+    не знижує середнє команди й не потрапляє в таблицю."""
+    partial = {**full(0), "backend_quality": {"score": 20, "comment": ""},
+               "database_structure": {"score": "", "comment": ""}}
+    store = build(subs=[("s1", "A", "r1")], evals=[("s1", "j1", 90), ("s1", "j2", 4.0, partial)])
+    assert by_team(get(store))["A"]["round_scores"]["r1"] == 90.0
+
+
+def test_round_with_only_partial_evaluations_counts_as_not_evaluated(get):
+    partial = {"backend_quality": {"score": 50, "comment": ""}}
+    store = build(subs=[("s1", "A", "r1")], evals=[("s1", "j1", 10.0, partial)])
+    entry = by_team(get(store))["A"]
+    assert entry["round_scores"]["r1"] is None
+    assert entry["total_score"] == 0.0 and entry["evaluated_rounds"] == 0
+
+
+def test_completeness_uses_the_criteria_of_the_round(get):
+    """Якщо в раунду свої критерії, повнота перевіряється за ними, а не за стандартними."""
+    store = build(subs=[("s1", "A", "r1")], evals=[
+        ("s1", "j1", 70.0, {"idea": {"score": 80, "comment": ""}, "ux": {"score": 60, "comment": ""}}),
+        ("s1", "j2", 50.0, {"idea": {"score": 100, "comment": ""}}),          # немає ux → неповна
+    ])
+    store["rounds"][0]["criteria"] = [{"key": "idea", "weight": 50}, {"key": "ux", "weight": 50}]
+    entry = by_team(get(store))["A"]
+    assert entry["round_scores"]["r1"] == 70.0
+
+
+def test_round_criteria_are_not_leaked_in_the_response(get):
+    store = build(subs=[("s1", "A", "r1")], evals=[("s1", "j1", 70)])
+    store["rounds"][0]["criteria"] = [{"key": "a", "weight": 100}]
+    assert all("criteria" not in r for r in get(store)["rounds"])
 
 
 def test_known_scores_are_not_corrected_for_juror_strictness(get):
