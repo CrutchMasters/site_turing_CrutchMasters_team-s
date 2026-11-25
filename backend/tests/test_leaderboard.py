@@ -161,10 +161,45 @@ def test_missing_database_is_500(monkeypatch):
 
 # ---- поточна поведінка, яку варто знати (не обов'язково бажана) ----
 
-def test_known_ties_get_different_places(get):
-    """Команди з однаковою сумою отримують різні місця (1 і 2), а не спільне."""
-    store = build(subs=[("a", "A", "r1"), ("b", "B", "r1")], evals=[("a", "j1", 80), ("b", "j1", 80)])
-    assert sorted(e["place"] for e in get(store)["leaderboard"]) == [1, 2]
+def test_tied_teams_share_a_place_and_next_place_is_skipped(get):
+    """Рівні підсумки → однакове місце за змагальною нумерацією: 1, 1, 3."""
+    store = build(teams=("A", "B", "C"),
+                  subs=[("a", "A", "r1"), ("b", "B", "r1"), ("c", "C", "r1")],
+                  evals=[("a", "j1", 80), ("b", "j1", 80), ("c", "j1", 60)])
+    places = {e["team_id"]: e["place"] for e in get(store)["leaderboard"]}
+    assert places == {"A": 1, "B": 1, "C": 3}
+
+
+def test_tie_in_the_middle_and_at_the_bottom(get):
+    store = build(teams=("A", "B", "C", "D", "E"),
+                  subs=[(t.lower(), t, "r1") for t in "ABCDE"],
+                  evals=[("a", "j1", 90), ("b", "j1", 70), ("c", "j1", 70), ("d", "j1", 50), ("e", "j1", 50)])
+    places = {e["team_id"]: e["place"] for e in get(store)["leaderboard"]}
+    assert places == {"A": 1, "B": 2, "C": 2, "D": 4, "E": 4}
+
+
+def test_all_teams_tied_are_all_first(get):
+    store = build(subs=[("a", "A", "r1"), ("b", "B", "r1")], evals=[("a", "j1", 70), ("b", "j1", 70)])
+    assert [e["place"] for e in get(store)["leaderboard"]] == [1, 1]
+
+
+def test_order_among_tied_teams_is_stable_by_name(get):
+    store = build(teams=("B", "A"), subs=[("a", "A", "r1"), ("b", "B", "r1")],
+                  evals=[("a", "j1", 70), ("b", "j1", 70)])
+    assert [e["team_name"] for e in get(store)["leaderboard"]] == ["Команда A", "Команда B"]
+
+
+def test_totals_equal_after_rounding_to_two_decimals_tie(get):
+    """80,001 і 80,004 після округлення (як у відповіді) — однакові, отже й місце спільне."""
+    store = build(subs=[("a", "A", "r1"), ("b", "B", "r1")],
+                  evals=[("a", "j1", 80.001), ("b", "j1", 80.004)])
+    assert [e["place"] for e in get(store)["leaderboard"]] == [1, 1]
+
+
+def test_places_without_ties_are_sequential(get):
+    store = build(teams=("A", "B", "C"), subs=[(t.lower(), t, "r1") for t in "ABC"],
+                  evals=[("a", "j1", 90), ("b", "j1", 80), ("c", "j1", 70)])
+    assert [e["place"] for e in get(store)["leaderboard"]] == [1, 2, 3]
 
 
 def test_known_missing_round_is_penalised_by_sum(get):

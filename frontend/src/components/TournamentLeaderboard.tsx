@@ -3,7 +3,11 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trophy, Loader, Medal } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+
+const API_URL =
+  typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? "http://localhost:8000"
+    : "https://site-turing-crutchmasters-team-s.onrender.com";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,93 +42,25 @@ export default function TournamentLeaderboard({
 
     (async () => {
       try {
-        // 1. Команды турнира — через teams.tournament_id (не tournament_teams!)
-        const { data: teams, error: teamsErr } = await supabase
-        .from("teams")
-        .select("id, name")
-        .eq("tournament_id", tournamentId)
-        .limit(50);
-
-        if (teamsErr || !teams || teams.length === 0) {
+        // Єдине джерело правди — бекенд (той самий розрахунок, що й на сторінці турніру):
+        // середнє за повними оцінками журі, сума за раунди, спільні місця при рівності.
+        const res = await fetch(`${API_URL}/api/tournaments/${tournamentId}/leaderboard`);
+        if (!res.ok) {
           setEntries([]);
           return;
         }
-
-        const teamIds = teams.map((t: any) => t.id);
-
-        // 2. Сабмишены команд (только финальные — не черновики)
-        const { data: submissions } = await supabase
-        .from("submissions")
-        .select("id, team_id, round_id")
-        .in("team_id", teamIds)
-        .eq("is_draft", false);
-
-        if (!submissions || submissions.length === 0) {
-          // Команды есть, но сабмишенов нет — показываем команды с 0 очков
-          const ranked: LeaderboardEntry[] = teams
-          .map((t: any, i: number) => ({
-            rank: i + 1,
-            team_id: t.id,
-            team_name: t.name,
-            score: 0,
-            rounds_completed: 0,
-          }));
-          setEntries(ranked);
-          return;
-        }
-
-        const submissionIds = submissions.map((s: any) => s.id);
-
-        // 3. Оценки жюри по этим сабмишенам
-        const { data: evaluations } = await supabase
-        .from("jury_evaluations")
-        .select("submission_id, total_score")
-        .in("submission_id", submissionIds);
-
-        // Средний балл жюри по каждому сабмишену
-        const submissionAvgScore: Record<string, number> = {};
-        const submissionScoreCount: Record<string, { sum: number; count: number }> = {};
-
-        (evaluations ?? []).forEach((e: any) => {
-          if (e.total_score == null) return;
-          if (!submissionScoreCount[e.submission_id]) {
-            submissionScoreCount[e.submission_id] = { sum: 0, count: 0 };
-          }
-          submissionScoreCount[e.submission_id].sum   += Number(e.total_score);
-          submissionScoreCount[e.submission_id].count += 1;
-        });
-
-        Object.entries(submissionScoreCount).forEach(([sid, { sum, count }]) => {
-          submissionAvgScore[sid] = count > 0 ? sum / count : 0;
-        });
-
-        // Суммируем по командам
-        const scoreMap: Record<string, { score: number; rounds: Set<string> }> = {};
-
-        submissions.forEach((s: any) => {
-          if (!scoreMap[s.team_id]) scoreMap[s.team_id] = { score: 0, rounds: new Set() };
-          const avg = submissionAvgScore[s.id] ?? 0;
-          scoreMap[s.team_id].score += avg;
-          if (s.round_id) scoreMap[s.team_id].rounds.add(s.round_id);
-        });
-
-          const ranked: LeaderboardEntry[] = teams
-          .map((t: any) => {
-            const sm = scoreMap[t.id] ?? { score: 0, rounds: new Set() };
-            return {
-              team_id: t.id,
-              team_name: t.name,
-              score: Math.round(sm.score * 10) / 10,
-               rounds_completed: sm.rounds.size,
-               rank: 0,
-            };
-          })
-          .sort((a, b) => b.score - a.score || b.rounds_completed - a.rounds_completed)
-          .map((e, i) => ({ ...e, rank: i + 1 }));
-
-          setEntries(ranked);
+        const data = await res.json();
+        const ranked: LeaderboardEntry[] = (data.leaderboard ?? []).map((e: any) => ({
+          rank: e.place,
+          team_id: e.team_id,
+          team_name: e.team_name,
+          score: Math.round(Number(e.total_score) * 10) / 10,
+          rounds_completed: e.evaluated_rounds,
+        }));
+        setEntries(ranked);
       } catch (e) {
         console.error(e);
+        setEntries([]);
       } finally {
         setLoading(false);
       }
