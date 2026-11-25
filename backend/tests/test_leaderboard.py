@@ -138,6 +138,37 @@ def test_rounds_are_returned_in_order(get):
     assert [r["number"] for r in res["rounds"]] == [1, 2, 3]
 
 
+# ---- попередній / остаточний стан таблиці ----
+
+def with_statuses(store, *statuses):
+    for r, st in zip(store["rounds"], statuses):
+        r["status"] = st
+    return store
+
+
+def test_leaderboard_is_provisional_until_every_round_is_judged(get):
+    store = with_statuses(build(rounds=("r1", "r2"), subs=[("a", "A", "r1")], evals=[("a", "j1", 70)]),
+                          "judged", "judging")
+    res = get(store)
+    assert res["is_final"] is False
+    assert (res["rounds_judged"], res["rounds_total"]) == (1, 2)
+
+
+def test_leaderboard_is_final_when_all_rounds_are_judged(get):
+    store = with_statuses(build(rounds=("r1", "r2"), subs=[("a", "A", "r1")], evals=[("a", "j1", 70)]),
+                          "judged", "judged")
+    res = get(store)
+    assert res["is_final"] is True
+    assert (res["rounds_judged"], res["rounds_total"]) == (2, 2)
+
+
+def test_progress_is_reported_even_for_empty_boards(get):
+    assert get(build(rounds=()))["is_final"] is False                    # немає раундів
+    store = with_statuses(build(rounds=("r1",), subs=[]), "judged")
+    res = get(store)
+    assert res["leaderboard"] == [] and res["is_final"] is True
+
+
 # ---- порожні й помилкові випадки ----
 
 def test_tournament_without_rounds_or_submissions_returns_empty_board(get):
@@ -204,7 +235,8 @@ def test_places_without_ties_are_sequential(get):
 
 def test_known_missing_round_is_penalised_by_sum(get):
     """Підсумок — сума по раундах, тож команда з одним оціненим раундом (100)
-    програє команді з двома оціненими по 60."""
+    програє команді з двома оціненими по 60. Доки не всі раунди judged, таблиця
+    позначена як попередня (is_final = False), щоб це не виглядало як остаточний результат."""
     store = build(rounds=("r1", "r2"),
                   subs=[("a1", "A", "r1"), ("a2", "A", "r2"), ("b1", "B", "r1"), ("b2", "B", "r2")],
                   evals=[("a1", "j1", 100), ("b1", "j1", 60), ("b2", "j1", 60)])

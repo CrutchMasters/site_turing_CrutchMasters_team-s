@@ -9,6 +9,17 @@ from src.services.scoring import is_complete
 router = APIRouter()
 
 
+def round_progress(rounds: list[dict]) -> dict:
+    """Скільки раундів турніру вже повністю оцінено (статус judged).
+
+    Підсумок команди — сума балів за раунди, тож доки не всі раунди judged, таблиця
+    попередня: команда без оцінки за ще не завершений раунд просто не має цих балів.
+    """
+    judged = sum(1 for r in rounds if r.get("status") == "judged")
+    return {"is_final": bool(rounds) and judged == len(rounds),
+            "rounds_judged": judged, "rounds_total": len(rounds)}
+
+
 def assign_places(entries: list[dict]) -> None:
     """Проставляє `place` у відсортованому списку; команди з однаковою сумою ділять місце.
 
@@ -49,7 +60,7 @@ async def get_tournament_leaderboard(tournament_id: str, authorization: str | No
     rounds = [{k: v for k, v in r.items() if k != "criteria"} for r in rounds_raw]
 
     if not rounds:
-        return {"tournament": tournament, "leaderboard": [], "rounds": []}
+        return {"tournament": tournament, "leaderboard": [], "rounds": [], **round_progress([])}
 
     round_ids = [r["id"] for r in rounds]
 
@@ -61,7 +72,7 @@ async def get_tournament_leaderboard(tournament_id: str, authorization: str | No
     submissions = subs_res.data or []
 
     if not submissions:
-        return {"tournament": tournament, "leaderboard": [], "rounds": rounds}
+        return {"tournament": tournament, "leaderboard": [], "rounds": rounds, **round_progress(rounds)}
 
     sub_ids = [s["id"] for s in submissions]
 
@@ -154,4 +165,5 @@ async def get_tournament_leaderboard(tournament_id: str, authorization: str | No
         "tournament": tournament,
         "rounds":     rounds,
         "leaderboard": leaderboard,
+        **round_progress(rounds),
     }
