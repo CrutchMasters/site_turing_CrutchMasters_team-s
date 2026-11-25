@@ -9,6 +9,20 @@ from src.services.scoring import is_complete
 router = APIRouter()
 
 
+def assign_places(entries: list[dict]) -> None:
+    """Проставляє `place` у відсортованому списку; команди з однаковою сумою ділять місце.
+
+    «Змагальна» нумерація: 1, 1, 3 (а не 1, 2, 3): після двох перших місць наступне — третє.
+    Порівнюються підсумки в тому вигляді, в якому їх бачить користувач (округлені до 0,01).
+    """
+    previous_total, previous_place = None, 0
+    for index, entry in enumerate(entries, start=1):
+        if entry["total_score"] != previous_total:
+            previous_place = index
+            previous_total = entry["total_score"]
+        entry["place"] = previous_place
+
+
 @router.get("/api/tournaments/{tournament_id}/leaderboard")
 async def get_tournament_leaderboard(tournament_id: str, authorization: str | None = Header(None)):
     if not supabase:
@@ -132,10 +146,9 @@ async def get_tournament_leaderboard(tournament_id: str, authorization: str | No
         }
         leaderboard.append(entry)
 
-    leaderboard.sort(key=lambda x: x["total_score"], reverse=True)
-
-    for i, entry in enumerate(leaderboard):
-        entry["place"] = i + 1
+    # Порядок: за підсумком (спадання), а при рівності — за назвою, щоб вивід був стабільним.
+    leaderboard.sort(key=lambda x: (-x["total_score"], str(x["team_name"]).casefold()))
+    assign_places(leaderboard)
 
     return {
         "tournament": tournament,
