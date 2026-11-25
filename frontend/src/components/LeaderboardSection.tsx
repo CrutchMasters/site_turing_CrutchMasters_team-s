@@ -63,6 +63,7 @@ export function LeaderboardSection({ tournamentId }: Props) {
     const [error, setError] = useState<string | null>(null);
     const [isLive, setIsLive] = useState(false);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [progress, setProgress] = useState<{ isFinal: boolean; judged: number; total: number } | null>(null);
     const [flashIds, setFlashIds] = useState<Set<string>>(new Set());
     const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
@@ -99,6 +100,11 @@ export function LeaderboardSection({ tournamentId }: Props) {
             });
 
             setRounds(data.rounds || []);
+            setProgress(
+                typeof data.rounds_total === "number"
+                    ? { isFinal: !!data.is_final, judged: data.rounds_judged ?? 0, total: data.rounds_total }
+                    : null
+            );
             setLastUpdated(new Date());
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : "Помилка завантаження");
@@ -205,6 +211,14 @@ export function LeaderboardSection({ tournamentId }: Props) {
                     Оновити
                 </button>
             </div>
+
+            {/* Попередні результати: не всі раунди ще оцінено */}
+            {!isEmpty && progress && !progress.isFinal && (
+                <div className="mb-6 px-4 py-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-[12px] font-bold text-amber-600">
+                    Попередні результати: оцінено раундів {progress.judged} з {progress.total}.
+                    Підсумок — сума балів за раунди, тож місця можуть змінитися.
+                </div>
+            )}
 
             {/* Статистика */}
             {!isEmpty && (
