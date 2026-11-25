@@ -10,12 +10,21 @@ class Query:
     def __init__(self, store, name):
         self.store, self.name = store, name
         self.filters, self.mode, self.rows, self.lim = [], "select", None, None
+        self.in_filters, self.order_key = [], None
 
     def select(self, *_):
         return self
 
     def eq(self, key, value):
         self.filters.append((key, value))
+        return self
+
+    def in_(self, key, values):
+        self.in_filters.append((key, list(values)))
+        return self
+
+    def order(self, key, desc=False):
+        self.order_key = (key, desc)
         return self
 
     def limit(self, n):
@@ -40,7 +49,8 @@ class Query:
 
     def execute(self):
         table = self.store.setdefault(self.name, [])
-        match = lambda row: all(row.get(k) == v for k, v in self.filters)
+        match = lambda row: (all(row.get(k) == v for k, v in self.filters)
+                             and all(row.get(k) in vals for k, vals in self.in_filters))
         if self.mode == "delete":
             self.store[self.name] = [r for r in table if not match(r)]
             return Result([])
@@ -61,6 +71,9 @@ class Query:
             table.append(dict(self.rows))
             return Result([self.rows])
         out = [r for r in table if match(r)]
+        if self.order_key:
+            key, desc = self.order_key
+            out = sorted(out, key=lambda r: r.get(key), reverse=desc)
         return Result(out[: self.lim] if self.lim else out)
 
 
