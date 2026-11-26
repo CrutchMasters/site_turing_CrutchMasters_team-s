@@ -6,6 +6,7 @@ from src.db import fetch_one, supabase
 from src.schemas import RegisterTeamForTournament, TournamentUpdate
 from src.security import get_caller
 from src.services.emails import get_user_email, send_notification_email
+from src.services.scoring import ScoringError, validate_round_criteria
 from src.services.statuses import recalc_round_status, recalc_tournament_status, validate_tournament_timeline
 
 
@@ -388,6 +389,13 @@ async def create_tournament_rounds(
         raise HTTPException(status_code=404, detail="Турнір не знайдено")
     if caller.get("role") not in ("admin", "superadmin") and tournament.get("created_by") != caller["id"]:
         raise HTTPException(status_code=403, detail="Ви не є власником цього турніру")
+
+    # Критерії мають бути списком {key, label, weight} із сумою ваг 100
+    for r in rounds:
+        try:
+            validate_round_criteria(r.get("criteria"))
+        except ScoringError as e:
+            raise HTTPException(status_code=400, detail=f"Раунд {r.get('number')}: {e}")
 
     # Валідація часової послідовності раундів
     rounds_with_dates = [r for r in rounds if r.get("start_at") or r.get("end_at")]

@@ -374,7 +374,7 @@ export default function TournamentEditPage() {
                                          if (Array.isArray(r.criteria)) {
                                              return (r.criteria as any[]).map((c, idx) => ({
                                                  key:    c.key   ?? `criterion_${idx}`,
-                                                 label:  c.label ?? c.name ?? String(c),
+                                                 label:  (typeof c === 'string' ? c : (c.label ?? c.name)) ?? `Критерій ${idx + 1}`,
                                                                                            weight: typeof c.weight === 'number' ? c.weight : Math.floor(100 / (r.criteria as any[]).length),
                                              }));
                                          }

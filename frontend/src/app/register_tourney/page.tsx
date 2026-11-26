@@ -398,7 +398,10 @@ export default function RegisterTourney() {
             number:       n,
             name:         rd?.name?.trim()                        || `Раунд ${n}`,
                    description:  rd?.description?.trim()                 || null,
-                   criteria:     rd?.criteria?.filter(Boolean).join('\n')|| null,
+                   // масив {key, label, weight} (а не рядок: join('\n') давав «[object Object]» у назвах критеріїв)
+                   criteria:     (rd?.criteria && rd.criteria.length > 0)
+                                   ? rd.criteria.filter(c => c.label.trim())
+                                   : null,
                    technologies: rd?.requirements?.filter(Boolean)       ?? [],
                    start_at:         toTimestamp(rd?.startDate ?? '', rd?.startTime ?? '') ?? null,
                    end_at:           toTimestamp(rd?.deadlineDate ?? '', rd?.deadlineTime ?? '') ?? null,

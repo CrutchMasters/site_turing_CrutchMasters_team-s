@@ -469,7 +469,7 @@ export default function JuryEvaluationPage() {
             if (roundData.criteria && Array.isArray(roundData.criteria) && roundData.criteria.length > 0) {
                 parsedCriteria = roundData.criteria.map((c: any, idx: number) => ({
                     key: c.key ?? `criterion_${idx}`,
-                    label: c.label ?? c.name ?? `Критерій ${idx + 1}`,
+                    label: (c.label && c.label !== "[object Object]") ? c.label : (c.name ?? `Критерій ${idx + 1}`),
                     weight: typeof c.weight === "number" ? c.weight : Math.floor(100 / roundData.criteria.length),
                 }));
             }
