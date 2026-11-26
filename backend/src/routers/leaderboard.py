@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Header
 
 from src.db import fetch_one, supabase
 from src.services.ranking import DEFAULT_LAMBDA, adjusted_quality, juror_groups
-from src.services.scoring import is_complete
+from src.services.scoring import counts_as_final
 
 
 router = APIRouter()
@@ -135,7 +135,7 @@ async def get_tournament_leaderboard(tournament_id: str, authorization: str | No
             counted = [
                 e for e in sub_evals
                 if e.get("total_score") is not None
-                and is_complete(e.get("criteria_scores"), round_criteria)
+                and counts_as_final(e.get("criteria_scores"), round_criteria)
             ]
             scored = [e["total_score"] for e in counted]
             if not scored:
