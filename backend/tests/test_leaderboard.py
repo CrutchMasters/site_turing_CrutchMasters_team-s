@@ -320,6 +320,26 @@ def test_partial_evaluations_are_ignored(get):
     assert by_team(get(store))["A"]["round_scores"]["r1"] == 90.0
 
 
+def test_legacy_evaluations_without_a_breakdown_are_still_counted(get):
+    """У реальній базі є оцінки з criteria_scores = NULL (демо/імпорт): довіряємо total_score,
+    інакше такий турнір показував би всім нулі."""
+    store = build(subs=[("s1", "A", "r1"), ("s2", "B", "r1")],
+                  evals=[("s1", "j1", 87, None), ("s2", "j1", 74, None)])
+    teams = by_team(get(store))
+    assert teams["A"]["total_score"] == 87.0 and teams["B"]["total_score"] == 74.0
+    assert teams["A"]["place"] == 1
+
+
+def test_legacy_and_regular_evaluations_can_be_mixed(get):
+    store = build(subs=[("s1", "A", "r1")], evals=[("s1", "j1", 80, None), ("s1", "j2", 60)])
+    assert by_team(get(store))["A"]["round_scores"]["r1"] == 70.0
+
+
+def test_empty_object_is_not_legacy_it_is_an_unfinished_evaluation(get):
+    store = build(subs=[("s1", "A", "r1")], evals=[("s1", "j1", 0.0, {})])
+    assert by_team(get(store))["A"]["round_scores"]["r1"] is None
+
+
 def test_round_with_only_partial_evaluations_counts_as_not_evaluated(get):
     partial = {"backend_quality": {"score": 50, "comment": ""}}
     store = build(subs=[("s1", "A", "r1")], evals=[("s1", "j1", 10.0, partial)])

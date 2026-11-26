@@ -66,6 +66,20 @@ def is_complete(criteria_scores, round_criteria) -> bool:
     return True
 
 
+def counts_as_final(criteria_scores, round_criteria) -> bool:
+    """Чи враховувати оцінку в таблиці лідерів.
+
+    * Є розбивка за критеріями — оцінка завершена, лише якщо бали виставлено за ВСІ критерії
+      раунду (журі може зберегти оцінку частково — у формі це статус «in_progress»; тоді
+      `total_score` — лише сума виставлених балів, і порівнювати її з повними некоректно).
+    * `criteria_scores` порожнє (NULL) — «старий» запис без розбивки (наприклад, імпортовані
+      чи демо-дані): повноту перевірити неможливо, тож довіряємо `total_score`.
+    """
+    if criteria_scores is None:
+        return True
+    return is_complete(criteria_scores, round_criteria)
+
+
 def compute_total(criteria_scores, round_criteria) -> float:
     """Підсумкова оцінка. Кидає ScoringError, якщо бали некоректні."""
     if not isinstance(criteria_scores, dict):

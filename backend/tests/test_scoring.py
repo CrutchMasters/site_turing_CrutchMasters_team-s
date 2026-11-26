@@ -178,3 +178,15 @@ def test_is_complete_follows_round_criteria():
     crit = [{"key": "a", "weight": 50}, {"key": "b", "weight": 50}]
     assert is_complete({"a": {"score": 1}, "b": {"score": 2}}, crit)
     assert not is_complete({"a": {"score": 1}}, crit)
+
+
+from src.services.scoring import counts_as_final  # noqa: E402
+
+
+def test_counts_as_final_legacy_null_is_trusted_but_empty_dict_is_not():
+    assert counts_as_final(None, None)
+    assert not counts_as_final({}, None)
+    assert counts_as_final(_all(70), None)
+    partial = _all(70)
+    partial["must_have"]["score"] = ""
+    assert not counts_as_final(partial, None)
