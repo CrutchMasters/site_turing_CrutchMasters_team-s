@@ -190,3 +190,39 @@ def test_counts_as_final_legacy_null_is_trusted_but_empty_dict_is_not():
     partial = _all(70)
     partial["must_have"]["score"] = ""
     assert not counts_as_final(partial, None)
+
+
+from src.services.scoring import validate_round_criteria  # noqa: E402
+
+
+def _crit(*weights):
+    return [{"key": f"criterion_{i}", "label": f"Критерій {i}", "weight": w} for i, w in enumerate(weights)]
+
+
+def test_validate_round_criteria_accepts_none_empty_and_proper_lists():
+    assert validate_round_criteria(None) is None
+    assert validate_round_criteria([]) == []
+    assert validate_round_criteria(_crit(100)) == _crit(100)
+    assert validate_round_criteria(_crit(33, 33, 34)) is not None
+
+
+@pytest.mark.parametrize("bad", [
+    "[object Object]\n[object Object]",           # старий баг: список, склеєний у рядок
+    {"key": "a"},
+    ["назва", "ще одна"],
+    [{"label": "x", "weight": 100}],              # немає key
+    [{"key": "a", "label": "", "weight": 100}],
+    [{"key": "a", "label": "[object Object]", "weight": 100}],
+    [{"key": "a", "label": "x", "weight": "100"}],
+    [{"key": "a", "label": "x", "weight": True}],
+    [{"key": "a", "label": "x", "weight": 101}],
+    [{"key": "a", "label": "x", "weight": -1}],
+])
+def test_validate_round_criteria_rejects_malformed_input(bad):
+    with pytest.raises(ScoringError):
+        validate_round_criteria(bad)
+
+
+def test_validate_round_criteria_requires_weights_to_sum_to_100():
+    with pytest.raises(ScoringError, match="100"):
+        validate_round_criteria(_crit(50, 40))

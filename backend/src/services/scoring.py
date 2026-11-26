@@ -32,6 +32,32 @@ def _is_number(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
+def validate_round_criteria(value) -> list[dict] | None:
+    """Перевіряє критерії раунду, що надходять від клієнта: None або список {key, label, weight}.
+
+    Раніше форма створення турніру надсилала критерії рядком (`join('\\n')` давав
+    «[object Object]»), і в базі лежали зіпсовані назви. Тепер некоректний формат
+    відхиляється з зрозумілою помилкою, а не мовчки зберігається.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise ScoringError("criteria має бути списком об'єктів {key, label, weight}")
+    for idx, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise ScoringError(f"Критерій №{idx + 1} має бути об'єктом {{key, label, weight}}")
+        key, label, weight = item.get("key"), item.get("label"), item.get("weight")
+        if not isinstance(key, str) or not key.strip():
+            raise ScoringError(f"Критерій №{idx + 1}: порожній key")
+        if not isinstance(label, str) or not label.strip() or label.strip() == "[object Object]":
+            raise ScoringError(f"Критерій №{idx + 1}: потрібна назва (label)")
+        if not _is_number(weight) or not math.isfinite(weight) or not 0 <= weight <= 100:
+            raise ScoringError(f"Критерій №{idx + 1}: вага має бути числом від 0 до 100")
+    if value and sum(item["weight"] for item in value) != 100:
+        raise ScoringError("Сума ваг критеріїв раунду має дорівнювати 100")
+    return value
+
+
 def resolve_criteria(round_criteria) -> list[dict]:
     """Список {key, weight} у порядку раунду; значення за замовчуванням — як на клієнті."""
     if isinstance(round_criteria, list) and round_criteria:
