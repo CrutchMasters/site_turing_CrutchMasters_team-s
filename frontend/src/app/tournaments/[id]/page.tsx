@@ -81,6 +81,10 @@ interface LeaderboardEntry {
     round_scores: Record<string, number | null>;
     total_score: number;
     evaluated_rounds: number;
+    // Рейтинг з поправкою на строгість суддів (необов'язкові: старий бекенд їх не повертає)
+    adjusted_total_score?: number;
+    adjusted_round_scores?: Record<string, number | null>;
+    adjusted_place?: number;
 }
 
 type Tab = "info" | "leaderboard";
@@ -636,6 +640,8 @@ function InlineLeaderboard({ tournamentId, tournamentName, isAdmin }: InlineLead
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [certOpen, setCertOpen] = useState(false);
+    const [adjustedView, setAdjustedView] = useState(false);
+    const [progress, setProgress] = useState<{ isFinal: boolean; judged: number; total: number } | null>(null);
 
     useEffect(() => { fetchLeaderboard(); }, [tournamentId]);
 
@@ -651,6 +657,11 @@ function InlineLeaderboard({ tournamentId, tournamentName, isAdmin }: InlineLead
             const data = await res.json();
             setLbRounds(data.rounds || []);
             setLeaderboard(data.leaderboard || []);
+            setProgress(
+                typeof data.rounds_total === "number"
+                    ? { isFinal: !!data.is_final, judged: data.rounds_judged ?? 0, total: data.rounds_total }
+                    : null
+            );
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : "Помилка завантаження");
         } finally {
@@ -673,8 +684,56 @@ function InlineLeaderboard({ tournamentId, tournamentName, isAdmin }: InlineLead
 
     const isEmpty = leaderboard.length === 0;
 
+    // Скоригований вигляд: ті самі команди, але бали й місця з поправкою на строгість суддів.
+    // CSV і сертифікати завжди беруть офіційний рейтинг (`leaderboard`).
+    const canAdjust = !isEmpty && leaderboard.every((e) => e.adjusted_total_score !== undefined);
+    const shown: LeaderboardEntry[] = adjustedView && canAdjust
+        ? leaderboard
+            .map((e) => ({
+                ...e,
+                total_score: e.adjusted_total_score ?? e.total_score,
+                round_scores: e.adjusted_round_scores ?? e.round_scores,
+                place: e.adjusted_place ?? e.place,
+            }))
+            .sort((a, b) => a.place - b.place || a.team_name.localeCompare(b.team_name))
+        : leaderboard;
+
     return (
         <>
+        {/* Перемикач: офіційний рейтинг (середнє) / з поправкою на строгість суддів */}
+        {canAdjust && (
+            <div className="mb-6 flex flex-col gap-2">
+            <div className="inline-flex self-start rounded-xl border border-(--brd) bg-(--card) p-1 text-[11px] font-black uppercase tracking-wider">
+            <button
+            onClick={() => setAdjustedView(false)}
+            className={`px-3 py-1.5 rounded-lg transition-all ${!adjustedView ? "bg-blue-600 text-white" : "text-(--t2) hover:text-blue-600"}`}
+            >
+            Офіційний (середнє)
+            </button>
+            <button
+            onClick={() => setAdjustedView(true)}
+            className={`px-3 py-1.5 rounded-lg transition-all ${adjustedView ? "bg-blue-600 text-white" : "text-(--t2) hover:text-blue-600"}`}
+            >
+            З поправкою на суворість суддів
+            </button>
+            </div>
+            {adjustedView && (
+                <p className="text-[11px] font-medium text-(--t2)">
+                Додатковий рейтинг: бали виправлено з урахуванням того, що одні судді оцінюють суворіше за інших.
+                Офіційні місця визначаються за простим середнім.
+                </p>
+            )}
+            </div>
+        )}
+
+        {/* Попередні результати: не всі раунди ще оцінено */}
+        {!isEmpty && progress && !progress.isFinal && (
+            <div className="mb-6 px-4 py-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-[12px] font-bold text-amber-600">
+            Попередні результати: оцінено раундів {progress.judged} з {progress.total}.
+            Підсумок — сума балів за раунди, тож місця можуть змінитися.
+            </div>
+        )}
+
         {/* Actions */}
         {!isEmpty && (
             <div className="flex items-center gap-2 flex-wrap mb-6">
@@ -712,16 +771,16 @@ function InlineLeaderboard({ tournamentId, tournamentName, isAdmin }: InlineLead
             </div>
             <div className="bg-(--bg) border border-(--brd) rounded-2xl p-4 flex flex-col gap-1">
             <div className="text-[10px] font-black uppercase tracking-widest text-(--t2)">Лідер</div>
-            <div className="text-sm font-black text-yellow-500 truncate">{leaderboard[0]?.team_name || "—"}</div>
+            <div className="text-sm font-black text-yellow-500 truncate">{shown[0]?.team_name || "—"}</div>
             </div>
             </div>
         )}
 
         {/* Podium top-3 */}
-        {leaderboard.filter(e => e.total_score > 0).length >= 1 && (
+        {shown.filter(e => e.total_score > 0).length >= 1 && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
             {[1, 0, 2].map((idx) => {
-                const entry = leaderboard[idx];
+                const entry = shown[idx];
                 if (!entry) return <div key={idx} />;
                 const place = entry.place;
                 return (
@@ -769,7 +828,7 @@ function InlineLeaderboard({ tournamentId, tournamentName, isAdmin }: InlineLead
             </tr>
             </thead>
             <tbody>
-            {leaderboard.map((entry) => {
+            {shown.map((entry) => {
                 const isTop3 = entry.place <= 3;
                 const isFirst = entry.place === 1;
                 return (
@@ -821,7 +880,9 @@ function InlineLeaderboard({ tournamentId, tournamentName, isAdmin }: InlineLead
         )}
 
         <p className="mt-4 text-[11px] text-(--t2) font-bold text-center">
-        Бали — середнє значення оцінок журі по кожному раунду. Відсортовано за спаданням.
+        {adjustedView && canAdjust
+            ? "Бали з поправкою на строгість суддів (додатковий рейтинг). Відсортовано за спаданням."
+            : "Бали — середнє значення оцінок журі по кожному раунду. Відсортовано за спаданням."}
         </p>
 
         {certOpen && (
@@ -1197,7 +1258,9 @@ export default function TournamentPage() {
                         const start = round.start_at ? new Date(round.start_at).getTime() : null;
                         const end = round.end_at ? new Date(round.end_at).getTime() : null;
                         const dbStatus = round.status;
-                        const isFinished = dbStatus === "finished" || (!dbStatus && end && now > end);
+                        // Статуси раунду в базі: pending / active / judging / judged (значення "finished" не існує)
+                        const isJudging = dbStatus === "judging";
+                        const isFinished = dbStatus === "judged" || isJudging || (!dbStatus && end && now > end);
                         const isActive = dbStatus === "active" || (!dbStatus && start && end && now >= start && now <= end);
                         const isPending = dbStatus === "pending" || (!dbStatus && start && now < start);
 
@@ -1207,7 +1270,11 @@ export default function TournamentPage() {
                         let statusBadgeBorder = "border-(--brd)";
                         let dotColor = "bg-gray-400";
 
-                        if (isFinished) {
+                        if (isJudging) {
+                            statusLabel = "Оцінювання";
+                            statusColor = "text-amber-600";
+                            dotColor = "bg-amber-500";
+                        } else if (isFinished) {
                             statusLabel = "Завершено";
                         } else if (isActive) {
                             statusLabel = "Активний";
