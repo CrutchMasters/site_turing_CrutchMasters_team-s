@@ -1,5 +1,7 @@
 # CodeFuture 🏆
 
+[![Tests](https://github.com/CrutchMasters/site_turing_CrutchMasters_team-s/actions/workflows/tests.yml/badge.svg)](https://github.com/CrutchMasters/site_turing_CrutchMasters_team-s/actions/workflows/tests.yml)
+
 > Платформа для організації IT-турнірів та хакатонів — від реєстрації до фінального leaderboard.  
 > Розроблено командою **CrutchMasters**
 
@@ -429,6 +431,10 @@ pytest -q                               # усі тести; у кінці ря�
 `pytest -k leaderboard` (тести, у назві яких є слово). Якщо тест впав, pytest покаже `FAILED`,
 рядок із перевіркою та очікуване/отримане значення. Наступного разу достатньо `cd backend`,
 `source venv/bin/activate` і `pytest -q` — перевстановлювати нічого не треба.
+
+Ті самі тести автоматично запускаються на GitHub (вкладка **Actions**, файл `.github/workflows/tests.yml`) на кожен
+push у `main` і на кожен pull request: у PR видно зелену галочку або червоний хрестик. Запускаються тести бекенду
+(Python 3.12 і 3.13) та симуляції з `research/`.
 
 > **Примітка:** Бекенд також задеплоєний на [Render](https://render.com). Якщо локальний бекенд не потрібен, у `frontend/.env.local` вкажіть актуальний URL з Render як `NEXT_PUBLIC_API_URL`. Безкоштовний інстанс Render «засинає» після періоду бездіяльності, тому перший запит може тривати до хвилини.
 
