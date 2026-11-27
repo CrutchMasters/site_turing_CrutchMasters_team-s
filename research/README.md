@@ -53,7 +53,7 @@
 cd research
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-pytest -q                          # 45 тестів
+pytest -q                          # 62 тести
 python run_experiment.py           # ~1,5 хв → results/results.csv, results/summary.md
 ```
 
@@ -62,6 +62,24 @@ python run_experiment.py           # ~1,5 хв → results/results.csv, results/
 ```bash
 cd backend && python ../research/verify_against_backend.py
 ```
+
+## Реальні дані (коли буде турнір з кількома суддями)
+
+Симуляція відповідає на питання «що було б, якби судді відрізнялись на X балів». Щоб дізнатись, **яке X насправді**,
+потрібні справжні оцінки. Для цього є три файли:
+
+| файл | для чого |
+|---|---|
+| [`PILOT.md`](PILOT.md) | як провести пробний турнір: скільки робіт і суддів потрібно, як оцінювати, етика |
+| `export_evaluations.sql` | запит для Supabase SQL Editor: вивантажує оцінки **без імен** (мітки T, W, C, J) у CSV |
+| `analyze_real_data.py` | читає CSV і пише звіт: розкид суворості суддів з інтервалом, рейтинг «середнє» проти «з поправкою» |
+
+```bash
+cd research
+python analyze_real_data.py evaluations.csv --out report.md
+```
+
+На даних, що є зараз (4 оцінки, по одному судді на роботу), скрипт чесно відповідає, що даних недостатньо.
 
 ## Модель
 
